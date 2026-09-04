@@ -22,7 +22,8 @@ import { Chapter7Panel } from './components/Chapter7';
 import { Chapter8Panel } from './components/Chapter8';
 import { Chapter9Panel } from './components/Chapter9';
 import { Chapter10Panel } from './components/Chapter10';
-import { Play, Pause, Brain, Atom, Clock, Layers, Bot, Zap, Lightbulb, Upload, Network, Cpu, Sparkles, Calculator, Grid, Database, Music, BookOpen, Hexagon, CircleDot, Magnet, Droplet, Egg, TrendingUp, Code2 } from 'lucide-react';
+import { RelevanceRealizationPanel } from './components/RelevanceRealizationPanel';
+import { Play, Pause, Brain, Atom, Clock, Layers, Bot, Zap, Lightbulb, Upload, Network, Cpu, Sparkles, Calculator, Grid, Database, Music, BookOpen, Hexagon, CircleDot, Magnet, Droplet, Egg, TrendingUp, Focus, Code2 } from 'lucide-react';
 import { EnhancedCogNanoVisualization } from './components/EnhancedCogNanoVisualization';
 
 function App() {
@@ -63,7 +64,8 @@ function App() {
     { id: 'agents', label: 'Agents', icon: Bot },
     { id: 'crystals', label: 'Time Crystals', icon: Clock },
     { id: 'fractal', label: 'Fractal Theory', icon: Layers },
-    { id: 'uploading', label: 'Consciousness Upload', icon: Upload }
+    { id: 'uploading', label: 'Consciousness Upload', icon: Upload },
+    { id: 'rr-system', label: 'Relevance Realization', icon: Focus }
   ];
 
   return (
@@ -315,6 +317,9 @@ function App() {
 
         {activeTab === 'uploading' && (
           <ConsciousnessUploading consciousness={consciousness} isRunning={isRunning} />
+        )}
+        {activeTab === 'rr-system' && (
+          <RelevanceRealizationPanel />
         )}
       </main>
 
