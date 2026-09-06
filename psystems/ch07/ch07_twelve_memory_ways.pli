@@ -1,0 +1,74 @@
+/* ============================================================================
+ * psystems/ch07/ch07_twelve_memory_ways.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.6
+ * Functionality: Twelve ways of memorizing and twelve carriers operating rhythms/clocks.
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'mem_1 []'mem_2 []'mem_3 []'mem_4 []'mem_5 []'mem_6 []'mem_7 []'mem_8 []'mem_9 []'mem_10 []'mem_11 []'mem_12 ]'skin;
+
+@mskin = seed;
+@mmem_1 = unit(mem_1), fuel;
+@mmem_2 = unit(mem_2), fuel;
+@mmem_3 = unit(mem_3), fuel;
+@mmem_4 = unit(mem_4), fuel;
+@mmem_5 = unit(mem_5), fuel;
+@mmem_6 = unit(mem_6), fuel;
+@mmem_7 = unit(mem_7), fuel;
+@mmem_8 = unit(mem_8), fuel;
+@mmem_9 = unit(mem_9), fuel;
+@mmem_10 = unit(mem_10), fuel;
+@mmem_11 = unit(mem_11), fuel;
+@mmem_12 = unit(mem_12), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_mem_1 ]'skin;
+[seed_dispense : seed --> (work)in_mem_2 ]'skin;
+[seed_dispense : seed --> (work)in_mem_3 ]'skin;
+[seed_dispense : seed --> (work)in_mem_4 ]'skin;
+[seed_dispense : seed --> (work)in_mem_5 ]'skin;
+[seed_dispense : seed --> (work)in_mem_6 ]'skin;
+[seed_dispense : seed --> (work)in_mem_7 ]'skin;
+[seed_dispense : seed --> (work)in_mem_8 ]'skin;
+[seed_dispense : seed --> (work)in_mem_9 ]'skin;
+[seed_dispense : seed --> (work)in_mem_10 ]'skin;
+[seed_dispense : seed --> (work)in_mem_11 ]'skin;
+[seed_dispense : seed --> (work)in_mem_12 ]'skin;
+[step : work * unit(mem_1) * fuel --> done(mem_1) ]'mem_1;
+[step : work * unit(mem_2) * fuel --> done(mem_2) ]'mem_2;
+[step : work * unit(mem_3) * fuel --> done(mem_3) ]'mem_3;
+[step : work * unit(mem_4) * fuel --> done(mem_4) ]'mem_4;
+[step : work * unit(mem_5) * fuel --> done(mem_5) ]'mem_5;
+[step : work * unit(mem_6) * fuel --> done(mem_6) ]'mem_6;
+[step : work * unit(mem_7) * fuel --> done(mem_7) ]'mem_7;
+[step : work * unit(mem_8) * fuel --> done(mem_8) ]'mem_8;
+[step : work * unit(mem_9) * fuel --> done(mem_9) ]'mem_9;
+[step : work * unit(mem_10) * fuel --> done(mem_10) ]'mem_10;
+[step : work * unit(mem_11) * fuel --> done(mem_11) ]'mem_11;
+[step : work * unit(mem_12) * fuel --> done(mem_12) ]'mem_12;
+[report : done(mem_1) --> (result(mem_1))out ]'mem_1;
+[report : done(mem_2) --> (result(mem_2))out ]'mem_2;
+[report : done(mem_3) --> (result(mem_3))out ]'mem_3;
+[report : done(mem_4) --> (result(mem_4))out ]'mem_4;
+[report : done(mem_5) --> (result(mem_5))out ]'mem_5;
+[report : done(mem_6) --> (result(mem_6))out ]'mem_6;
+[report : done(mem_7) --> (result(mem_7))out ]'mem_7;
+[report : done(mem_8) --> (result(mem_8))out ]'mem_8;
+[report : done(mem_9) --> (result(mem_9))out ]'mem_9;
+[report : done(mem_10) --> (result(mem_10))out ]'mem_10;
+[report : done(mem_11) --> (result(mem_11))out ]'mem_11;
+[report : done(mem_12) --> (result(mem_12))out ]'mem_12;

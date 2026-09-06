@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch05/ch05_tc_transform.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.3, 5.3.1
+ * Functionality: Replacing the Fourier transform by the time-crystal transform; image processing and sound analysis using time crystals.
+ * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'tct []'image []'sound ]'skin;
+
+@mskin = seed;
+@mtct = unit(tct), fuel;
+@mimage = unit(image), fuel;
+@msound = unit(sound), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_tct ]'skin;
+[seed_dispense : seed --> (work)in_image ]'skin;
+[seed_dispense : seed --> (work)in_sound ]'skin;
+[step : work * unit(tct) * fuel --> done(tct) ]'tct;
+[step : work * unit(image) * fuel --> done(image) ]'image;
+[step : work * unit(sound) * fuel --> done(sound) ]'sound;
+[report : done(tct) --> (result(tct))out ]'tct;
+[report : done(image) --> (result(image))out ]'image;
+[report : done(sound) --> (result(sound))out ]'sound;

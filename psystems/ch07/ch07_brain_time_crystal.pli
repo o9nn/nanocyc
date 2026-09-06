@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch07/ch07_brain_time_crystal.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.10
+ * Functionality: Time-crystal model of the human brain (integrates common/time_crystal_core.pli).
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'brain_tc ]'skin;
+
+@mskin = seed;
+@mbrain_tc = unit(brain_tc), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_brain_tc ]'skin;
+[step : work * unit(brain_tc) * fuel --> done(brain_tc) ]'brain_tc;
+[report : done(brain_tc) --> (result(brain_tc))out ]'brain_tc;

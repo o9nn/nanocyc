@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch06/ch06_filament_communication.pli
+ *
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * Issue #11 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 6.7, 6.7.1-6.7.2
+ * Functionality: Hidden communication in the filaments much before a nerve spike; triplet-of-triplet resonance band in the axon; scale-free bands across tubulin, microtubule and neuron.
+ * Traceability: src/cpp/nanobrain_singularity.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'tubulin []'microtubule []'neuron ]'skin;
+
+@mskin = seed;
+@mtubulin = unit(tubulin), fuel;
+@mmicrotubule = unit(microtubule), fuel;
+@mneuron = unit(neuron), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_tubulin ]'skin;
+[seed_dispense : seed --> (work)in_microtubule ]'skin;
+[seed_dispense : seed --> (work)in_neuron ]'skin;
+[step : work * unit(tubulin) * fuel --> done(tubulin) ]'tubulin;
+[step : work * unit(microtubule) * fuel --> done(microtubule) ]'microtubule;
+[step : work * unit(neuron) * fuel --> done(neuron) ]'neuron;
+[report : done(tubulin) --> (result(tubulin))out ]'tubulin;
+[report : done(microtubule) --> (result(microtubule))out ]'microtubule;
+[report : done(neuron) --> (result(neuron))out ]'neuron;

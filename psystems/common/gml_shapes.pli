@@ -1,0 +1,31 @@
+/* ============================================================================
+ * common/gml_shapes.pli
+ *
+ * Geometric Musical Language: the 15 geometric shapes as object types plus
+ * harmonic/resonance rules. 15 shapes suffice to recreate any 1D/2D/3D
+ * pattern (section 2.2.2).
+ *
+ * Issue: all (shared) — primary use in ch02, ch05, ch09
+ * Sections: 2.2, 2.2.2, 2.11
+ * Traceability: src/cpp/nanobrain_time_crystal.h (GML shapes and harmonics),
+ *               src/cpp/nanobrain_fractal.h
+ * Initial multiset: a raw waveform to be decomposed into shapes.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+@mu = []'skin;
+
+@mskin = waveform(1),
+         shape(1), shape(2), shape(3), shape(4), shape(5),
+         shape(6), shape(7), shape(8), shape(9), shape(10),
+         shape(11), shape(12), shape(13), shape(14), shape(15);
+
+/* --------------------------------------------------------------------------
+ * decompose : a waveform locks onto the shape whose harmonic matches
+ * resonate  : two copies of a shape produce a harmonic (octave up)
+ * compose   : a harmonic plus a base shape assembles a composite pattern
+ * ------------------------------------------------------------------------*/
+[decompose : waveform(N) * shape(S) --> pattern(N,S) ]'skin;
+[resonate  : shape(S)*2 --> harmonic(S) ]'skin;
+[compose   : harmonic(S) * shape(T) --> composite(S,T) ]'skin;

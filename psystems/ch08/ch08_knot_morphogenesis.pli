@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch08/ch08_knot_morphogenesis.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.6, 8.6.1-8.6.3
+ * Functionality: Interactive three cylinders perturbing the knots; generation of spin-like knots of dark lines; synthesis of super-super coils made of dark lines; morphogenesis of knots to vortex-like magnetic atoms.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'perturb []'dark_lines []'coil []'morph ]'skin;
+
+@mskin = seed;
+@mperturb = unit(perturb), fuel;
+@mdark_lines = unit(dark_lines), fuel;
+@mcoil = unit(coil), fuel;
+@mmorph = unit(morph), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_perturb ]'skin;
+[seed_dispense : seed --> (work)in_dark_lines ]'skin;
+[seed_dispense : seed --> (work)in_coil ]'skin;
+[seed_dispense : seed --> (work)in_morph ]'skin;
+[step : work * unit(perturb) * fuel --> done(perturb) ]'perturb;
+[step : work * unit(dark_lines) * fuel --> done(dark_lines) ]'dark_lines;
+[step : work * unit(coil) * fuel --> done(coil) ]'coil;
+[step : work * unit(morph) * fuel --> done(morph) ]'morph;
+[report : done(perturb) --> (result(perturb))out ]'perturb;
+[report : done(dark_lines) --> (result(dark_lines))out ]'dark_lines;
+[report : done(coil) --> (result(coil))out ]'coil;
+[report : done(morph) --> (result(morph))out ]'morph;

@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch04/ch04_fundamental_constants.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.5
+ * Functionality: A table of fundamental constants in nature as constant objects with unit-conversion rules.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'constants ]'skin;
+
+@mskin = seed;
+@mconstants = unit(constants), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_constants ]'skin;
+[step : work * unit(constants) * fuel --> done(constants) ]'constants;
+[report : done(constants) --> (result(constants))out ]'constants;

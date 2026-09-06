@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch04/ch04_dodecanion_manifolds.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.9, 4.9.1
+ * Functionality: Fundamentals of quaternion, octonion and dodecanion; the rule of the 11D manifolds (inlines common/hypernumbers.pli).
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'quat []'oct []'dodec []'manifold_11d ]'skin;
+
+@mskin = seed;
+@mquat = unit(quat), fuel;
+@moct = unit(oct), fuel;
+@mdodec = unit(dodec), fuel;
+@mmanifold_11d = unit(manifold_11d), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_quat ]'skin;
+[seed_dispense : seed --> (work)in_oct ]'skin;
+[seed_dispense : seed --> (work)in_dodec ]'skin;
+[seed_dispense : seed --> (work)in_manifold_11d ]'skin;
+[step : work * unit(quat) * fuel --> done(quat) ]'quat;
+[step : work * unit(oct) * fuel --> done(oct) ]'oct;
+[step : work * unit(dodec) * fuel --> done(dodec) ]'dodec;
+[step : work * unit(manifold_11d) * fuel --> done(manifold_11d) ]'manifold_11d;
+[report : done(quat) --> (result(quat))out ]'quat;
+[report : done(oct) --> (result(oct))out ]'oct;
+[report : done(dodec) --> (result(dodec))out ]'dodec;
+[report : done(manifold_11d) --> (result(manifold_11d))out ]'manifold_11d;

@@ -1,0 +1,40 @@
+/* ============================================================================
+ * common/time_crystal_core.pli
+ *
+ * Base time-crystal skin: 11 nested phase membranes (the 11D manifold),
+ * clock/tick rules and singularity-point objects. Every chapter model that
+ * works with time crystals inlines this structure and cites this file.
+ *
+ * Issue: all (shared)
+ * Sections: 1.10.1 (language of time crystals), 2.3, 7.1.2 (singularity on a
+ *           sphere = key to a clock of a time crystal)
+ * Traceability: src/cpp/nanobrain_time_crystal.h (TimeCrystalQuantumState,
+ *               11D quantum manifold processing)
+ * Initial multiset: a tick object in the outermost phase membrane.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Skin + 11 nested phase membranes d1..d11 (d11 innermost). */
+@mu = [ [ [ [ [ [ [ [ [ [ [ []'d11 ]'d10 ]'d9 ]'d8 ]'d7 ]'d6 ]'d5 ]'d4 ]'d3 ]'d2 ]'d1 ]'skin;
+
+@mskin = tick;
+
+/* --------------------------------------------------------------------------
+ * tick_in    : the clock pulse propagates one dimension deeper per step
+ * tick_wrap  : at d11 the pulse wraps back to the skin (closed time loop)
+ * singularity: a singularity_point at any depth seeds a new clock
+ * ------------------------------------------------------------------------*/
+[tick_in   : tick --> (tick)in_d1 ]'skin;
+[tick_in   : tick --> (tick)in_d2 ]'d1;
+[tick_in   : tick --> (tick)in_d3 ]'d2;
+[tick_in   : tick --> (tick)in_d4 ]'d3;
+[tick_in   : tick --> (tick)in_d5 ]'d4;
+[tick_in   : tick --> (tick)in_d6 ]'d5;
+[tick_in   : tick --> (tick)in_d7 ]'d6;
+[tick_in   : tick --> (tick)in_d8 ]'d7;
+[tick_in   : tick --> (tick)in_d9 ]'d8;
+[tick_in   : tick --> (tick)in_d10 ]'d9;
+[tick_in   : tick --> (tick)in_d11 ]'d10;
+[tick_wrap : tick --> (tick)out ]'d11;
+[singularity : singularity_point --> singularity_point * tick ]'d11;

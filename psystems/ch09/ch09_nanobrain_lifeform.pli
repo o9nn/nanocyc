@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch09/ch09_nanobrain_lifeform.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.7, 9.7.1-9.7.2
+ * Functionality: Nanobrain, the smallest life form: jelly of megamers following a resonance chain; EEG of a nanobrain.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'megamer []'resonance []'eeg ]'skin;
+
+@mskin = seed;
+@mmegamer = unit(megamer), fuel;
+@mresonance = unit(resonance), fuel;
+@meeg = unit(eeg), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_megamer ]'skin;
+[seed_dispense : seed --> (work)in_resonance ]'skin;
+[seed_dispense : seed --> (work)in_eeg ]'skin;
+[step : work * unit(megamer) * fuel --> done(megamer) ]'megamer;
+[step : work * unit(resonance) * fuel --> done(resonance) ]'resonance;
+[step : work * unit(eeg) * fuel --> done(eeg) ]'eeg;
+[report : done(megamer) --> (result(megamer))out ]'megamer;
+[report : done(resonance) --> (result(resonance))out ]'resonance;
+[report : done(eeg) --> (result(eeg))out ]'eeg;

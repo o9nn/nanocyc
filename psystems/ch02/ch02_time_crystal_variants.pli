@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch02/ch02_time_crystal_variants.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.5
+ * Functionality: Comparative study of Winfree, Wilczek and universal time crystals as three variant membranes.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'winfree []'wilczek []'universal ]'skin;
+
+@mskin = seed;
+@mwinfree = unit(winfree), fuel;
+@mwilczek = unit(wilczek), fuel;
+@muniversal = unit(universal), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_winfree ]'skin;
+[seed_dispense : seed --> (work)in_wilczek ]'skin;
+[seed_dispense : seed --> (work)in_universal ]'skin;
+[step : work * unit(winfree) * fuel --> done(winfree) ]'winfree;
+[step : work * unit(wilczek) * fuel --> done(wilczek) ]'wilczek;
+[step : work * unit(universal) * fuel --> done(universal) ]'universal;
+[report : done(winfree) --> (result(winfree))out ]'winfree;
+[report : done(wilczek) --> (result(wilczek))out ]'wilczek;
+[report : done(universal) --> (result(universal))out ]'universal;

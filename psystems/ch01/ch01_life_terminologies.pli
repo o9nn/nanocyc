@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch01/ch01_life_terminologies.pli
+ *
+ * NanoBrain CH01: Philosophical transformation essential to reverse engineer consciousness
+ * Issue #6 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 1.8
+ * Functionality: Terminologies of life that computers do not support, as objects with rewrite semantics.
+ * Traceability: src/cpp/nanobrain_philosophical.h, nanobrain_unified.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'life_terms ]'skin;
+
+@mskin = seed;
+@mlife_terms = unit(life_terms), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_life_terms ]'skin;
+[step : work * unit(life_terms) * fuel --> done(life_terms) ]'life_terms;
+[report : done(life_terms) --> (result(life_terms))out ]'life_terms;

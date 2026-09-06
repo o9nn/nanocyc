@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch05/ch05_instant_reply.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.2, 5.2.1-5.2.4
+ * Functionality: Origin of fractal resolution and instant reply: spontaneous reply (search without searching), automated error correction by time-crystal learning, synchronization of time crystals on incomplete problems, umbrella of perception (harvesting infinity).
+ * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'reply []'error_correct []'sync []'umbrella ]'skin;
+
+@mskin = seed;
+@mreply = unit(reply), fuel;
+@merror_correct = unit(error_correct), fuel;
+@msync = unit(sync), fuel;
+@mumbrella = unit(umbrella), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_reply ]'skin;
+[seed_dispense : seed --> (work)in_error_correct ]'skin;
+[seed_dispense : seed --> (work)in_sync ]'skin;
+[seed_dispense : seed --> (work)in_umbrella ]'skin;
+[step : work * unit(reply) * fuel --> done(reply) ]'reply;
+[step : work * unit(error_correct) * fuel --> done(error_correct) ]'error_correct;
+[step : work * unit(sync) * fuel --> done(sync) ]'sync;
+[step : work * unit(umbrella) * fuel --> done(umbrella) ]'umbrella;
+[report : done(reply) --> (result(reply))out ]'reply;
+[report : done(error_correct) --> (result(error_correct))out ]'error_correct;
+[report : done(sync) --> (result(sync))out ]'sync;
+[report : done(umbrella) --> (result(umbrella))out ]'umbrella;

@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch08/ch08_spiral_cylinders.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.2, 8.2.1-8.2.2
+ * Functionality: Three concentric spiral cylinders talking to each other; periodically oscillating edge and screw dislocations; topology regulating polarization.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'cyl_inner []'cyl_mid []'cyl_outer ]'skin;
+
+@mskin = seed;
+@mcyl_inner = unit(cyl_inner), fuel;
+@mcyl_mid = unit(cyl_mid), fuel;
+@mcyl_outer = unit(cyl_outer), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_cyl_inner ]'skin;
+[seed_dispense : seed --> (work)in_cyl_mid ]'skin;
+[seed_dispense : seed --> (work)in_cyl_outer ]'skin;
+[step : work * unit(cyl_inner) * fuel --> done(cyl_inner) ]'cyl_inner;
+[step : work * unit(cyl_mid) * fuel --> done(cyl_mid) ]'cyl_mid;
+[step : work * unit(cyl_outer) * fuel --> done(cyl_outer) ]'cyl_outer;
+[report : done(cyl_inner) --> (result(cyl_inner))out ]'cyl_inner;
+[report : done(cyl_mid) --> (result(cyl_mid))out ]'cyl_mid;
+[report : done(cyl_outer) --> (result(cyl_outer))out ]'cyl_outer;

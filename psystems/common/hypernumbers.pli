@@ -1,0 +1,35 @@
+/* ============================================================================
+ * common/hypernumbers.pli
+ *
+ * Quaternion, octonion and dodecanion objects with multiplication rules.
+ * Quaternions (4D) multiply pairwise; octonions (8D) lose associativity —
+ * modeled with a non-assoc marker; dodecanions (12D) extend to the
+ * 11D-manifold algebra of the dodecanion brain.
+ *
+ * Issue: all (shared) — primary use in ch02, ch04, ch07
+ * Sections: 2.6, 4.9, 7.11.2
+ * Traceability: src/cpp/nanobrain_dodecanion.h
+ * Initial multiset: sample basis elements q_i, o_e1, d_a1 to be multiplied.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+@mu = []'skin;
+
+@mskin = q(1), q(i), q(j), q(k),
+         o(1), o(e1), o(e2), o(e3), o(e4), o(e5), o(e6), o(e7),
+         d(1), d(a1), d(a2), d(a3), d(a4), d(a5),
+         d(a6), d(a7), d(a8), d(a9), d(a10), d(a11);
+
+/* --------------------------------------------------------------------------
+ * q_mul   : quaternion product (associative)
+ * o_mul   : octonion product — tagged non-associative
+ * d_mul   : dodecanion product across the 12 generators
+ * q_imag  : imaginary quaternion units square to -1
+ * ------------------------------------------------------------------------*/
+[q_mul  : q(A) * q(B) --> q(prod(A,B)) ]'skin;
+[o_mul  : o(A) * o(B) --> o(prod(A,B)) * nonassoc ]'skin;
+[d_mul  : d(A) * d(B) --> d(prod(A,B)) ]'skin;
+[q_imag : q(i)*2 --> q(minus1) ]'skin;
+[q_imag : q(j)*2 --> q(minus1) ]'skin;
+[q_imag : q(k)*2 --> q(minus1) ]'skin;

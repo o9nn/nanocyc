@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch04/ch04_clock_arithmetic.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.8, 4.8.1-4.8.2
+ * Functionality: Basic mathematics using clocks: numbers, equations, + - x /, differentiation, integration, PDEs and Lie algebra.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'arith []'calculus []'lie ]'skin;
+
+@mskin = seed;
+@marith = unit(arith), fuel;
+@mcalculus = unit(calculus), fuel;
+@mlie = unit(lie), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_arith ]'skin;
+[seed_dispense : seed --> (work)in_calculus ]'skin;
+[seed_dispense : seed --> (work)in_lie ]'skin;
+[step : work * unit(arith) * fuel --> done(arith) ]'arith;
+[step : work * unit(calculus) * fuel --> done(calculus) ]'calculus;
+[step : work * unit(lie) * fuel --> done(lie) ]'lie;
+[report : done(arith) --> (result(arith))out ]'arith;
+[report : done(calculus) --> (result(calculus))out ]'calculus;
+[report : done(lie) --> (result(lie))out ]'lie;

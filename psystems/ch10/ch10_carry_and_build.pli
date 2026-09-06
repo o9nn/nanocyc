@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch10/ch10_carry_and_build.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.5
+ * Functionality: When should we carry it, why do we make it: motivation and deployment decision rules.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'when []'why ]'skin;
+
+@mskin = seed;
+@mwhen = unit(when), fuel;
+@mwhy = unit(why), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_when ]'skin;
+[seed_dispense : seed --> (work)in_why ]'skin;
+[step : work * unit(when) * fuel --> done(when) ]'when;
+[step : work * unit(why) * fuel --> done(why) ]'why;
+[report : done(when) --> (result(when))out ]'when;
+[report : done(why) --> (result(why))out ]'why;

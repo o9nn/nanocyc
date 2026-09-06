@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch10/ch10_time_crystal_consciousness.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.4, 10.4.1
+ * Functionality: Consciousness is not on the neuron skin — the time-crystal model is nowhere but everywhere; difference between the neurogenic brain model and the time-crystal model.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'neurogenic []'tc_model ]'skin;
+
+@mskin = seed;
+@mneurogenic = unit(neurogenic), fuel;
+@mtc_model = unit(tc_model), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_neurogenic ]'skin;
+[seed_dispense : seed --> (work)in_tc_model ]'skin;
+[step : work * unit(neurogenic) * fuel --> done(neurogenic) ]'neurogenic;
+[step : work * unit(tc_model) * fuel --> done(tc_model) ]'tc_model;
+[report : done(neurogenic) --> (result(neurogenic))out ]'neurogenic;
+[report : done(tc_model) --> (result(tc_model))out ]'tc_model;

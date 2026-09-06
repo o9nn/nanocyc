@@ -1,0 +1,46 @@
+/* ============================================================================
+ * psystems/ch07/ch07_sensory_primes.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.2
+ * Functionality: Primes in the five sensory systems.
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'vision []'hearing []'touch []'taste []'smell ]'skin;
+
+@mskin = seed;
+@mvision = unit(vision), fuel;
+@mhearing = unit(hearing), fuel;
+@mtouch = unit(touch), fuel;
+@mtaste = unit(taste), fuel;
+@msmell = unit(smell), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_vision ]'skin;
+[seed_dispense : seed --> (work)in_hearing ]'skin;
+[seed_dispense : seed --> (work)in_touch ]'skin;
+[seed_dispense : seed --> (work)in_taste ]'skin;
+[seed_dispense : seed --> (work)in_smell ]'skin;
+[step : work * unit(vision) * fuel --> done(vision) ]'vision;
+[step : work * unit(hearing) * fuel --> done(hearing) ]'hearing;
+[step : work * unit(touch) * fuel --> done(touch) ]'touch;
+[step : work * unit(taste) * fuel --> done(taste) ]'taste;
+[step : work * unit(smell) * fuel --> done(smell) ]'smell;
+[report : done(vision) --> (result(vision))out ]'vision;
+[report : done(hearing) --> (result(hearing))out ]'hearing;
+[report : done(touch) --> (result(touch))out ]'touch;
+[report : done(taste) --> (result(taste))out ]'taste;
+[report : done(smell) --> (result(smell))out ]'smell;

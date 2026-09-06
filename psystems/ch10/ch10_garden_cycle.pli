@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch10/ch10_garden_cycle.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.13
+ * Functionality: A cycle of the garden to flower to a petal: full GOG life-cycle rules closing the book.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'garden []'flower []'petal ]'skin;
+
+@mskin = seed;
+@mgarden = unit(garden), fuel;
+@mflower = unit(flower), fuel;
+@mpetal = unit(petal), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_garden ]'skin;
+[seed_dispense : seed --> (work)in_flower ]'skin;
+[seed_dispense : seed --> (work)in_petal ]'skin;
+[step : work * unit(garden) * fuel --> done(garden) ]'garden;
+[step : work * unit(flower) * fuel --> done(flower) ]'flower;
+[step : work * unit(petal) * fuel --> done(petal) ]'petal;
+[report : done(garden) --> (result(garden))out ]'garden;
+[report : done(flower) --> (result(flower))out ]'flower;
+[report : done(petal) --> (result(petal))out ]'petal;

@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch04/ch04_fractal_tape_equations.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.10, 4.10.1
+ * Functionality: Twelve equations regulating a fractal tape for prime-based computing; projection from infinity — the future impacting the present.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'eq_1_4 []'eq_5_8 []'eq_9_12 []'infinity ]'skin;
+
+@mskin = seed;
+@meq_1_4 = unit(eq_1_4), fuel;
+@meq_5_8 = unit(eq_5_8), fuel;
+@meq_9_12 = unit(eq_9_12), fuel;
+@minfinity = unit(infinity), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_eq_1_4 ]'skin;
+[seed_dispense : seed --> (work)in_eq_5_8 ]'skin;
+[seed_dispense : seed --> (work)in_eq_9_12 ]'skin;
+[seed_dispense : seed --> (work)in_infinity ]'skin;
+[step : work * unit(eq_1_4) * fuel --> done(eq_1_4) ]'eq_1_4;
+[step : work * unit(eq_5_8) * fuel --> done(eq_5_8) ]'eq_5_8;
+[step : work * unit(eq_9_12) * fuel --> done(eq_9_12) ]'eq_9_12;
+[step : work * unit(infinity) * fuel --> done(infinity) ]'infinity;
+[report : done(eq_1_4) --> (result(eq_1_4))out ]'eq_1_4;
+[report : done(eq_5_8) --> (result(eq_5_8))out ]'eq_5_8;
+[report : done(eq_9_12) --> (result(eq_9_12))out ]'eq_9_12;
+[report : done(infinity) --> (result(infinity))out ]'infinity;

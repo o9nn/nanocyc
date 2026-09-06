@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch03/ch03_prime_classes.pli
+ *
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * Issue #8 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 3.16, 3.16.1-3.16.2
+ * Functionality: Three classes of primes: ordered-factor metric OF, prime-composition metric PC, prime-gap metric PG; advantages of PPM.
+ * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'of_class []'pc_class []'pg_class ]'skin;
+
+@mskin = seed;
+@mof_class = unit(of_class), fuel;
+@mpc_class = unit(pc_class), fuel;
+@mpg_class = unit(pg_class), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_of_class ]'skin;
+[seed_dispense : seed --> (work)in_pc_class ]'skin;
+[seed_dispense : seed --> (work)in_pg_class ]'skin;
+[step : work * unit(of_class) * fuel --> done(of_class) ]'of_class;
+[step : work * unit(pc_class) * fuel --> done(pc_class) ]'pc_class;
+[step : work * unit(pg_class) * fuel --> done(pg_class) ]'pg_class;
+[report : done(of_class) --> (result(of_class))out ]'of_class;
+[report : done(pc_class) --> (result(pc_class))out ]'pc_class;
+[report : done(pg_class) --> (result(pg_class))out ]'pg_class;

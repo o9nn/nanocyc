@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch01/ch01_tapes_languages.pli
+ *
+ * NanoBrain CH01: Philosophical transformation essential to reverse engineer consciousness
+ * Issue #6 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 1.5
+ * Functionality: Different kinds of tapes (Turing, fractal, GML) to recreate nature, modeled as alternative multiset-encoding schemes.
+ * Traceability: src/cpp/nanobrain_philosophical.h, nanobrain_unified.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'turing_tape []'fractal_tape []'gml_tape ]'skin;
+
+@mskin = seed;
+@mturing_tape = unit(turing_tape), fuel;
+@mfractal_tape = unit(fractal_tape), fuel;
+@mgml_tape = unit(gml_tape), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_turing_tape ]'skin;
+[seed_dispense : seed --> (work)in_fractal_tape ]'skin;
+[seed_dispense : seed --> (work)in_gml_tape ]'skin;
+[step : work * unit(turing_tape) * fuel --> done(turing_tape) ]'turing_tape;
+[step : work * unit(fractal_tape) * fuel --> done(fractal_tape) ]'fractal_tape;
+[step : work * unit(gml_tape) * fuel --> done(gml_tape) ]'gml_tape;
+[report : done(turing_tape) --> (result(turing_tape))out ]'turing_tape;
+[report : done(fractal_tape) --> (result(fractal_tape))out ]'fractal_tape;
+[report : done(gml_tape) --> (result(gml_tape))out ]'gml_tape;

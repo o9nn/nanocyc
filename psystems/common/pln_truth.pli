@@ -1,0 +1,35 @@
+/* ============================================================================
+ * common/pln_truth.pli
+ *
+ * PLN truth values as objects — tv(Atom, strength, confidence) — and the
+ * core inference rules: deduction, induction, abduction, revision.
+ *
+ * Issue: all (shared)
+ * Sections: cross-cutting — reasoning for every cognitive module
+ * Traceability: src/cpp/nanobrain_reasoning.h (Deduction, Induction,
+ *               Abduction, Revision inference rules)
+ * Initial multiset: two links Inheritance(a,b) and Inheritance(b,c) with
+ *                   truth values, ready for one deduction step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+@mu = []'skin;
+
+@mskin = tv(inh(a,b), s(0.9), c(0.8)),
+         tv(inh(b,c), s(0.8), c(0.7));
+
+/* --------------------------------------------------------------------------
+ * deduction  : A->B, B->C |- A->C (strength = product, confidence = min)
+ * induction  : A->B, A->C |- B->C
+ * abduction  : A->C, B->C |- A->B
+ * revision   : two estimates of the same statement merge into one
+ * ------------------------------------------------------------------------*/
+[deduction : tv(inh(A,B), s(S1), c(C1)) * tv(inh(B,C), s(S2), c(C2))
+         --> tv(inh(A,C), s(S1*S2), c(min(C1,C2))) ]'skin;
+[induction : tv(inh(A,B), s(S1), c(C1)) * tv(inh(A,C), s(S2), c(C2))
+         --> tv(inh(B,C), s(S1*S2), c(min(C1,C2))) ]'skin;
+[abduction : tv(inh(A,C), s(S1), c(C1)) * tv(inh(B,C), s(S2), c(C2))
+         --> tv(inh(A,B), s(S1*S2), c(min(C1,C2))) ]'skin;
+[revision  : tv(X, s(S1), c(C1)) * tv(X, s(S2), c(C2))
+         --> tv(X, s(rev(S1,S2)), c(C1+C2)) ]'skin;

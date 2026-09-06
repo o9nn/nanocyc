@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch02/ch02_singularity_assembly.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.1.1-2.1.2
+ * Functionality: Self-assembly of geometric shapes and the concept of singularity: singularity objects seed assembly rules.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'assembly ]'skin;
+
+@mskin = seed;
+@massembly = unit(assembly), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_assembly ]'skin;
+[step : work * unit(assembly) * fuel --> done(assembly) ]'assembly;
+[report : done(assembly) --> (result(assembly))out ]'assembly;

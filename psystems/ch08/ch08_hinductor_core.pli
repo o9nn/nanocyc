@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch08/ch08_hinductor_core.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.4, 8.4.1-8.4.3
+ * Functionality: Linear variation of magnetic flux and stored charge in H; flow of thermal wave; wireless communication between two H devices; Tomasch oscillations and harvesting noise.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'h_device_a []'h_device_b []'thermal ]'skin;
+
+@mskin = seed;
+@mh_device_a = unit(h_device_a), fuel;
+@mh_device_b = unit(h_device_b), fuel;
+@mthermal = unit(thermal), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_h_device_a ]'skin;
+[seed_dispense : seed --> (work)in_h_device_b ]'skin;
+[seed_dispense : seed --> (work)in_thermal ]'skin;
+[step : work * unit(h_device_a) * fuel --> done(h_device_a) ]'h_device_a;
+[step : work * unit(h_device_b) * fuel --> done(h_device_b) ]'h_device_b;
+[step : work * unit(thermal) * fuel --> done(thermal) ]'thermal;
+[report : done(h_device_a) --> (result(h_device_a))out ]'h_device_a;
+[report : done(h_device_b) --> (result(h_device_b))out ]'h_device_b;
+[report : done(thermal) --> (result(thermal))out ]'thermal;

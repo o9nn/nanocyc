@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch04/ch04_energy_worlds.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.2.4, 4.4
+ * Functionality: Energy in the world of many interacting imaginary worlds; action is not limited to Planck's constant — every imaginary world has one.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'world_a []'world_b ]'skin;
+
+@mskin = seed;
+@mworld_a = unit(world_a), fuel;
+@mworld_b = unit(world_b), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_world_a ]'skin;
+[seed_dispense : seed --> (work)in_world_b ]'skin;
+[step : work * unit(world_a) * fuel --> done(world_a) ]'world_a;
+[step : work * unit(world_b) * fuel --> done(world_b) ]'world_b;
+[report : done(world_a) --> (result(world_a))out ]'world_a;
+[report : done(world_b) --> (result(world_b))out ]'world_b;

@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch05/ch05_lotus_primes.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.7
+ * Functionality: Lotus lotus in the primes: revisiting the thermodynamics of geometry.
+ * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'lotus []'thermo ]'skin;
+
+@mskin = seed;
+@mlotus = unit(lotus), fuel;
+@mthermo = unit(thermo), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_lotus ]'skin;
+[seed_dispense : seed --> (work)in_thermo ]'skin;
+[step : work * unit(lotus) * fuel --> done(lotus) ]'lotus;
+[step : work * unit(thermo) * fuel --> done(thermo) ]'thermo;
+[report : done(lotus) --> (result(lotus))out ]'lotus;
+[report : done(thermo) --> (result(thermo))out ]'thermo;

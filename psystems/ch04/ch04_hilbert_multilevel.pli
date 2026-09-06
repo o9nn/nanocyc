@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch04/ch04_hilbert_multilevel.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.2.1
+ * Functionality: Multilevel geometric architecture of the Hilbert space as nested level membranes.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'level_0 []'level_1 []'level_2 ]'skin;
+
+@mskin = seed;
+@mlevel_0 = unit(level_0), fuel;
+@mlevel_1 = unit(level_1), fuel;
+@mlevel_2 = unit(level_2), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_level_0 ]'skin;
+[seed_dispense : seed --> (work)in_level_1 ]'skin;
+[seed_dispense : seed --> (work)in_level_2 ]'skin;
+[step : work * unit(level_0) * fuel --> done(level_0) ]'level_0;
+[step : work * unit(level_1) * fuel --> done(level_1) ]'level_1;
+[step : work * unit(level_2) * fuel --> done(level_2) ]'level_2;
+[report : done(level_0) --> (result(level_0))out ]'level_0;
+[report : done(level_1) --> (result(level_1))out ]'level_1;
+[report : done(level_2) --> (result(level_2))out ]'level_2;

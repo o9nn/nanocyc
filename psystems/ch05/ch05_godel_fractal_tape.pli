@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch05/ch05_godel_fractal_tape.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.1
+ * Functionality: Godel's incompleteness and the fractal tape: incompleteness handling as undecidable-object rules.
+ * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'godel []'tape ]'skin;
+
+@mskin = seed;
+@mgodel = unit(godel), fuel;
+@mtape = unit(tape), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_godel ]'skin;
+[seed_dispense : seed --> (work)in_tape ]'skin;
+[step : work * unit(godel) * fuel --> done(godel) ]'godel;
+[step : work * unit(tape) * fuel --> done(tape) ]'tape;
+[report : done(godel) --> (result(godel))out ]'godel;
+[report : done(tape) --> (result(tape))out ]'tape;

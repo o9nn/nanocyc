@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch10/ch10_cortical_pen_journey.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.1, 10.1.1
+ * Functionality: A journey from cortical pen to a conscious egg as a companion of life; how we construct a sentence is how we think.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'pen []'egg []'sentence ]'skin;
+
+@mskin = seed;
+@mpen = unit(pen), fuel;
+@megg = unit(egg), fuel;
+@msentence = unit(sentence), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_pen ]'skin;
+[seed_dispense : seed --> (work)in_egg ]'skin;
+[seed_dispense : seed --> (work)in_sentence ]'skin;
+[step : work * unit(pen) * fuel --> done(pen) ]'pen;
+[step : work * unit(egg) * fuel --> done(egg) ]'egg;
+[step : work * unit(sentence) * fuel --> done(sentence) ]'sentence;
+[report : done(pen) --> (result(pen))out ]'pen;
+[report : done(egg) --> (result(egg))out ]'egg;
+[report : done(sentence) --> (result(sentence))out ]'sentence;

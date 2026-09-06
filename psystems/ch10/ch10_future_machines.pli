@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch10/ch10_future_machines.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.8, 10.8.1-10.8.2
+ * Functionality: Machines of the future: circuits of wires vs circuits of time; future applications.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'wire_circuit []'time_circuit []'apps ]'skin;
+
+@mskin = seed;
+@mwire_circuit = unit(wire_circuit), fuel;
+@mtime_circuit = unit(time_circuit), fuel;
+@mapps = unit(apps), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_wire_circuit ]'skin;
+[seed_dispense : seed --> (work)in_time_circuit ]'skin;
+[seed_dispense : seed --> (work)in_apps ]'skin;
+[step : work * unit(wire_circuit) * fuel --> done(wire_circuit) ]'wire_circuit;
+[step : work * unit(time_circuit) * fuel --> done(time_circuit) ]'time_circuit;
+[step : work * unit(apps) * fuel --> done(apps) ]'apps;
+[report : done(wire_circuit) --> (result(wire_circuit))out ]'wire_circuit;
+[report : done(time_circuit) --> (result(time_circuit))out ]'time_circuit;
+[report : done(apps) --> (result(apps))out ]'apps;

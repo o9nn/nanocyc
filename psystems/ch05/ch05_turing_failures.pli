@@ -1,0 +1,66 @@
+/* ============================================================================
+ * psystems/ch05/ch05_turing_failures.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.4
+ * Functionality: Ten situations where the Turing machine fails and fractal machines hold on: ten counter-example membranes.
+ * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'case_1 []'case_2 []'case_3 []'case_4 []'case_5 []'case_6 []'case_7 []'case_8 []'case_9 []'case_10 ]'skin;
+
+@mskin = seed;
+@mcase_1 = unit(case_1), fuel;
+@mcase_2 = unit(case_2), fuel;
+@mcase_3 = unit(case_3), fuel;
+@mcase_4 = unit(case_4), fuel;
+@mcase_5 = unit(case_5), fuel;
+@mcase_6 = unit(case_6), fuel;
+@mcase_7 = unit(case_7), fuel;
+@mcase_8 = unit(case_8), fuel;
+@mcase_9 = unit(case_9), fuel;
+@mcase_10 = unit(case_10), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_case_1 ]'skin;
+[seed_dispense : seed --> (work)in_case_2 ]'skin;
+[seed_dispense : seed --> (work)in_case_3 ]'skin;
+[seed_dispense : seed --> (work)in_case_4 ]'skin;
+[seed_dispense : seed --> (work)in_case_5 ]'skin;
+[seed_dispense : seed --> (work)in_case_6 ]'skin;
+[seed_dispense : seed --> (work)in_case_7 ]'skin;
+[seed_dispense : seed --> (work)in_case_8 ]'skin;
+[seed_dispense : seed --> (work)in_case_9 ]'skin;
+[seed_dispense : seed --> (work)in_case_10 ]'skin;
+[step : work * unit(case_1) * fuel --> done(case_1) ]'case_1;
+[step : work * unit(case_2) * fuel --> done(case_2) ]'case_2;
+[step : work * unit(case_3) * fuel --> done(case_3) ]'case_3;
+[step : work * unit(case_4) * fuel --> done(case_4) ]'case_4;
+[step : work * unit(case_5) * fuel --> done(case_5) ]'case_5;
+[step : work * unit(case_6) * fuel --> done(case_6) ]'case_6;
+[step : work * unit(case_7) * fuel --> done(case_7) ]'case_7;
+[step : work * unit(case_8) * fuel --> done(case_8) ]'case_8;
+[step : work * unit(case_9) * fuel --> done(case_9) ]'case_9;
+[step : work * unit(case_10) * fuel --> done(case_10) ]'case_10;
+[report : done(case_1) --> (result(case_1))out ]'case_1;
+[report : done(case_2) --> (result(case_2))out ]'case_2;
+[report : done(case_3) --> (result(case_3))out ]'case_3;
+[report : done(case_4) --> (result(case_4))out ]'case_4;
+[report : done(case_5) --> (result(case_5))out ]'case_5;
+[report : done(case_6) --> (result(case_6))out ]'case_6;
+[report : done(case_7) --> (result(case_7))out ]'case_7;
+[report : done(case_8) --> (result(case_8))out ]'case_8;
+[report : done(case_9) --> (result(case_9))out ]'case_9;
+[report : done(case_10) --> (result(case_10))out ]'case_10;

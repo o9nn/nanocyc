@@ -1,0 +1,46 @@
+/* ============================================================================
+ * psystems/ch09/ch09_cortical_sheet.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.2, 9.2.1-9.2.2
+ * Functionality: A hexagonal 2D sheet of cortical sheets (a carpenter's job); collective response of quad patterns of primes; three rhythms — electric, magnetic, mechanical — binding them.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'sheet []'quad_primes []'rhythm_e []'rhythm_m []'rhythm_mech ]'skin;
+
+@mskin = seed;
+@msheet = unit(sheet), fuel;
+@mquad_primes = unit(quad_primes), fuel;
+@mrhythm_e = unit(rhythm_e), fuel;
+@mrhythm_m = unit(rhythm_m), fuel;
+@mrhythm_mech = unit(rhythm_mech), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_sheet ]'skin;
+[seed_dispense : seed --> (work)in_quad_primes ]'skin;
+[seed_dispense : seed --> (work)in_rhythm_e ]'skin;
+[seed_dispense : seed --> (work)in_rhythm_m ]'skin;
+[seed_dispense : seed --> (work)in_rhythm_mech ]'skin;
+[step : work * unit(sheet) * fuel --> done(sheet) ]'sheet;
+[step : work * unit(quad_primes) * fuel --> done(quad_primes) ]'quad_primes;
+[step : work * unit(rhythm_e) * fuel --> done(rhythm_e) ]'rhythm_e;
+[step : work * unit(rhythm_m) * fuel --> done(rhythm_m) ]'rhythm_m;
+[step : work * unit(rhythm_mech) * fuel --> done(rhythm_mech) ]'rhythm_mech;
+[report : done(sheet) --> (result(sheet))out ]'sheet;
+[report : done(quad_primes) --> (result(quad_primes))out ]'quad_primes;
+[report : done(rhythm_e) --> (result(rhythm_e))out ]'rhythm_e;
+[report : done(rhythm_m) --> (result(rhythm_m))out ]'rhythm_m;
+[report : done(rhythm_mech) --> (result(rhythm_mech))out ]'rhythm_mech;

@@ -1,0 +1,66 @@
+/* ============================================================================
+ * psystems/ch10/ch10_ten_paradoxes.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.3
+ * Functionality: Ten paradoxes that would change our thoughts forever, as constraint-satisfaction rule sets.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'paradox_1 []'paradox_2 []'paradox_3 []'paradox_4 []'paradox_5 []'paradox_6 []'paradox_7 []'paradox_8 []'paradox_9 []'paradox_10 ]'skin;
+
+@mskin = seed;
+@mparadox_1 = unit(paradox_1), fuel;
+@mparadox_2 = unit(paradox_2), fuel;
+@mparadox_3 = unit(paradox_3), fuel;
+@mparadox_4 = unit(paradox_4), fuel;
+@mparadox_5 = unit(paradox_5), fuel;
+@mparadox_6 = unit(paradox_6), fuel;
+@mparadox_7 = unit(paradox_7), fuel;
+@mparadox_8 = unit(paradox_8), fuel;
+@mparadox_9 = unit(paradox_9), fuel;
+@mparadox_10 = unit(paradox_10), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_paradox_1 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_2 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_3 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_4 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_5 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_6 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_7 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_8 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_9 ]'skin;
+[seed_dispense : seed --> (work)in_paradox_10 ]'skin;
+[step : work * unit(paradox_1) * fuel --> done(paradox_1) ]'paradox_1;
+[step : work * unit(paradox_2) * fuel --> done(paradox_2) ]'paradox_2;
+[step : work * unit(paradox_3) * fuel --> done(paradox_3) ]'paradox_3;
+[step : work * unit(paradox_4) * fuel --> done(paradox_4) ]'paradox_4;
+[step : work * unit(paradox_5) * fuel --> done(paradox_5) ]'paradox_5;
+[step : work * unit(paradox_6) * fuel --> done(paradox_6) ]'paradox_6;
+[step : work * unit(paradox_7) * fuel --> done(paradox_7) ]'paradox_7;
+[step : work * unit(paradox_8) * fuel --> done(paradox_8) ]'paradox_8;
+[step : work * unit(paradox_9) * fuel --> done(paradox_9) ]'paradox_9;
+[step : work * unit(paradox_10) * fuel --> done(paradox_10) ]'paradox_10;
+[report : done(paradox_1) --> (result(paradox_1))out ]'paradox_1;
+[report : done(paradox_2) --> (result(paradox_2))out ]'paradox_2;
+[report : done(paradox_3) --> (result(paradox_3))out ]'paradox_3;
+[report : done(paradox_4) --> (result(paradox_4))out ]'paradox_4;
+[report : done(paradox_5) --> (result(paradox_5))out ]'paradox_5;
+[report : done(paradox_6) --> (result(paradox_6))out ]'paradox_6;
+[report : done(paradox_7) --> (result(paradox_7))out ]'paradox_7;
+[report : done(paradox_8) --> (result(paradox_8))out ]'paradox_8;
+[report : done(paradox_9) --> (result(paradox_9))out ]'paradox_9;
+[report : done(paradox_10) --> (result(paradox_10))out ]'paradox_10;

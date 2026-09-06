@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch02/ch02_sensor_11d.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.4, 2.4.1-2.4.3
+ * Functionality: Sensor for acquiring 11D data: why Fourier transform fails, nerve-bundle engineering, operational chart of a sensor.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'acquire []'bundle []'chart ]'skin;
+
+@mskin = seed;
+@macquire = unit(acquire), fuel;
+@mbundle = unit(bundle), fuel;
+@mchart = unit(chart), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_acquire ]'skin;
+[seed_dispense : seed --> (work)in_bundle ]'skin;
+[seed_dispense : seed --> (work)in_chart ]'skin;
+[step : work * unit(acquire) * fuel --> done(acquire) ]'acquire;
+[step : work * unit(bundle) * fuel --> done(bundle) ]'bundle;
+[step : work * unit(chart) * fuel --> done(chart) ]'chart;
+[report : done(acquire) --> (result(acquire))out ]'acquire;
+[report : done(bundle) --> (result(bundle))out ]'bundle;
+[report : done(chart) --> (result(chart))out ]'chart;

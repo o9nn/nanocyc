@@ -1,0 +1,46 @@
+/* ============================================================================
+ * psystems/ch04/ch04_qm_with_clocks.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.1, 4.1.1
+ * Functionality: Revisiting quantum mechanics with clocks: wave-particle duality, beating, interference, entanglement, harmonic oscillator as clock membranes.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'duality []'beating []'interference []'entanglement []'oscillator ]'skin;
+
+@mskin = seed;
+@mduality = unit(duality), fuel;
+@mbeating = unit(beating), fuel;
+@minterference = unit(interference), fuel;
+@mentanglement = unit(entanglement), fuel;
+@moscillator = unit(oscillator), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_duality ]'skin;
+[seed_dispense : seed --> (work)in_beating ]'skin;
+[seed_dispense : seed --> (work)in_interference ]'skin;
+[seed_dispense : seed --> (work)in_entanglement ]'skin;
+[seed_dispense : seed --> (work)in_oscillator ]'skin;
+[step : work * unit(duality) * fuel --> done(duality) ]'duality;
+[step : work * unit(beating) * fuel --> done(beating) ]'beating;
+[step : work * unit(interference) * fuel --> done(interference) ]'interference;
+[step : work * unit(entanglement) * fuel --> done(entanglement) ]'entanglement;
+[step : work * unit(oscillator) * fuel --> done(oscillator) ]'oscillator;
+[report : done(duality) --> (result(duality))out ]'duality;
+[report : done(beating) --> (result(beating))out ]'beating;
+[report : done(interference) --> (result(interference))out ]'interference;
+[report : done(entanglement) --> (result(entanglement))out ]'entanglement;
+[report : done(oscillator) --> (result(oscillator))out ]'oscillator;

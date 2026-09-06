@@ -1,0 +1,46 @@
+/* ============================================================================
+ * psystems/ch08/ch08_magnetic_light_hamiltonian.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.3, 8.3.1-8.3.3
+ * Functionality: Hamiltonian (energy) of four clocks creating magnetic light; birefringence and quantum/classical beating; Pancharatnam-Berry phase; pyroelectric, ferroelectric and piezoelectric properties.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'clock_1 []'clock_2 []'clock_3 []'clock_4 []'pb_phase ]'skin;
+
+@mskin = seed;
+@mclock_1 = unit(clock_1), fuel;
+@mclock_2 = unit(clock_2), fuel;
+@mclock_3 = unit(clock_3), fuel;
+@mclock_4 = unit(clock_4), fuel;
+@mpb_phase = unit(pb_phase), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_clock_1 ]'skin;
+[seed_dispense : seed --> (work)in_clock_2 ]'skin;
+[seed_dispense : seed --> (work)in_clock_3 ]'skin;
+[seed_dispense : seed --> (work)in_clock_4 ]'skin;
+[seed_dispense : seed --> (work)in_pb_phase ]'skin;
+[step : work * unit(clock_1) * fuel --> done(clock_1) ]'clock_1;
+[step : work * unit(clock_2) * fuel --> done(clock_2) ]'clock_2;
+[step : work * unit(clock_3) * fuel --> done(clock_3) ]'clock_3;
+[step : work * unit(clock_4) * fuel --> done(clock_4) ]'clock_4;
+[step : work * unit(pb_phase) * fuel --> done(pb_phase) ]'pb_phase;
+[report : done(clock_1) --> (result(clock_1))out ]'clock_1;
+[report : done(clock_2) --> (result(clock_2))out ]'clock_2;
+[report : done(clock_3) --> (result(clock_3))out ]'clock_3;
+[report : done(clock_4) --> (result(clock_4))out ]'clock_4;
+[report : done(pb_phase) --> (result(pb_phase))out ]'pb_phase;

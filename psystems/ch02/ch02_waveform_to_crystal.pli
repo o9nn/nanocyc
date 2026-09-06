@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch02/ch02_waveform_to_crystal.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.2.3
+ * Functionality: Converting waveforms into a time crystal; non-differentiability as rule-level discrete jumps.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'sampler []'crystal ]'skin;
+
+@mskin = seed;
+@msampler = unit(sampler), fuel;
+@mcrystal = unit(crystal), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_sampler ]'skin;
+[seed_dispense : seed --> (work)in_crystal ]'skin;
+[step : work * unit(sampler) * fuel --> done(sampler) ]'sampler;
+[step : work * unit(crystal) * fuel --> done(crystal) ]'crystal;
+[report : done(sampler) --> (result(sampler))out ]'sampler;
+[report : done(crystal) --> (result(crystal))out ]'crystal;

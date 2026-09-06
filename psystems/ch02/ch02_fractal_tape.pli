@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch02/ch02_fractal_tape.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.1, 2.1.1
+ * Functionality: Fractal tape as self-similar nested membranes; surgery of a 2D image to place it in a nested sphere.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'tape_0 []'tape_1 []'tape_2 []'tape_3 ]'skin;
+
+@mskin = seed;
+@mtape_0 = unit(tape_0), fuel;
+@mtape_1 = unit(tape_1), fuel;
+@mtape_2 = unit(tape_2), fuel;
+@mtape_3 = unit(tape_3), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_tape_0 ]'skin;
+[seed_dispense : seed --> (work)in_tape_1 ]'skin;
+[seed_dispense : seed --> (work)in_tape_2 ]'skin;
+[seed_dispense : seed --> (work)in_tape_3 ]'skin;
+[step : work * unit(tape_0) * fuel --> done(tape_0) ]'tape_0;
+[step : work * unit(tape_1) * fuel --> done(tape_1) ]'tape_1;
+[step : work * unit(tape_2) * fuel --> done(tape_2) ]'tape_2;
+[step : work * unit(tape_3) * fuel --> done(tape_3) ]'tape_3;
+[report : done(tape_0) --> (result(tape_0))out ]'tape_0;
+[report : done(tape_1) --> (result(tape_1))out ]'tape_1;
+[report : done(tape_2) --> (result(tape_2))out ]'tape_2;
+[report : done(tape_3) --> (result(tape_3))out ]'tape_3;

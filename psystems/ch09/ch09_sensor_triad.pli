@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch09/ch09_sensor_triad.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.12, 9.12.1
+ * Functionality: Sensor triad: sensor jelly, muscle jelly, brain jelly; total transformation from the biological neural net to a jelly of time crystals.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'sensor_jelly []'muscle_jelly []'brain_jelly ]'skin;
+
+@mskin = seed;
+@msensor_jelly = unit(sensor_jelly), fuel;
+@mmuscle_jelly = unit(muscle_jelly), fuel;
+@mbrain_jelly = unit(brain_jelly), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_sensor_jelly ]'skin;
+[seed_dispense : seed --> (work)in_muscle_jelly ]'skin;
+[seed_dispense : seed --> (work)in_brain_jelly ]'skin;
+[step : work * unit(sensor_jelly) * fuel --> done(sensor_jelly) ]'sensor_jelly;
+[step : work * unit(muscle_jelly) * fuel --> done(muscle_jelly) ]'muscle_jelly;
+[step : work * unit(brain_jelly) * fuel --> done(brain_jelly) ]'brain_jelly;
+[report : done(sensor_jelly) --> (result(sensor_jelly))out ]'sensor_jelly;
+[report : done(muscle_jelly) --> (result(muscle_jelly))out ]'muscle_jelly;
+[report : done(brain_jelly) --> (result(brain_jelly))out ]'brain_jelly;

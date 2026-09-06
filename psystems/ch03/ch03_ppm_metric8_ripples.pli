@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch03/ch03_ppm_metric8_ripples.pli
+ *
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * Issue #8 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 3.9
+ * Functionality: Metric 8: normalized ripples on the metric plot show periodicity in events.
+ * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'metric8 ]'skin;
+
+@mskin = seed;
+@mmetric8 = unit(metric8), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_metric8 ]'skin;
+[step : work * unit(metric8) * fuel --> done(metric8) ]'metric8;
+[report : done(metric8) --> (result(metric8))out ]'metric8;

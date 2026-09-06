@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch02/ch02_gml_15shapes.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.2.2
+ * Functionality: 15 geometric shapes are enough to recreate any 1D/2D/3D pattern (uses common/gml_shapes.pli).
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'shape_space ]'skin;
+
+@mskin = seed;
+@mshape_space = unit(shape_space), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_shape_space ]'skin;
+[step : work * unit(shape_space) * fuel --> done(shape_space) ]'shape_space;
+[report : done(shape_space) --> (result(shape_space))out ]'shape_space;

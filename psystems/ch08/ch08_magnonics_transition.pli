@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch08/ch08_magnonics_transition.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.9
+ * Functionality: Transition from the old era of electronics to magnonics.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'electronics []'magnonics ]'skin;
+
+@mskin = seed;
+@melectronics = unit(electronics), fuel;
+@mmagnonics = unit(magnonics), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_electronics ]'skin;
+[seed_dispense : seed --> (work)in_magnonics ]'skin;
+[step : work * unit(electronics) * fuel --> done(electronics) ]'electronics;
+[step : work * unit(magnonics) * fuel --> done(magnonics) ]'magnonics;
+[report : done(electronics) --> (result(electronics))out ]'electronics;
+[report : done(magnonics) --> (result(magnonics))out ]'magnonics;

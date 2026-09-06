@@ -1,0 +1,94 @@
+/* ============================================================================
+ * psystems/ch09/ch09_biomorphic_devices.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.1
+ * Functionality: Neuromorphic devices are not alone: 17 bio-morphic devices singing together as a membrane chorus.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'dev_1 []'dev_2 []'dev_3 []'dev_4 []'dev_5 []'dev_6 []'dev_7 []'dev_8 []'dev_9 []'dev_10 []'dev_11 []'dev_12 []'dev_13 []'dev_14 []'dev_15 []'dev_16 []'dev_17 ]'skin;
+
+@mskin = seed;
+@mdev_1 = unit(dev_1), fuel;
+@mdev_2 = unit(dev_2), fuel;
+@mdev_3 = unit(dev_3), fuel;
+@mdev_4 = unit(dev_4), fuel;
+@mdev_5 = unit(dev_5), fuel;
+@mdev_6 = unit(dev_6), fuel;
+@mdev_7 = unit(dev_7), fuel;
+@mdev_8 = unit(dev_8), fuel;
+@mdev_9 = unit(dev_9), fuel;
+@mdev_10 = unit(dev_10), fuel;
+@mdev_11 = unit(dev_11), fuel;
+@mdev_12 = unit(dev_12), fuel;
+@mdev_13 = unit(dev_13), fuel;
+@mdev_14 = unit(dev_14), fuel;
+@mdev_15 = unit(dev_15), fuel;
+@mdev_16 = unit(dev_16), fuel;
+@mdev_17 = unit(dev_17), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_dev_1 ]'skin;
+[seed_dispense : seed --> (work)in_dev_2 ]'skin;
+[seed_dispense : seed --> (work)in_dev_3 ]'skin;
+[seed_dispense : seed --> (work)in_dev_4 ]'skin;
+[seed_dispense : seed --> (work)in_dev_5 ]'skin;
+[seed_dispense : seed --> (work)in_dev_6 ]'skin;
+[seed_dispense : seed --> (work)in_dev_7 ]'skin;
+[seed_dispense : seed --> (work)in_dev_8 ]'skin;
+[seed_dispense : seed --> (work)in_dev_9 ]'skin;
+[seed_dispense : seed --> (work)in_dev_10 ]'skin;
+[seed_dispense : seed --> (work)in_dev_11 ]'skin;
+[seed_dispense : seed --> (work)in_dev_12 ]'skin;
+[seed_dispense : seed --> (work)in_dev_13 ]'skin;
+[seed_dispense : seed --> (work)in_dev_14 ]'skin;
+[seed_dispense : seed --> (work)in_dev_15 ]'skin;
+[seed_dispense : seed --> (work)in_dev_16 ]'skin;
+[seed_dispense : seed --> (work)in_dev_17 ]'skin;
+[step : work * unit(dev_1) * fuel --> done(dev_1) ]'dev_1;
+[step : work * unit(dev_2) * fuel --> done(dev_2) ]'dev_2;
+[step : work * unit(dev_3) * fuel --> done(dev_3) ]'dev_3;
+[step : work * unit(dev_4) * fuel --> done(dev_4) ]'dev_4;
+[step : work * unit(dev_5) * fuel --> done(dev_5) ]'dev_5;
+[step : work * unit(dev_6) * fuel --> done(dev_6) ]'dev_6;
+[step : work * unit(dev_7) * fuel --> done(dev_7) ]'dev_7;
+[step : work * unit(dev_8) * fuel --> done(dev_8) ]'dev_8;
+[step : work * unit(dev_9) * fuel --> done(dev_9) ]'dev_9;
+[step : work * unit(dev_10) * fuel --> done(dev_10) ]'dev_10;
+[step : work * unit(dev_11) * fuel --> done(dev_11) ]'dev_11;
+[step : work * unit(dev_12) * fuel --> done(dev_12) ]'dev_12;
+[step : work * unit(dev_13) * fuel --> done(dev_13) ]'dev_13;
+[step : work * unit(dev_14) * fuel --> done(dev_14) ]'dev_14;
+[step : work * unit(dev_15) * fuel --> done(dev_15) ]'dev_15;
+[step : work * unit(dev_16) * fuel --> done(dev_16) ]'dev_16;
+[step : work * unit(dev_17) * fuel --> done(dev_17) ]'dev_17;
+[report : done(dev_1) --> (result(dev_1))out ]'dev_1;
+[report : done(dev_2) --> (result(dev_2))out ]'dev_2;
+[report : done(dev_3) --> (result(dev_3))out ]'dev_3;
+[report : done(dev_4) --> (result(dev_4))out ]'dev_4;
+[report : done(dev_5) --> (result(dev_5))out ]'dev_5;
+[report : done(dev_6) --> (result(dev_6))out ]'dev_6;
+[report : done(dev_7) --> (result(dev_7))out ]'dev_7;
+[report : done(dev_8) --> (result(dev_8))out ]'dev_8;
+[report : done(dev_9) --> (result(dev_9))out ]'dev_9;
+[report : done(dev_10) --> (result(dev_10))out ]'dev_10;
+[report : done(dev_11) --> (result(dev_11))out ]'dev_11;
+[report : done(dev_12) --> (result(dev_12))out ]'dev_12;
+[report : done(dev_13) --> (result(dev_13))out ]'dev_13;
+[report : done(dev_14) --> (result(dev_14))out ]'dev_14;
+[report : done(dev_15) --> (result(dev_15))out ]'dev_15;
+[report : done(dev_16) --> (result(dev_16))out ]'dev_16;
+[report : done(dev_17) --> (result(dev_17))out ]'dev_17;

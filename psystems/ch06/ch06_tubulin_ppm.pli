@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch06/ch06_tubulin_ppm.pli
+ *
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * Issue #11 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 6.1, 6.1.1-6.1.4
+ * Functionality: PPM embedded in tubulin: alpha-helices form groups of rings; hyperspace of symmetries follows a mathematical identity; ordered factors of integers and coding in proteins; water channels in biomaterials.
+ * Traceability: src/cpp/nanobrain_singularity.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'helix []'symmetry []'of_coding []'water ]'skin;
+
+@mskin = seed;
+@mhelix = unit(helix), fuel;
+@msymmetry = unit(symmetry), fuel;
+@mof_coding = unit(of_coding), fuel;
+@mwater = unit(water), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_helix ]'skin;
+[seed_dispense : seed --> (work)in_symmetry ]'skin;
+[seed_dispense : seed --> (work)in_of_coding ]'skin;
+[seed_dispense : seed --> (work)in_water ]'skin;
+[step : work * unit(helix) * fuel --> done(helix) ]'helix;
+[step : work * unit(symmetry) * fuel --> done(symmetry) ]'symmetry;
+[step : work * unit(of_coding) * fuel --> done(of_coding) ]'of_coding;
+[step : work * unit(water) * fuel --> done(water) ]'water;
+[report : done(helix) --> (result(helix))out ]'helix;
+[report : done(symmetry) --> (result(symmetry))out ]'symmetry;
+[report : done(of_coding) --> (result(of_coding))out ]'of_coding;
+[report : done(water) --> (result(water))out ]'water;

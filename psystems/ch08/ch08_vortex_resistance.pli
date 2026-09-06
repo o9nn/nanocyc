@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch08/ch08_vortex_resistance.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.1, 8.1.1-8.1.4
+ * Functionality: Resistance not for electrons but for vortex atoms; quantum non-demolition e-pi-phi quadratic sensors; rapidly oscillating cell membrane holding a long wave; paraxial systems; anisotropy and avoided crossing.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'vortex []'qnd_sensor []'cell_membrane []'paraxial ]'skin;
+
+@mskin = seed;
+@mvortex = unit(vortex), fuel;
+@mqnd_sensor = unit(qnd_sensor), fuel;
+@mcell_membrane = unit(cell_membrane), fuel;
+@mparaxial = unit(paraxial), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_vortex ]'skin;
+[seed_dispense : seed --> (work)in_qnd_sensor ]'skin;
+[seed_dispense : seed --> (work)in_cell_membrane ]'skin;
+[seed_dispense : seed --> (work)in_paraxial ]'skin;
+[step : work * unit(vortex) * fuel --> done(vortex) ]'vortex;
+[step : work * unit(qnd_sensor) * fuel --> done(qnd_sensor) ]'qnd_sensor;
+[step : work * unit(cell_membrane) * fuel --> done(cell_membrane) ]'cell_membrane;
+[step : work * unit(paraxial) * fuel --> done(paraxial) ]'paraxial;
+[report : done(vortex) --> (result(vortex))out ]'vortex;
+[report : done(qnd_sensor) --> (result(qnd_sensor))out ]'qnd_sensor;
+[report : done(cell_membrane) --> (result(cell_membrane))out ]'cell_membrane;
+[report : done(paraxial) --> (result(paraxial))out ]'paraxial;

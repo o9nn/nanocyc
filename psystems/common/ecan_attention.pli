@@ -1,0 +1,32 @@
+/* ============================================================================
+ * common/ecan_attention.pli
+ *
+ * ECAN token economy: STI/LTI attention tokens, wage and rent collection,
+ * and diffusion of importance between membranes (P-system membrane flow).
+ *
+ * Issue: all (shared)
+ * Sections: cross-cutting — attention allocation for every cognitive module
+ * Traceability: src/cpp/nanobrain_attention.h (ECAN, rent collection and
+ *               wage distribution), src/cpp/nanobrain_metacognitive.h
+ *               (calculate_membrane_flow, apply_membrane_rules)
+ * Initial multiset: two atoms with STI balances inside an attentional focus
+ *                   membrane surrounded by the default space.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+@mu = [ []'focus ]'skin;
+
+@mskin  = bank_sti(100), bank_lti(100);
+@mfocus = atom(a,sti(10)), atom(b,sti(5));
+
+/* --------------------------------------------------------------------------
+ * wage     : active atoms are paid STI from the central bank
+ * rent     : every atom pays rent back to the bank each cycle
+ * diffuse  : STI flows across the membrane to the outer space (send-out)
+ * promote  : atom whose STI crosses threshold enters the attentional focus
+ * ------------------------------------------------------------------------*/
+[wage    : atom(A,sti(S)) * bank_sti(B) --> atom(A,sti(S+1)) * bank_sti(B-1) ]'focus;
+[rent    : atom(A,sti(S)) --> atom(A,sti(S-1)) * bank_sti(+1) ]'focus;
+[diffuse : atom(A,sti(S)) --> (atom(A,sti(S-1)))out * sti_spill(1) ]'focus;
+[promote : atom(A,sti(S)) --> (atom(A,sti(S)))in_focus ]'skin;

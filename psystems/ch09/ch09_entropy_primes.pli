@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch09/ch09_entropy_primes.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.9, 9.9.1
+ * Functionality: Entropy drives the synthesis of a pattern of primes; Hesse diagram for entropy builds the material analog of integers.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'entropy []'hesse ]'skin;
+
+@mskin = seed;
+@mentropy = unit(entropy), fuel;
+@mhesse = unit(hesse), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_entropy ]'skin;
+[seed_dispense : seed --> (work)in_hesse ]'skin;
+[step : work * unit(entropy) * fuel --> done(entropy) ]'entropy;
+[step : work * unit(hesse) * fuel --> done(hesse) ]'hesse;
+[report : done(entropy) --> (result(entropy))out ]'entropy;
+[report : done(hesse) --> (result(hesse))out ]'hesse;

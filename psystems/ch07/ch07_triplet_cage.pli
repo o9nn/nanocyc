@@ -1,0 +1,54 @@
+/* ============================================================================
+ * psystems/ch07/ch07_triplet_cage.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.1, 7.1.1-7.1.2
+ * Functionality: The brain as prime engineering in a triplet-of-triplet cage; 4, 8 and 12 imaginary worlds working together; singularity on a sphere as the key to a time-crystal clock.
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'cage_1 []'cage_2 []'cage_3 []'worlds_4 []'worlds_8 []'worlds_12 []'sphere ]'skin;
+
+@mskin = seed;
+@mcage_1 = unit(cage_1), fuel;
+@mcage_2 = unit(cage_2), fuel;
+@mcage_3 = unit(cage_3), fuel;
+@mworlds_4 = unit(worlds_4), fuel;
+@mworlds_8 = unit(worlds_8), fuel;
+@mworlds_12 = unit(worlds_12), fuel;
+@msphere = unit(sphere), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_cage_1 ]'skin;
+[seed_dispense : seed --> (work)in_cage_2 ]'skin;
+[seed_dispense : seed --> (work)in_cage_3 ]'skin;
+[seed_dispense : seed --> (work)in_worlds_4 ]'skin;
+[seed_dispense : seed --> (work)in_worlds_8 ]'skin;
+[seed_dispense : seed --> (work)in_worlds_12 ]'skin;
+[seed_dispense : seed --> (work)in_sphere ]'skin;
+[step : work * unit(cage_1) * fuel --> done(cage_1) ]'cage_1;
+[step : work * unit(cage_2) * fuel --> done(cage_2) ]'cage_2;
+[step : work * unit(cage_3) * fuel --> done(cage_3) ]'cage_3;
+[step : work * unit(worlds_4) * fuel --> done(worlds_4) ]'worlds_4;
+[step : work * unit(worlds_8) * fuel --> done(worlds_8) ]'worlds_8;
+[step : work * unit(worlds_12) * fuel --> done(worlds_12) ]'worlds_12;
+[step : work * unit(sphere) * fuel --> done(sphere) ]'sphere;
+[report : done(cage_1) --> (result(cage_1))out ]'cage_1;
+[report : done(cage_2) --> (result(cage_2))out ]'cage_2;
+[report : done(cage_3) --> (result(cage_3))out ]'cage_3;
+[report : done(worlds_4) --> (result(worlds_4))out ]'worlds_4;
+[report : done(worlds_8) --> (result(worlds_8))out ]'worlds_8;
+[report : done(worlds_12) --> (result(worlds_12))out ]'worlds_12;
+[report : done(sphere) --> (result(sphere))out ]'sphere;

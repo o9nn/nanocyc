@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch06/ch06_cellular_automaton.pli
+ *
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * Issue #11 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 6.5
+ * Functionality: Massively parallel computing by cellular automaton as a grid of communicating membranes.
+ * Traceability: src/cpp/nanobrain_singularity.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'cell_a []'cell_b []'cell_c []'cell_d ]'skin;
+
+@mskin = seed;
+@mcell_a = unit(cell_a), fuel;
+@mcell_b = unit(cell_b), fuel;
+@mcell_c = unit(cell_c), fuel;
+@mcell_d = unit(cell_d), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_cell_a ]'skin;
+[seed_dispense : seed --> (work)in_cell_b ]'skin;
+[seed_dispense : seed --> (work)in_cell_c ]'skin;
+[seed_dispense : seed --> (work)in_cell_d ]'skin;
+[step : work * unit(cell_a) * fuel --> done(cell_a) ]'cell_a;
+[step : work * unit(cell_b) * fuel --> done(cell_b) ]'cell_b;
+[step : work * unit(cell_c) * fuel --> done(cell_c) ]'cell_c;
+[step : work * unit(cell_d) * fuel --> done(cell_d) ]'cell_d;
+[report : done(cell_a) --> (result(cell_a))out ]'cell_a;
+[report : done(cell_b) --> (result(cell_b))out ]'cell_b;
+[report : done(cell_c) --> (result(cell_c))out ]'cell_c;
+[report : done(cell_d) --> (result(cell_d))out ]'cell_d;

@@ -1,0 +1,66 @@
+/* ============================================================================
+ * psystems/ch01/ch01_brain_models_kb.pli
+ *
+ * NanoBrain CH01: Philosophical transformation essential to reverse engineer consciousness
+ * Issue #6 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 1.4, 1.4.1-1.4.2
+ * Functionality: Ten popular human brain models as competing membrane configurations with selection rules; how information looks in nature; mutual understanding as membrane resonance.
+ * Traceability: src/cpp/nanobrain_philosophical.h, nanobrain_unified.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'model_1 []'model_2 []'model_3 []'model_4 []'model_5 []'model_6 []'model_7 []'model_8 []'model_9 []'model_10 ]'skin;
+
+@mskin = seed;
+@mmodel_1 = unit(model_1), fuel;
+@mmodel_2 = unit(model_2), fuel;
+@mmodel_3 = unit(model_3), fuel;
+@mmodel_4 = unit(model_4), fuel;
+@mmodel_5 = unit(model_5), fuel;
+@mmodel_6 = unit(model_6), fuel;
+@mmodel_7 = unit(model_7), fuel;
+@mmodel_8 = unit(model_8), fuel;
+@mmodel_9 = unit(model_9), fuel;
+@mmodel_10 = unit(model_10), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_model_1 ]'skin;
+[seed_dispense : seed --> (work)in_model_2 ]'skin;
+[seed_dispense : seed --> (work)in_model_3 ]'skin;
+[seed_dispense : seed --> (work)in_model_4 ]'skin;
+[seed_dispense : seed --> (work)in_model_5 ]'skin;
+[seed_dispense : seed --> (work)in_model_6 ]'skin;
+[seed_dispense : seed --> (work)in_model_7 ]'skin;
+[seed_dispense : seed --> (work)in_model_8 ]'skin;
+[seed_dispense : seed --> (work)in_model_9 ]'skin;
+[seed_dispense : seed --> (work)in_model_10 ]'skin;
+[step : work * unit(model_1) * fuel --> done(model_1) ]'model_1;
+[step : work * unit(model_2) * fuel --> done(model_2) ]'model_2;
+[step : work * unit(model_3) * fuel --> done(model_3) ]'model_3;
+[step : work * unit(model_4) * fuel --> done(model_4) ]'model_4;
+[step : work * unit(model_5) * fuel --> done(model_5) ]'model_5;
+[step : work * unit(model_6) * fuel --> done(model_6) ]'model_6;
+[step : work * unit(model_7) * fuel --> done(model_7) ]'model_7;
+[step : work * unit(model_8) * fuel --> done(model_8) ]'model_8;
+[step : work * unit(model_9) * fuel --> done(model_9) ]'model_9;
+[step : work * unit(model_10) * fuel --> done(model_10) ]'model_10;
+[report : done(model_1) --> (result(model_1))out ]'model_1;
+[report : done(model_2) --> (result(model_2))out ]'model_2;
+[report : done(model_3) --> (result(model_3))out ]'model_3;
+[report : done(model_4) --> (result(model_4))out ]'model_4;
+[report : done(model_5) --> (result(model_5))out ]'model_5;
+[report : done(model_6) --> (result(model_6))out ]'model_6;
+[report : done(model_7) --> (result(model_7))out ]'model_7;
+[report : done(model_8) --> (result(model_8))out ]'model_8;
+[report : done(model_9) --> (result(model_9))out ]'model_9;
+[report : done(model_10) --> (result(model_10))out ]'model_10;

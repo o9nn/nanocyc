@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch02/ch02_garden_of_gardens.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.3
+ * Functionality: The basic concept of a time crystal: the garden of gardens nesting semantics.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'garden_0 []'garden_1 []'garden_2 ]'skin;
+
+@mskin = seed;
+@mgarden_0 = unit(garden_0), fuel;
+@mgarden_1 = unit(garden_1), fuel;
+@mgarden_2 = unit(garden_2), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_garden_0 ]'skin;
+[seed_dispense : seed --> (work)in_garden_1 ]'skin;
+[seed_dispense : seed --> (work)in_garden_2 ]'skin;
+[step : work * unit(garden_0) * fuel --> done(garden_0) ]'garden_0;
+[step : work * unit(garden_1) * fuel --> done(garden_1) ]'garden_1;
+[step : work * unit(garden_2) * fuel --> done(garden_2) ]'garden_2;
+[report : done(garden_0) --> (result(garden_0))out ]'garden_0;
+[report : done(garden_1) --> (result(garden_1))out ]'garden_1;
+[report : done(garden_2) --> (result(garden_2))out ]'garden_2;

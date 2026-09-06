@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch01/ch01_energy_transmission.pli
+ *
+ * NanoBrain CH01: Philosophical transformation essential to reverse engineer consciousness
+ * Issue #6 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 1.7
+ * Functionality: Energy transmission in the brain beyond the neuron skin: energy-flow rules crossing nested membranes.
+ * Traceability: src/cpp/nanobrain_philosophical.h, nanobrain_unified.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'neuron_skin []'interior []'field ]'skin;
+
+@mskin = seed;
+@mneuron_skin = unit(neuron_skin), fuel;
+@minterior = unit(interior), fuel;
+@mfield = unit(field), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_neuron_skin ]'skin;
+[seed_dispense : seed --> (work)in_interior ]'skin;
+[seed_dispense : seed --> (work)in_field ]'skin;
+[step : work * unit(neuron_skin) * fuel --> done(neuron_skin) ]'neuron_skin;
+[step : work * unit(interior) * fuel --> done(interior) ]'interior;
+[step : work * unit(field) * fuel --> done(field) ]'field;
+[report : done(neuron_skin) --> (result(neuron_skin))out ]'neuron_skin;
+[report : done(interior) --> (result(interior))out ]'interior;
+[report : done(field) --> (result(field))out ]'field;

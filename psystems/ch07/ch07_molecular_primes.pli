@@ -1,0 +1,50 @@
+/* ============================================================================
+ * psystems/ch07/ch07_molecular_primes.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.5
+ * Functionality: Primes in the neuron, glia, dendro-astrocytes, microtubule, proteins and DNA.
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'neuron []'glia []'astrocyte []'microtubule []'protein []'dna ]'skin;
+
+@mskin = seed;
+@mneuron = unit(neuron), fuel;
+@mglia = unit(glia), fuel;
+@mastrocyte = unit(astrocyte), fuel;
+@mmicrotubule = unit(microtubule), fuel;
+@mprotein = unit(protein), fuel;
+@mdna = unit(dna), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_neuron ]'skin;
+[seed_dispense : seed --> (work)in_glia ]'skin;
+[seed_dispense : seed --> (work)in_astrocyte ]'skin;
+[seed_dispense : seed --> (work)in_microtubule ]'skin;
+[seed_dispense : seed --> (work)in_protein ]'skin;
+[seed_dispense : seed --> (work)in_dna ]'skin;
+[step : work * unit(neuron) * fuel --> done(neuron) ]'neuron;
+[step : work * unit(glia) * fuel --> done(glia) ]'glia;
+[step : work * unit(astrocyte) * fuel --> done(astrocyte) ]'astrocyte;
+[step : work * unit(microtubule) * fuel --> done(microtubule) ]'microtubule;
+[step : work * unit(protein) * fuel --> done(protein) ]'protein;
+[step : work * unit(dna) * fuel --> done(dna) ]'dna;
+[report : done(neuron) --> (result(neuron))out ]'neuron;
+[report : done(glia) --> (result(glia))out ]'glia;
+[report : done(astrocyte) --> (result(astrocyte))out ]'astrocyte;
+[report : done(microtubule) --> (result(microtubule))out ]'microtubule;
+[report : done(protein) --> (result(protein))out ]'protein;
+[report : done(dna) --> (result(dna))out ]'dna;

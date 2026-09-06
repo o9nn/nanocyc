@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch03/ch03_diabetes_bigdata.pli
+ *
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * Issue #8 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 3.15
+ * Functionality: Solution of a big-data problem on diabetes: PPM in an artificial brain.
+ * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'ingest []'ppm_filter []'decide ]'skin;
+
+@mskin = seed;
+@mingest = unit(ingest), fuel;
+@mppm_filter = unit(ppm_filter), fuel;
+@mdecide = unit(decide), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_ingest ]'skin;
+[seed_dispense : seed --> (work)in_ppm_filter ]'skin;
+[seed_dispense : seed --> (work)in_decide ]'skin;
+[step : work * unit(ingest) * fuel --> done(ingest) ]'ingest;
+[step : work * unit(ppm_filter) * fuel --> done(ppm_filter) ]'ppm_filter;
+[step : work * unit(decide) * fuel --> done(decide) ]'decide;
+[report : done(ingest) --> (result(ingest))out ]'ingest;
+[report : done(ppm_filter) --> (result(ppm_filter))out ]'ppm_filter;
+[report : done(decide) --> (result(decide))out ]'decide;

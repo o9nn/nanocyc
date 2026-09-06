@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch01/ch01_worldview_config.pli
+ *
+ * NanoBrain CH01: Philosophical transformation essential to reverse engineer consciousness
+ * Issue #6 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 1.1-1.3
+ * Functionality: Parameter membranes selecting the worldview; the 'universe within and above, not side by side' as a nested membrane topology.
+ * Traceability: src/cpp/nanobrain_philosophical.h, nanobrain_unified.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'worldview []'universe_within []'universe_above ]'skin;
+
+@mskin = seed;
+@mworldview = unit(worldview), fuel;
+@muniverse_within = unit(universe_within), fuel;
+@muniverse_above = unit(universe_above), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_worldview ]'skin;
+[seed_dispense : seed --> (work)in_universe_within ]'skin;
+[seed_dispense : seed --> (work)in_universe_above ]'skin;
+[step : work * unit(worldview) * fuel --> done(worldview) ]'worldview;
+[step : work * unit(universe_within) * fuel --> done(universe_within) ]'universe_within;
+[step : work * unit(universe_above) * fuel --> done(universe_above) ]'universe_above;
+[report : done(worldview) --> (result(worldview))out ]'worldview;
+[report : done(universe_within) --> (result(universe_within))out ]'universe_within;
+[report : done(universe_above) --> (result(universe_above))out ]'universe_above;

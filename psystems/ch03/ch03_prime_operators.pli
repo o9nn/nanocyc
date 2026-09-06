@@ -1,0 +1,66 @@
+/* ============================================================================
+ * psystems/ch03/ch03_prime_operators.pli
+ *
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * Issue #8 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 3.12
+ * Functionality: Ten prime operators applied step by step as a prioritized rule chain.
+ * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'op_1 []'op_2 []'op_3 []'op_4 []'op_5 []'op_6 []'op_7 []'op_8 []'op_9 []'op_10 ]'skin;
+
+@mskin = seed;
+@mop_1 = unit(op_1), fuel;
+@mop_2 = unit(op_2), fuel;
+@mop_3 = unit(op_3), fuel;
+@mop_4 = unit(op_4), fuel;
+@mop_5 = unit(op_5), fuel;
+@mop_6 = unit(op_6), fuel;
+@mop_7 = unit(op_7), fuel;
+@mop_8 = unit(op_8), fuel;
+@mop_9 = unit(op_9), fuel;
+@mop_10 = unit(op_10), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_op_1 ]'skin;
+[seed_dispense : seed --> (work)in_op_2 ]'skin;
+[seed_dispense : seed --> (work)in_op_3 ]'skin;
+[seed_dispense : seed --> (work)in_op_4 ]'skin;
+[seed_dispense : seed --> (work)in_op_5 ]'skin;
+[seed_dispense : seed --> (work)in_op_6 ]'skin;
+[seed_dispense : seed --> (work)in_op_7 ]'skin;
+[seed_dispense : seed --> (work)in_op_8 ]'skin;
+[seed_dispense : seed --> (work)in_op_9 ]'skin;
+[seed_dispense : seed --> (work)in_op_10 ]'skin;
+[step : work * unit(op_1) * fuel --> done(op_1) ]'op_1;
+[step : work * unit(op_2) * fuel --> done(op_2) ]'op_2;
+[step : work * unit(op_3) * fuel --> done(op_3) ]'op_3;
+[step : work * unit(op_4) * fuel --> done(op_4) ]'op_4;
+[step : work * unit(op_5) * fuel --> done(op_5) ]'op_5;
+[step : work * unit(op_6) * fuel --> done(op_6) ]'op_6;
+[step : work * unit(op_7) * fuel --> done(op_7) ]'op_7;
+[step : work * unit(op_8) * fuel --> done(op_8) ]'op_8;
+[step : work * unit(op_9) * fuel --> done(op_9) ]'op_9;
+[step : work * unit(op_10) * fuel --> done(op_10) ]'op_10;
+[report : done(op_1) --> (result(op_1))out ]'op_1;
+[report : done(op_2) --> (result(op_2))out ]'op_2;
+[report : done(op_3) --> (result(op_3))out ]'op_3;
+[report : done(op_4) --> (result(op_4))out ]'op_4;
+[report : done(op_5) --> (result(op_5))out ]'op_5;
+[report : done(op_6) --> (result(op_6))out ]'op_6;
+[report : done(op_7) --> (result(op_7))out ]'op_7;
+[report : done(op_8) --> (result(op_8))out ]'op_8;
+[report : done(op_9) --> (result(op_9))out ]'op_9;
+[report : done(op_10) --> (result(op_10))out ]'op_10;

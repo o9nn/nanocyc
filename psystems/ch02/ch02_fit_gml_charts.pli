@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch02/ch02_fit_gml_charts.pli
+ *
+ * NanoBrain CH02: Replacing Turing tape with a Fractal tape: FIT & GML
+ * Issue #7 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 2.10-2.12
+ * Functionality: FIT and GML summary charts as consolidated rule sets; Russell's paradox and higher-order logic in a geometric language.
+ * Traceability: src/cpp/nanobrain_fractal_tape.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'fit_chart []'gml_chart []'logic ]'skin;
+
+@mskin = seed;
+@mfit_chart = unit(fit_chart), fuel;
+@mgml_chart = unit(gml_chart), fuel;
+@mlogic = unit(logic), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_fit_chart ]'skin;
+[seed_dispense : seed --> (work)in_gml_chart ]'skin;
+[seed_dispense : seed --> (work)in_logic ]'skin;
+[step : work * unit(fit_chart) * fuel --> done(fit_chart) ]'fit_chart;
+[step : work * unit(gml_chart) * fuel --> done(gml_chart) ]'gml_chart;
+[step : work * unit(logic) * fuel --> done(logic) ]'logic;
+[report : done(fit_chart) --> (result(fit_chart))out ]'fit_chart;
+[report : done(gml_chart) --> (result(gml_chart))out ]'gml_chart;
+[report : done(logic) --> (result(logic))out ]'logic;

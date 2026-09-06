@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch10/ch10_evolving_brain_wheels.pli
+ *
+ * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
+ * Issue #15 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 10.11
+ * Functionality: Wheels of an evolving brain: generational evolution rules across wheel membranes.
+ * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'wheel_gen_0 []'wheel_gen_1 ]'skin;
+
+@mskin = seed;
+@mwheel_gen_0 = unit(wheel_gen_0), fuel;
+@mwheel_gen_1 = unit(wheel_gen_1), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_wheel_gen_0 ]'skin;
+[seed_dispense : seed --> (work)in_wheel_gen_1 ]'skin;
+[step : work * unit(wheel_gen_0) * fuel --> done(wheel_gen_0) ]'wheel_gen_0;
+[step : work * unit(wheel_gen_1) * fuel --> done(wheel_gen_1) ]'wheel_gen_1;
+[report : done(wheel_gen_0) --> (result(wheel_gen_0))out ]'wheel_gen_0;
+[report : done(wheel_gen_1) --> (result(wheel_gen_1))out ]'wheel_gen_1;

@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch07/ch07_cavity_dielectric.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.9
+ * Functionality: Fusion of the cavity and dielectric resonator models of a human brain.
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'cavity []'dielectric ]'skin;
+
+@mskin = seed;
+@mcavity = unit(cavity), fuel;
+@mdielectric = unit(dielectric), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_cavity ]'skin;
+[seed_dispense : seed --> (work)in_dielectric ]'skin;
+[step : work * unit(cavity) * fuel --> done(cavity) ]'cavity;
+[step : work * unit(dielectric) * fuel --> done(dielectric) ]'dielectric;
+[report : done(cavity) --> (result(cavity))out ]'cavity;
+[report : done(dielectric) --> (result(dielectric))out ]'dielectric;

@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch04/ch04_fractal_mechanics.pli
+ *
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * Issue #9 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 4.1.2, 4.2
+ * Functionality: Multiple imaginary worlds operating at a time need fractal mechanics; fractal mechanics acts in the phase space connecting singularity points.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'world_1 []'world_2 []'world_3 []'phase_space ]'skin;
+
+@mskin = seed;
+@mworld_1 = unit(world_1), fuel;
+@mworld_2 = unit(world_2), fuel;
+@mworld_3 = unit(world_3), fuel;
+@mphase_space = unit(phase_space), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_world_1 ]'skin;
+[seed_dispense : seed --> (work)in_world_2 ]'skin;
+[seed_dispense : seed --> (work)in_world_3 ]'skin;
+[seed_dispense : seed --> (work)in_phase_space ]'skin;
+[step : work * unit(world_1) * fuel --> done(world_1) ]'world_1;
+[step : work * unit(world_2) * fuel --> done(world_2) ]'world_2;
+[step : work * unit(world_3) * fuel --> done(world_3) ]'world_3;
+[step : work * unit(phase_space) * fuel --> done(phase_space) ]'phase_space;
+[report : done(world_1) --> (result(world_1))out ]'world_1;
+[report : done(world_2) --> (result(world_2))out ]'world_2;
+[report : done(world_3) --> (result(world_3))out ]'world_3;
+[report : done(phase_space) --> (result(phase_space))out ]'phase_space;

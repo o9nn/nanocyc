@@ -1,0 +1,30 @@
+/* ============================================================================
+ * psystems/ch09/ch09_fractal_condensation.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.5, 9.5.1
+ * Functionality: Fractal condensation: condensing everywhere at a time; patterns of primes need not be told.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'condense ]'skin;
+
+@mskin = seed;
+@mcondense = unit(condense), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_condense ]'skin;
+[step : work * unit(condense) * fuel --> done(condense) ]'condense;
+[report : done(condense) --> (result(condense))out ]'condense;

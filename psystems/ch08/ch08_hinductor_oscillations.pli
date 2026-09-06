@@ -1,0 +1,38 @@
+/* ============================================================================
+ * psystems/ch08/ch08_hinductor_oscillations.pli
+ *
+ * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
+ * Issue #13 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 8.5, 8.5.1-8.5.3
+ * Functionality: Periodic oscillation of capacitance, inductance and hinductance with geometry; phase space with 12 blinking holes; oscillations with length, pitch, lattice area/diameter; knots of darkness on the H interface.
+ * Traceability: src/cpp/nanobrain_hinductor.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'c_l_h []'holes_12 []'knots ]'skin;
+
+@mskin = seed;
+@mc_l_h = unit(c_l_h), fuel;
+@mholes_12 = unit(holes_12), fuel;
+@mknots = unit(knots), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_c_l_h ]'skin;
+[seed_dispense : seed --> (work)in_holes_12 ]'skin;
+[seed_dispense : seed --> (work)in_knots ]'skin;
+[step : work * unit(c_l_h) * fuel --> done(c_l_h) ]'c_l_h;
+[step : work * unit(holes_12) * fuel --> done(holes_12) ]'holes_12;
+[step : work * unit(knots) * fuel --> done(knots) ]'knots;
+[report : done(c_l_h) --> (result(c_l_h))out ]'c_l_h;
+[report : done(holes_12) --> (result(holes_12))out ]'holes_12;
+[report : done(knots) --> (result(knots))out ]'knots;

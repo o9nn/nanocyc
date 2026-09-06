@@ -1,0 +1,46 @@
+/* ============================================================================
+ * psystems/ch07/ch07_four_metrics_hexagonal.pli
+ *
+ * NanoBrain CH07: A complete, integrated time crystal model of a human brain
+ * Issue #12 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 7.11, 7.11.1-7.11.2
+ * Functionality: Four metrics of primes running in parallel — the saga of the hexagonal lattice; composition of 4/8/12-dimension tensors: quaternion, octonion, dodecanion.
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'metric_1 []'metric_2 []'metric_3 []'metric_4 []'hex_lattice ]'skin;
+
+@mskin = seed;
+@mmetric_1 = unit(metric_1), fuel;
+@mmetric_2 = unit(metric_2), fuel;
+@mmetric_3 = unit(metric_3), fuel;
+@mmetric_4 = unit(metric_4), fuel;
+@mhex_lattice = unit(hex_lattice), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_metric_1 ]'skin;
+[seed_dispense : seed --> (work)in_metric_2 ]'skin;
+[seed_dispense : seed --> (work)in_metric_3 ]'skin;
+[seed_dispense : seed --> (work)in_metric_4 ]'skin;
+[seed_dispense : seed --> (work)in_hex_lattice ]'skin;
+[step : work * unit(metric_1) * fuel --> done(metric_1) ]'metric_1;
+[step : work * unit(metric_2) * fuel --> done(metric_2) ]'metric_2;
+[step : work * unit(metric_3) * fuel --> done(metric_3) ]'metric_3;
+[step : work * unit(metric_4) * fuel --> done(metric_4) ]'metric_4;
+[step : work * unit(hex_lattice) * fuel --> done(hex_lattice) ]'hex_lattice;
+[report : done(metric_1) --> (result(metric_1))out ]'metric_1;
+[report : done(metric_2) --> (result(metric_2))out ]'metric_2;
+[report : done(metric_3) --> (result(metric_3))out ]'metric_3;
+[report : done(metric_4) --> (result(metric_4))out ]'metric_4;
+[report : done(hex_lattice) --> (result(hex_lattice))out ]'hex_lattice;

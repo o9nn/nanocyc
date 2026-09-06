@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch01/ch01_artificial_brain_triad.pli
+ *
+ * NanoBrain CH01: Philosophical transformation essential to reverse engineer consciousness
+ * Issue #6 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 1.10, 1.10.1-1.10.3, 1.11
+ * Functionality: The triad defining an artificial brain: a language of time crystals (prime symmetries), a magnetic-light device storing charge, and a pattern of all prime arrangements. Conclusion (1.11) as meta-rule set over Darwin/Turing/Hodgkin-Huxley.
+ * Traceability: src/cpp/nanobrain_philosophical.h, nanobrain_unified.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'tc_language []'magnetic_light_device []'prime_pattern_store []'meta ]'skin;
+
+@mskin = seed;
+@mtc_language = unit(tc_language), fuel;
+@mmagnetic_light_device = unit(magnetic_light_device), fuel;
+@mprime_pattern_store = unit(prime_pattern_store), fuel;
+@mmeta = unit(meta), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_tc_language ]'skin;
+[seed_dispense : seed --> (work)in_magnetic_light_device ]'skin;
+[seed_dispense : seed --> (work)in_prime_pattern_store ]'skin;
+[seed_dispense : seed --> (work)in_meta ]'skin;
+[step : work * unit(tc_language) * fuel --> done(tc_language) ]'tc_language;
+[step : work * unit(magnetic_light_device) * fuel --> done(magnetic_light_device) ]'magnetic_light_device;
+[step : work * unit(prime_pattern_store) * fuel --> done(prime_pattern_store) ]'prime_pattern_store;
+[step : work * unit(meta) * fuel --> done(meta) ]'meta;
+[report : done(tc_language) --> (result(tc_language))out ]'tc_language;
+[report : done(magnetic_light_device) --> (result(magnetic_light_device))out ]'magnetic_light_device;
+[report : done(prime_pattern_store) --> (result(prime_pattern_store))out ]'prime_pattern_store;
+[report : done(meta) --> (result(meta))out ]'meta;

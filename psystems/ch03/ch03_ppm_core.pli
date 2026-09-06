@@ -1,0 +1,42 @@
+/* ============================================================================
+ * psystems/ch03/ch03_ppm_core.pli
+ *
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * Issue #8 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 3.1, 3.1.1-3.1.3
+ * Functionality: Ten classes of PPM; 15 primes covering 99.99% of integers; ordered-factor metric and its 3D version; time-crystal decomposition/amplification via PPM.
+ * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'coverage []'of_metric []'of_metric_3d []'tc_decompose ]'skin;
+
+@mskin = seed;
+@mcoverage = unit(coverage), fuel;
+@mof_metric = unit(of_metric), fuel;
+@mof_metric_3d = unit(of_metric_3d), fuel;
+@mtc_decompose = unit(tc_decompose), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_coverage ]'skin;
+[seed_dispense : seed --> (work)in_of_metric ]'skin;
+[seed_dispense : seed --> (work)in_of_metric_3d ]'skin;
+[seed_dispense : seed --> (work)in_tc_decompose ]'skin;
+[step : work * unit(coverage) * fuel --> done(coverage) ]'coverage;
+[step : work * unit(of_metric) * fuel --> done(of_metric) ]'of_metric;
+[step : work * unit(of_metric_3d) * fuel --> done(of_metric_3d) ]'of_metric_3d;
+[step : work * unit(tc_decompose) * fuel --> done(tc_decompose) ]'tc_decompose;
+[report : done(coverage) --> (result(coverage))out ]'coverage;
+[report : done(of_metric) --> (result(of_metric))out ]'of_metric;
+[report : done(of_metric_3d) --> (result(of_metric_3d))out ]'of_metric_3d;
+[report : done(tc_decompose) --> (result(tc_decompose))out ]'tc_decompose;

@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch05/ch05_ppm_sync.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.1.2
+ * Functionality: The PPM allows two systems to sync without communication: twin membranes evolving in lockstep.
+ * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'sys_a []'sys_b ]'skin;
+
+@mskin = seed;
+@msys_a = unit(sys_a), fuel;
+@msys_b = unit(sys_b), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_sys_a ]'skin;
+[seed_dispense : seed --> (work)in_sys_b ]'skin;
+[step : work * unit(sys_a) * fuel --> done(sys_a) ]'sys_a;
+[step : work * unit(sys_b) * fuel --> done(sys_b) ]'sys_b;
+[report : done(sys_a) --> (result(sys_a))out ]'sys_a;
+[report : done(sys_b) --> (result(sys_b))out ]'sys_b;

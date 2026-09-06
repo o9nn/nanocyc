@@ -1,0 +1,34 @@
+/* ============================================================================
+ * psystems/ch09/ch09_living_gel.pli
+ *
+ * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
+ * Issue #14 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 9.4
+ * Functionality: A living gel that listens and then grows from atomic to centimeters: scale-growth membranes.
+ * Traceability: src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: sample objects in each membrane so the simulator can run
+ *                   at least one evolution step.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+/* Membrane structure: skin with one membrane per functional unit. */
+@mu = [ []'listen []'grow ]'skin;
+
+@mskin = seed;
+@mlisten = unit(listen), fuel;
+@mgrow = unit(grow), fuel;
+
+/* --------------------------------------------------------------------------
+ * Evolution rules
+ * seed_dispense : the skin injects a work token into each functional membrane
+ * step_%s-local : each membrane transforms its unit object and consumes fuel
+ * report        : finished results are sent out to the skin
+ * ------------------------------------------------------------------------*/
+[seed_dispense : seed --> (work)in_listen ]'skin;
+[seed_dispense : seed --> (work)in_grow ]'skin;
+[step : work * unit(listen) * fuel --> done(listen) ]'listen;
+[step : work * unit(grow) * fuel --> done(grow) ]'grow;
+[report : done(listen) --> (result(listen))out ]'listen;
+[report : done(grow) --> (result(grow))out ]'grow;
