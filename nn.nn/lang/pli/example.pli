@@ -1,0 +1,635 @@
+#!/usr/bin/env plingua
+/*
+ * Example Programs for Neural Network in PLingua
+ * Practical, ready-to-use examples for common neural network tasks
+ */
+
+@model<examples>
+
+/* Include the main neural network module */
+@import "nn.pli"
+@import "layers.pli"
+@import "criteria.pli"
+@import "momentum_adam_rmsprop.pli"
+@import "recurrent.pli"
+@import "snp.pli"
+
+/* ============================================================================
+ * EXAMPLE 1: Simple Prediction
+ * Create a network and make a single prediction
+ * ============================================================================ */
+
+@example simple_prediction
+{
+    @description "Simplest possible neural network usage"
+    
+    @code
+    {
+        /* Create a 2-3-1 network */
+        [network
+            [layer1 linear_layer(2, 3)]'network
+            [activation1 tanh_activation]'network
+            [layer2 linear_layer(3, 1)]'network
+            [activation2 sigmoid_activation]'network
+        ]'main
+        
+        /* Make prediction on [0.5, 0.8] */
+        [input{1, 50}, input{2, 80}]'main ->
+            [input{1, 50}, input{2, 80}]'layer1
+        
+        /* Propagate through network */
+        [output{j, v}]'layer1 -> [x{v}]'activation1
+        [tanh_out{t}]'activation1 -> [input{j, t}]'layer2
+        [output{j, v}]'layer2 -> [x{v}]'activation2
+        [sig{s}]'activation2 -> []'activation2 (prediction{s/100.0}, out)
+        
+        /* Output: prediction value between 0 and 1 */
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 2: Training a Simple Regressor
+ * Learn a simple linear relationship
+ * ============================================================================ */
+
+@example linear_regression
+{
+    @description "Train network to learn y = 2*x1 + 3*x2"
+    
+    @code
+    {
+        /* Simple linear network (no hidden layer) */
+        [network linear_layer(2, 1)]'main
+        
+        /* Training data: y = 2*x1 + 3*x2 */
+        training_data{
+            sample{[10, 10], 50},   /* 2*10 + 3*10 = 50 */
+            sample{[20, 10], 70},   /* 2*20 + 3*10 = 70 */
+            sample{[10, 20], 80},   /* 2*10 + 3*20 = 80 */
+            sample{[30, 20], 120}   /* 2*30 + 3*20 = 120 */
+        }
+        
+        /* Train for 100 epochs */
+        train_network(network, training_data, 100, 10)
+        
+        /* Test on new data */
+        [input{1, 25}, input{2, 15}]'network  /* Should predict ~95 */
+        [output{1, pred}]'network ->
+            []'network (prediction{pred}, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 3: Binary Classifier
+ * Classify data into two categories
+ * ============================================================================ */
+
+@example binary_classifier_example
+{
+    @description "Classify points above or below diagonal line"
+    
+    @code
+    {
+        /* Network: 2 inputs -> 4 hidden -> 1 output */
+        [classifier
+            [layer1 linear_layer(2, 4)]'classifier
+            [relu1 relu_activation]'classifier
+            [layer2 linear_layer(4, 1)]'classifier
+            [sigmoid1 sigmoid_activation]'classifier
+        ]'main
+        
+        /* Training data: classify if y > x */
+        training_data{
+            /* Below diagonal (class 0) */
+            sample{[50, 30], 0},  /* y < x */
+            sample{[70, 40], 0},
+            sample{[60, 20], 0},
+            
+            /* Above diagonal (class 1) */
+            sample{[30, 50], 1},  /* y > x */
+            sample{[40, 70], 1},
+            sample{[20, 60], 1}
+        }
+        
+        /* Train classifier */
+        train_network(classifier, training_data, 200, 20)
+        
+        /* Test predictions */
+        test_cases{
+            [45, 55],  /* Above diagonal -> 1 */
+            [60, 40],  /* Below diagonal -> 0 */
+            [50, 50]   /* On diagonal -> ~0.5 */
+        }
+        
+        for (test in test_cases)
+        {
+            [input{1, test[0]}, input{2, test[1]}]'classifier
+            [output{o}]'classifier ->
+                []'classifier (result{test, o/100.0}, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 4: Multi-Class Classification
+ * Classify into multiple categories using softmax
+ * ============================================================================ */
+
+@example multiclass_classification
+{
+    @description "Classify handwritten digits (simplified)"
+    
+    @code
+    {
+        /* Network for 3-class classification */
+        [classifier
+            [layer1 linear_layer(4, 8)]'classifier
+            [relu1 relu_activation]'classifier
+            [layer2 linear_layer(8, 3)]'classifier
+            [softmax1 softmax]'classifier
+        ]'main
+        
+        /* Training data: 3 classes based on feature patterns */
+        training_data{
+            /* Class 0: low values */
+            sample{[10, 15, 12, 18], 0},
+            sample{[15, 10, 20, 12], 0},
+            
+            /* Class 1: medium values */
+            sample{[40, 45, 50, 42], 1},
+            sample{[48, 40, 45, 50], 1},
+            
+            /* Class 2: high values */
+            sample{[80, 85, 90, 82], 2},
+            sample{[88, 90, 85, 92], 2}
+        }
+        
+        /* Train network */
+        train_network(classifier, training_data, 300, 15)
+        
+        /* Predict on new sample */
+        [input{1, 12}, input{2, 18}, input{3, 15}, input{4, 20}]'classifier
+        
+        /* Get class probabilities */
+        [probability{1, p1}, probability{2, p2}, probability{3, p3}]'softmax ->
+        {
+            predicted_class{argmax([p1, p2, p3])}
+            []'main (result{
+                probabilities: [p1, p2, p3],
+                predicted_class: argmax([p1, p2, p3])
+            }, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 5: XOR Function Learning
+ * The classic neural network test
+ * ============================================================================ */
+
+@example xor_function
+{
+    @description "Learn XOR - requires non-linear network"
+    
+    @code
+    {
+        /* XOR needs hidden layer (not linearly separable) */
+        [xor_net
+            [layer1 linear_layer(2, 4)]'xor_net
+            [tanh1 tanh_activation]'xor_net
+            [layer2 linear_layer(4, 1)]'xor_net
+            [sigmoid1 sigmoid_activation]'xor_net
+        ]'main
+        
+        /* XOR truth table */
+        xor_data{
+            sample{[0, 0], 0},
+            sample{[0, 100], 100},  /* 1 scaled to 100 */
+            sample{[100, 0], 100},
+            sample{[100, 100], 0}
+        }
+        
+        /* Train network */
+        train_network(xor_net, xor_data, 1000, 50)
+        
+        /* Test all cases */
+        for (input in [[0,0], [0,100], [100,0], [100,100]])
+        {
+            [input{1, input[0]}, input{2, input[1]}]'xor_net
+            [output{o}]'xor_net ->
+                []'xor_net (xor_result{
+                    input: [input[0]/100, input[1]/100],
+                    output: o/100.0,
+                    rounded: round(o/100.0)
+                }, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 6: Custom Network Architecture
+ * Build your own architecture from scratch
+ * ============================================================================ */
+
+@example custom_architecture
+{
+    @description "Build a custom deep network"
+    
+    @code
+    {
+        /* Custom 5-layer deep network */
+        [deep_net
+            /* Input processing */
+            [input_layer linear_layer(10, 20)]'deep_net
+            [input_relu relu_activation]'deep_net
+            
+            /* Hidden layers */
+            [hidden1 linear_layer(20, 15)]'deep_net
+            [hidden1_relu relu_activation]'deep_net
+            
+            [hidden2 linear_layer(15, 10)]'deep_net
+            [hidden2_relu relu_activation]'deep_net
+            
+            /* Output layer */
+            [output_layer linear_layer(10, 5)]'deep_net
+            [output_softmax softmax]'deep_net
+        ]'main
+        
+        /* Use sequential container for cleaner composition */
+        [sequential_net
+            sequential_network([
+                linear_layer(10, 20),
+                relu_activation,
+                linear_layer(20, 15),
+                relu_activation,
+                linear_layer(15, 10),
+                relu_activation,
+                linear_layer(10, 5),
+                softmax
+            ])
+        ]'main
+        
+        /* Both networks are equivalent */
+        /* Use the sequential version for cleaner code */
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 7: Incremental Training
+ * Train network, test it, then continue training
+ * ============================================================================ */
+
+@example incremental_training
+{
+    @description "Train in stages with evaluation"
+    
+    @code
+    {
+        /* Create network */
+        [network linear_layer(2, 1)]'main
+        
+        /* Initial training data */
+        initial_data{
+            sample{[10, 20], 30},
+            sample{[20, 30], 50}
+        }
+        
+        /* Train phase 1 */
+        train_network(network, initial_data, 50, 20)
+        
+        /* Evaluate */
+        [input{1, 15}, input{2, 25}]'network
+        [output{o1}]'network -> []'network (eval1{o1}, out)
+        
+        /* Add more training data */
+        extended_data{
+            sample{[10, 20], 30},
+            sample{[20, 30], 50},
+            sample{[30, 40], 70},  /* New data */
+            sample{[40, 50], 90}   /* New data */
+        }
+        
+        /* Train phase 2 - continue training same network */
+        train_network(network, extended_data, 50, 20)
+        
+        /* Re-evaluate */
+        [input{1, 15}, input{2, 25}]'network
+        [output{o2}]'network -> []'network (eval2{o2}, out)
+        
+        /* Compare results */
+        []'main (comparison{
+            after_phase1: eval1,
+            after_phase2: eval2,
+            improvement: abs(o2 - 40) < abs(o1 - 40)
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 8: Using Different Loss Functions
+ * ============================================================================ */
+
+@example loss_function_comparison
+{
+    @description "Compare MSE vs Absolute Error loss"
+    
+    @code
+    {
+        /* Same network, different loss functions */
+        
+        /* Network with MSE */
+        [net_mse linear_layer(2, 1)]'main
+        [mse_loss mse_criterion]'main
+        
+        /* Network with Absolute Error */
+        [net_abs linear_layer(2, 1)]'main
+        [abs_loss abs_criterion]'main
+        
+        /* Same training data */
+        data{
+            sample{[10, 20], 35},
+            sample{[20, 30], 55},
+            sample{[30, 40], 75}
+        }
+        
+        /* Train both networks */
+        train_network(net_mse, data, 100, 15, mse_loss)
+        train_network(net_abs, data, 100, 15, abs_loss)
+        
+        /* Compare predictions */
+        test_input{15, 25}
+        
+        [input{1, 15}, input{2, 25}]'net_mse
+        [output{o_mse}]'net_mse ->
+            []'net_mse (prediction_mse{o_mse}, out)
+        
+        [input{1, 15}, input{2, 25}]'net_abs
+        [output{o_abs}]'net_abs ->
+            []'net_abs (prediction_abs{o_abs}, out)
+        
+        []'main (comparison{
+            "MSE trained": o_mse,
+            "Absolute trained": o_abs,
+            "Expected": 40,
+            "Note": "MSE penalizes large errors more"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 9: Xavier Initialization
+ * Use principled weight initialization for faster convergence
+ * ============================================================================ */
+
+@example xavier_initialization
+{
+    @description "Compare Xavier-initialized vs uniformly-initialized networks"
+
+    @membrane_structure
+    {
+        [main
+            /* Xavier bounds adapt to layer size: +-sqrt(6/(fan_in+fan_out)) */
+            [net_xavier
+                [layer1 linear_layer_init(8, 16, xavier)]'net_xavier
+                [act1 tanh_activation]'net_xavier
+                [layer2 linear_layer_init(16, 1, xavier)]'net_xavier
+            ]'main
+
+            /* Legacy uniform random(-50, 50) */
+            [net_uniform
+                [layer1 linear_layer_init(8, 16, uniform)]'net_uniform
+                [act1 tanh_activation]'net_uniform
+                [layer2 linear_layer_init(16, 1, uniform)]'net_uniform
+            ]'main
+        ]
+    }
+
+    @execution
+    {
+        /* Train both for the same epochs and compare initial loss decay */
+        train_network(net_xavier, training_data, 100, 10)
+        train_network(net_uniform, training_data, 100, 10)
+
+        []'main (comparison{
+            "Note": "Xavier keeps activation variance stable across layers,",
+            "Effect": "avoiding saturation of tanh in early epochs"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 10: Word Embeddings with LookupTable
+ * Map token IDs to dense vectors and classify short sequences
+ * ============================================================================ */
+
+@example word_embedding_example
+{
+    @description "Embedding lookup feeding a linear classifier"
+
+    @membrane_structure
+    {
+        [main
+            [embed lookup_table(10, 4)]'main   /* vocab 10, dim 4 */
+            [classifier linear_layer(4, 2)]'main
+            [output softmax]'main
+        ]'main
+    }
+
+    @execution
+    {
+        /* Look up token 7 at position 1 */
+        [token{1, 7}]'embed
+
+        /* Embedding row 7 flows to the classifier */
+        [output{1, d, v}]'embed -> [input{d, v}]'classifier
+
+        /* Class probabilities out of softmax */
+        [probability{c, p}]'output ->
+            []'output (class_prob{c, p}, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 11: Sequence Prediction with LSTM
+ * Learn to continue a simple arithmetic sequence
+ * ============================================================================ */
+
+@example lstm_sequence_prediction
+{
+    @description "Train an LSTM to predict the next element of a sequence"
+
+    @membrane_structure
+    {
+        [main
+            [model lstm(1, 8, 4)]'main
+            [head linear_layer(8, 1)]'main
+        ]'main
+    }
+
+    @execution
+    {
+        /* Training sequences: predict x_{t+1} from x_1..x_t */
+        /* [10, 20, 30, 40] -> 50; [20, 30, 40, 50] -> 60 */
+        [x{1, 1, 10}, x{2, 1, 20}, x{3, 1, 30}, x{4, 1, 40}, target{50}]'model
+        [x{1, 1, 20}, x{2, 1, 30}, x{3, 1, 40}, x{4, 1, 50}, target{60}]'model
+
+        /* Final hidden state feeds the regression head */
+        [hidden{4, h, v}]'model -> [input{h, v}]'head
+
+        train_network(model, sequence_data, 500, 5)
+
+        /* Predict continuation of [30, 40, 50, 60] (expect ~70) */
+        [x{1, 1, 30}, x{2, 1, 40}, x{3, 1, 50}, x{4, 1, 60}]'model
+        [output{1, v}]'head -> []'head (prediction{v}, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 12: Class-Imbalanced Training with Weighted NLL
+ * Handle a 9:1 class imbalance with per-class loss weights
+ * ============================================================================ */
+
+@example weighted_loss_example
+{
+    @description "Weighted NLL to compensate for class imbalance"
+
+    @membrane_structure
+    {
+        [main
+            [classifier
+                [layer1 linear_layer(4, 8)]'classifier
+                [act1 relu_activation]'classifier
+                [layer2 linear_layer(8, 2)]'classifier
+                [out softmax]'classifier
+            ]'main
+            [loss weighted_nll_criterion(2)]'main
+        ]'main
+    }
+
+    @execution
+    {
+        /* Class 2 is rare (10% of samples): weight it 9x (900) */
+        [class_weight{1, 100}]'loss -> [class_weight{1, 100}]'loss
+        [class_weight{2, 100}]'loss -> [class_weight{2, 900}]'loss
+
+        train_network(classifier, imbalanced_data, 300, 10)
+
+        []'main (display{
+            "Weighted loss prevents the network from",
+            "ignoring the minority class"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE 13: Spiking XOR with an SN P System
+ * Exact XOR using spiking neural P system semantics - no training needed
+ * ============================================================================ */
+
+@example snp_xor_example
+{
+    @description "XOR via spike routing, firing thresholds, and inhibition"
+
+    @membrane_structure
+    {
+        [main
+            snp_xor
+        ]'main
+    }
+
+    @execution
+    {
+        /* Truth table via spike injection */
+        /* (0,0): no spikes -> no output spike */
+        /* (1,0): (a, in)'in1 -> OR fires, AND does not -> output spikes */
+        /* (0,1): (a, in)'in2 -> output spikes */
+        /* (1,1): both spike -> AND fires and inhibits output -> no spike */
+
+        (a, in)'in1
+        step(3)
+
+        []'main (display{
+            "SN P systems compute XOR structurally:",
+            "OR neuron (threshold 1) minus AND inhibition (threshold 2)"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * MAIN RUNNER
+ * ============================================================================ */
+
+@main
+{
+    @usage {
+        "Run specific example:",
+        "  plingua example.pli --run <example_name>",
+        "",
+        "Available examples:",
+        "  1. simple_prediction",
+        "  2. linear_regression", 
+        "  3. binary_classifier_example",
+        "  4. multiclass_classification",
+        "  5. xor_function",
+        "  6. custom_architecture",
+        "  7. incremental_training",
+        "  8. loss_function_comparison",
+        "  9. xavier_initialization",
+        "  10. word_embedding_example",
+        "  11. lstm_sequence_prediction",
+        "  12. weighted_loss_example",
+        "  13. snp_xor_example",
+        "",
+        "Run all examples:",
+        "  plingua example.pli"
+    }
+    
+    /* Default: run all examples */
+    simple_prediction
+    linear_regression
+    binary_classifier_example
+    multiclass_classification
+    xor_function
+    custom_architecture
+    incremental_training
+    loss_function_comparison
+    xavier_initialization
+    word_embedding_example
+    lstm_sequence_prediction
+    weighted_loss_example
+    snp_xor_example
+    
+    []'main (display{
+        "All examples completed successfully!",
+        "These examples demonstrate practical usage of",
+        "neural networks in PLingua using P-Systems.",
+        "",
+        "Key takeaways:",
+        "- Networks are membrane structures",
+        "- Training updates weights via rules",
+        "- Forward/backward passes use communication",
+        "- Modular composition enables complex architectures"
+    }, out)
+}
+
+/*
+ * NOTES:
+ * 
+ * These examples show practical patterns for using
+ * neural networks in PLingua:
+ * 
+ * 1. Network Creation: Define membrane structure with layers
+ * 2. Data Preparation: Encode training samples
+ * 3. Training: Apply rules iteratively to update weights
+ * 4. Prediction: Forward pass through network
+ * 5. Evaluation: Compare predictions with expected values
+ * 
+ * The P-Systems formalism maps naturally to neural networks:
+ * - Membranes = Layers/Neurons
+ * - Objects = Data (activations, weights)
+ * - Rules = Computations (forward, backward)
+ * - Communication = Data flow
+ * 
+ * This makes PLingua a natural fit for expressing
+ * neural network algorithms in membrane computing!
+ */

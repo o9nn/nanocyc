@@ -1,0 +1,373 @@
+/*
+ * Momentum and Adaptive Learning Rate Optimizers in PLingua
+ * P-Systems membrane computing implementation of:
+ *   - SGD with Momentum
+ *   - RMSprop
+ *   - Adam (Adaptive Moment Estimation)
+ *   - AdaGrad
+ *
+ * Each optimizer is a membrane module that wraps weight-update rules.
+ * Optimizer state (moments, velocity, etc.) lives as objects in a
+ * dedicated membrane alongside each weight object.
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * SGD WITH MOMENTUM
+ * v_t  = beta * v_{t-1} + (1-beta) * grad
+ * w_t  = w_{t-1} - lr * v_t
+ * ============================================================================ */
+
+@module sgd_momentum(learning_rate, beta)
+{
+    /*
+     * Membrane structure per weight:
+     *   [opt_sgd  weight{j,w}  velocity{j,v}  grad{j,g}  lr{lr}  beta{b} ]
+     */
+
+    @initial
+    {
+        /* Velocity initialised to zero for every weight index j */
+        [opt_sgd
+            lr{learning_rate}
+            beta{beta}
+        ]'main
+    }
+
+    /* On first step initialise velocity if missing */
+    @rules init_velocity
+    {
+        [grad{j, g}]'opt_sgd ->
+            [velocity{j, 0}, grad{j, g}]'opt_sgd
+            where not_exists velocity{j}
+    }
+
+    /* Update velocity: v = beta*v + (1-beta)*g */
+    @rules update_velocity
+    {
+        [velocity{j, v}, grad{j, g}, beta{b}]'opt_sgd ->
+            [velocity{j, (b * v + (100 - b) * g) / 100}]'opt_sgd
+    }
+
+    /* Update weight: w = w - lr * v */
+    @rules update_weight
+    {
+        [weight{j, w}, velocity{j, v}, lr{l}]'opt_sgd ->
+            [weight{j, w - (l * v) / 100}]'opt_sgd
+    }
+
+    /* Discard consumed gradient */
+    @rules clear_grad
+    {
+        [grad{j, g}]'opt_sgd -> []'opt_sgd
+    }
+}
+
+/* ============================================================================
+ * ADAGRAD
+ * G_t  = G_{t-1} + grad^2
+ * w_t  = w_{t-1} - lr / sqrt(G_t + eps) * grad
+ * ============================================================================ */
+
+@module adagrad(learning_rate, epsilon)
+{
+    @initial
+    {
+        [opt_adagrad
+            lr{learning_rate}
+            eps{epsilon}
+        ]'main
+    }
+
+    /* Accumulate squared gradient */
+    @rules accumulate_sq
+    {
+        [sq_grad_acc{j, g2}, grad{j, g}]'opt_adagrad ->
+            [sq_grad_acc{j, g2 + g * g}]'opt_adagrad
+
+        /* Initialise accumulator */
+        [grad{j, g}]'opt_adagrad ->
+            [sq_grad_acc{j, g * g}]'opt_adagrad
+            where not_exists sq_grad_acc{j}
+    }
+
+    /* Update weight */
+    @rules update_weight
+    {
+        [weight{j, w}, sq_grad_acc{j, g2}, grad{j, g}, lr{l}, eps{e}]'opt_adagrad ->
+            [weight{j, w - (l * g) / sqrt(g2 + e)}]'opt_adagrad
+    }
+
+    @rules clear_grad
+    {
+        [grad{j, g}]'opt_adagrad -> []'opt_adagrad
+    }
+}
+
+/* ============================================================================
+ * RMSPROP
+ * E[g^2]_t = rho * E[g^2]_{t-1} + (1-rho) * g_t^2
+ * w_t      = w_{t-1} - lr / sqrt(E[g^2]_t + eps) * g_t
+ * ============================================================================ */
+
+@module rmsprop(learning_rate, rho, epsilon)
+{
+    /*
+     * Membrane objects per weight j:
+     *   mean_sq{j, value}   -- running mean of squared gradients
+     *   grad{j, g}          -- current gradient (consumed each step)
+     *   weight{j, w}        -- weight parameter
+     */
+
+    @initial
+    {
+        [opt_rmsprop
+            lr{learning_rate}
+            rho{rho}
+            eps{epsilon}
+        ]'main
+    }
+
+    /* Initialise running mean on first encounter */
+    @rules init_mean_sq
+    {
+        [grad{j, g}]'opt_rmsprop ->
+            [mean_sq{j, g * g}, grad{j, g}]'opt_rmsprop
+            where not_exists mean_sq{j}
+    }
+
+    /* Update running mean of squared gradients */
+    @rules update_mean_sq
+    {
+        [mean_sq{j, ms}, grad{j, g}, rho{r}]'opt_rmsprop ->
+            [mean_sq{j, (r * ms + (100 - r) * g * g) / 100}]'opt_rmsprop
+    }
+
+    /* Adapted weight update */
+    @rules update_weight
+    {
+        [weight{j, w}, mean_sq{j, ms}, grad{j, g}, lr{l}, eps{e}]'opt_rmsprop ->
+            [weight{j, w - (l * g) / sqrt(ms + e)}]'opt_rmsprop
+    }
+
+    @rules clear_grad
+    {
+        [grad{j, g}]'opt_rmsprop -> []'opt_rmsprop
+    }
+}
+
+/* ============================================================================
+ * ADAM  (Adaptive Moment Estimation)
+ * m_t  = beta1 * m_{t-1} + (1-beta1) * g_t          (first moment)
+ * v_t  = beta2 * v_{t-1} + (1-beta2) * g_t^2        (second moment)
+ * m_hat = m_t / (1 - beta1^t)                        (bias correction)
+ * v_hat = v_t / (1 - beta2^t)                        (bias correction)
+ * w_t  = w_{t-1} - lr * m_hat / (sqrt(v_hat) + eps)
+ * ============================================================================ */
+
+@module adam(learning_rate, beta1, beta2, epsilon)
+{
+    /*
+     * Membrane objects:
+     *   first_moment{j, m}    -- biased first moment estimate
+     *   second_moment{j, v}   -- biased second moment estimate
+     *   timestep{t}           -- global step counter for bias correction
+     *   grad{j, g}            -- current gradient (consumed each step)
+     *   weight{j, w}          -- weight parameter
+     */
+
+    @initial
+    {
+        [opt_adam
+            lr{learning_rate}
+            beta1{beta1}
+            beta2{beta2}
+            eps{epsilon}
+            timestep{0}
+        ]'main
+    }
+
+    /* Increment global step */
+    @rules increment_step
+    {
+        [timestep{t}]'opt_adam -> [timestep{t + 1}]'opt_adam
+    }
+
+    /* Initialise moments to zero on first encounter */
+    @rules init_moments
+    {
+        [grad{j, g}]'opt_adam ->
+            [first_moment{j, 0}, second_moment{j, 0}, grad{j, g}]'opt_adam
+            where not_exists first_moment{j}
+    }
+
+    /* Update first moment: m = beta1*m + (1-beta1)*g */
+    @rules update_first_moment
+    {
+        [first_moment{j, m}, grad{j, g}, beta1{b1}]'opt_adam ->
+            [first_moment{j, (b1 * m + (100 - b1) * g) / 100}]'opt_adam
+    }
+
+    /* Update second moment: v = beta2*v + (1-beta2)*g^2 */
+    @rules update_second_moment
+    {
+        [second_moment{j, v}, grad{j, g}, beta2{b2}]'opt_adam ->
+            [second_moment{j, (b2 * v + (100 - b2) * g * g) / 100}]'opt_adam
+    }
+
+    /* Bias-corrected weight update
+     * m_hat = m / (1 - beta1^t),  v_hat = v / (1 - beta2^t)
+     * w = w - lr * m_hat / (sqrt(v_hat) + eps)
+     */
+    @rules update_weight
+    {
+        [weight{j, w},
+         first_moment{j, m}, second_moment{j, v},
+         timestep{t},
+         lr{l}, beta1{b1}, beta2{b2}, eps{e}]'opt_adam ->
+            [weight{j, w - l * (m / (1 - pow(b1/100, t))) /
+                          (sqrt(v / (1 - pow(b2/100, t))) + e)}]'opt_adam
+    }
+
+    @rules clear_grad
+    {
+        [grad{j, g}]'opt_adam -> []'opt_adam
+    }
+}
+
+/* ============================================================================
+ * ADAMW  (Adam with decoupled weight decay)
+ * Same as Adam but adds weight decay directly to weight (not gradient):
+ * w_t = w_{t-1} - lr * (m_hat / (sqrt(v_hat) + eps) + lambda * w_{t-1})
+ * ============================================================================ */
+
+@module adamw(learning_rate, beta1, beta2, epsilon, weight_decay)
+{
+    @import adam(learning_rate, beta1, beta2, epsilon)
+
+    @rules weight_decay_update
+    {
+        [weight{j, w}, lambda{wd}, lr{l}]'opt_adam ->
+            [weight{j, w - l * wd * w}]'opt_adam
+    }
+
+    @initial
+    {
+        [opt_adam
+            lambda{weight_decay}
+        ]'main
+    }
+}
+
+/* ============================================================================
+ * LEARNING RATE SCHEDULERS
+ * ============================================================================ */
+
+/* Step-decay scheduler: halve lr every step_size epochs */
+@module lr_step_decay(initial_lr, decay_factor, step_size)
+{
+    @initial
+    {
+        [scheduler
+            lr{initial_lr}
+            decay{decay_factor}
+            step{step_size}
+            epoch{0}
+        ]'main
+    }
+
+    @rules update_lr
+    {
+        [epoch{e}, step{s}, lr{l}, decay{d}]'scheduler ->
+            [lr{l * d / 100}, epoch{e + 1}, step{s}, decay{d}]'scheduler
+            where e mod s == 0 and e > 0
+        [epoch{e}, step{s}]'scheduler ->
+            [epoch{e + 1}, step{s}]'scheduler
+            where e mod s != 0 or e == 0
+    }
+}
+
+/* Cosine annealing: lr = lr_min + 0.5*(lr_max-lr_min)*(1+cos(pi*t/T)) */
+@module lr_cosine_annealing(lr_max, lr_min, T_max)
+{
+    @initial
+    {
+        [scheduler
+            lr_max{lr_max}
+            lr_min{lr_min}
+            T_max{T_max}
+            t{0}
+        ]'main
+    }
+
+    @rules update_lr
+    {
+        [t{tick}, lr_max{lmax}, lr_min{lmin}, T_max{T}]'scheduler ->
+            [lr{lmin + (lmax - lmin) * (1 + cos(3141592 * tick / (T * 1000000))) / 2},
+             t{tick + 1}]'scheduler
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE: Training XOR with Adam
+ * ============================================================================ */
+
+@model xor_with_adam
+{
+    @membrane_structure
+    {
+        [main
+            /* Layers */
+            [layer1 linear_layer(2, 4)]'main
+            [activation1 relu_activation]'main
+            [layer2 linear_layer(4, 1)]'main
+            [activation2 sigmoid_activation]'main
+
+            /* Optimizer (beta1=90%, beta2=99%, eps=0.001, lr=0.001) */
+            [optimizer adam(1, 90, 99, 1)]'main
+
+            /* Learning rate scheduler */
+            [scheduler lr_step_decay(1, 50, 100)]'main
+
+            /* Loss function */
+            [loss mse_criterion]'main
+        ]
+    }
+
+    @training_data
+    {
+        sample{[0, 0], [0]}
+        sample{[0, 1], [1]}
+        sample{[1, 0], [1]}
+        sample{[1, 1], [0]}
+    }
+
+    @hyperparams
+    {
+        epochs: 1000
+        batch_size: 4
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Optimizers in PLingua"
+    version: "1.0.0"
+    description: "SGD with momentum, RMSprop, Adam, AdamW optimizers as P-Systems"
+    features: [
+        "SGD with momentum",
+        "AdaGrad",
+        "RMSprop",
+        "Adam with bias correction",
+        "AdamW with weight decay",
+        "Step-decay learning rate scheduler",
+        "Cosine annealing scheduler"
+    ]
+}

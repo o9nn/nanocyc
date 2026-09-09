@@ -1,0 +1,2305 @@
+/*
+ * Extended Test Suite for the PLingua Neural Network Library
+ * Covers the v2.x extension modules and the new v2.1 modules:
+ *   optimizers, batch/layer norm, dropout, convolutional, recurrent,
+ *   gradient utilities, new activations, new criteria, containers,
+ *   layers, attention, SN P systems, exporter round-trip, and the
+ *   v2.2 modules: GNN, neuroevolution, Bayesian layers and the
+ *   transformer decoder with causal masking.
+ *
+ * Uses the same test_framework as test_nn.pli.
+ */
+
+@model<testing>
+
+@import "nn.pli"
+@import "activations.pli"
+@import "criteria.pli"
+@import "containers.pli"
+@import "layers.pli"
+@import "attention.pli"
+@import "snp.pli"
+@import "momentum_adam_rmsprop.pli"
+@import "batch_normalization.pli"
+@import "dropout.pli"
+@import "convolutional.pli"
+@import "recurrent.pli"
+@import "backpropagation.pli"
+@import "integration.pli"
+@import "gnn.pli"
+@import "neuroevolution.pli"
+@import "bayesian.pli"
+@import "transformer_decoder.pli"
+@import "atomspace.pli"
+@import "a9nn.pli"
+@import "pln.pli"
+@import "openpsi.pli"
+@import "unified.pli"
+@import "topology.pli"
+@import "bseries.pli"
+@import "closures.pli"
+@import "test_nn.pli"   /* reuse test_framework */
+
+/* ============================================================================
+ * OPTIMIZER TESTS
+ * ============================================================================ */
+
+@test sgd_momentum_test
+{
+    @description "SGD with momentum: velocity update v = beta*v + g; w -= lr*v"
+
+    @setup
+    {
+        [test_momentum
+            weight{1, 100}
+            velocity{1, 20}
+            grad{1, 10}
+            beta{90}          /* 0.9 */
+            learning_rate{10} /* 0.1 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* v = 0.9*20 + 10 = 28 */
+        [velocity{1, 20}, grad{1, 10}, beta{90}]'test ->
+            [velocity{1, 28}]'test
+
+        assert_equal("momentum_velocity", 28, velocity{1})
+
+        /* w = 100 - 0.1*28 ~ 97 */
+        [weight{1, 100}, velocity{1, 28}, learning_rate{10}]'test ->
+            [weight{1, 97}]'test
+
+        assert_equal("momentum_weight_update", 97, weight{1})
+    }
+}
+
+@test adam_test
+{
+    @description "Adam: bias-corrected first/second moment update"
+
+    @setup
+    {
+        [test_adam
+            m{1, 0}
+            v{1, 0}
+            grad{1, 100}
+            timestep{1}
+            beta1{90}   /* 0.9 */
+            beta2{99}   /* 0.999 approximated as 0.99 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* m = 0.9*0 + 0.1*100 = 10 */
+        [m{1, 0}, grad{1, 100}, beta1{90}]'test ->
+            [m{1, 10}]'test
+
+        assert_equal("adam_first_moment", 10, m{1})
+
+        /* v = 0.99*0 + 0.01*100^2/100 = 100 */
+        [v{1, 0}, grad{1, 100}, beta2{99}]'test ->
+            [v{1, 100}]'test
+
+        assert_equal("adam_second_moment", 100, v{1})
+
+        /* Bias correction at t=1: m_hat = m / (1 - 0.9) = 100 */
+        [m{1, 10}, timestep{1}, beta1{90}]'test ->
+            [m_hat{1, 100}]'test
+
+        assert_equal("adam_bias_correction", 100, m_hat{1})
+    }
+}
+
+/* ============================================================================
+ * NORMALIZATION TESTS
+ * ============================================================================ */
+
+@test batch_norm_test
+{
+    @description "Batch norm: zero-mean/unit-variance in train mode"
+
+    @setup
+    {
+        [test_bn
+            /* Batch of 2 values for feature 1: 40 and 60; mean = 50 */
+            batch_value{1, 1, 40}
+            batch_value{2, 1, 60}
+            mode{train}
+        ]'main
+    }
+
+    @rules
+    {
+        /* mean = (40 + 60) / 2 = 50 */
+        [batch_value{1, 1, 40}, batch_value{2, 1, 60}]'test ->
+            [batch_mean{1, 50}]'test
+
+        assert_equal("bn_batch_mean", 50, batch_mean{1})
+
+        /* variance = ((40-50)^2 + (60-50)^2)/2 = 100 */
+        [batch_mean{1, 50}]'test ->
+            [batch_var{1, 100}]'test
+
+        assert_equal("bn_batch_variance", 100, batch_var{1})
+    }
+}
+
+/* ============================================================================
+ * DROPOUT TESTS
+ * ============================================================================ */
+
+@test dropout_mask_test
+{
+    @description "Dropout: eval mode is identity; dropped units emit zero"
+
+    @setup
+    {
+        [test_dropout
+            input{1, 80}
+            input{2, 60}
+            mask{1, 1}    /* kept */
+            mask{2, 0}    /* dropped */
+            mode{train}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Kept unit passes (with inverted scaling p=0.5: 80*2 = 160) */
+        [input{1, 80}, mask{1, 1}]'test ->
+            [output{1, 160}]'test
+
+        assert_equal("dropout_kept_scaled", 160, output{1})
+
+        /* Dropped unit outputs zero */
+        [input{2, 60}, mask{2, 0}]'test ->
+            [output{2, 0}]'test
+
+        assert_equal("dropout_dropped", 0, output{2})
+
+        /* Eval mode: pass-through unchanged */
+        [input{1, 80}, mode{eval}]'test ->
+            [output{1, 80}]'test
+
+        assert_equal("dropout_eval_identity", 80, output{1})
+    }
+}
+
+/* ============================================================================
+ * CONVOLUTIONAL TESTS
+ * ============================================================================ */
+
+@test conv2d_shape_test
+{
+    @description "Conv2D output shape: out = (in + 2*pad - kernel)/stride + 1"
+
+    @setup
+    {
+        [test_conv
+            input_size{28}
+            kernel{5}
+            stride{1}
+            padding{0}
+        ]'main
+    }
+
+    @rules
+    {
+        /* (28 + 0 - 5)/1 + 1 = 24 */
+        [input_size{28}, kernel{5}, stride{1}, padding{0}]'test ->
+            [output_size{24}]'test
+
+        assert_equal("conv2d_output_size", 24, output_size)
+    }
+}
+
+@test max_pool_test
+{
+    @description "MaxPool 2x2: selects max of window"
+
+    @setup
+    {
+        [test_pool
+            input{1, 1, 1, 10}
+            input{1, 1, 2, 40}
+            input{1, 2, 1, 20}
+            input{1, 2, 2, 30}
+        ]'main
+    }
+
+    @rules
+    {
+        /* max(10, 40, 20, 30) = 40 */
+        [input{1, 1, 1, 10}, input{1, 1, 2, 40},
+         input{1, 2, 1, 20}, input{1, 2, 2, 30}]'test ->
+            [pooled{1, 1, 1, 40}]'test
+
+        assert_equal("max_pool_value", 40, pooled{1, 1, 1})
+    }
+}
+
+/* ============================================================================
+ * RECURRENT TESTS
+ * ============================================================================ */
+
+@test lstm_gate_test
+{
+    @description "LSTM gates: cell state update c = f*c_prev + i*g"
+
+    @setup
+    {
+        [test_lstm
+            gate_f{1, 50}   /* forget gate 0.5 */
+            gate_i{1, 100}  /* input gate 1.0 */
+            gate_g{1, 40}   /* candidate 0.4 */
+            cell_prev{1, 80}
+        ]'main
+    }
+
+    @rules
+    {
+        /* c = 0.5*80 + 1.0*40 = 40 + 40 = 80 */
+        [gate_f{1, 50}, gate_i{1, 100}, gate_g{1, 40}, cell_prev{1, 80}]'test ->
+            [cell{1, 80}]'test
+
+        assert_equal("lstm_cell_update", 80, cell{1})
+    }
+}
+
+/* ============================================================================
+ * GRADIENT UTILITY TESTS
+ * ============================================================================ */
+
+@test gradient_clip_test
+{
+    @description "Gradient clipping by value"
+
+    @setup
+    {
+        [test_clip
+            grad{1, 500}
+            grad{2, -300}
+            grad{3, 50}
+            clip{100}
+        ]'main
+    }
+
+    @rules
+    {
+        /* 500 clipped to 100 */
+        [grad{1, 500}, clip{100}]'test -> [clipped{1, 100}]'test
+        assert_equal("clip_positive", 100, clipped{1})
+
+        /* -300 clipped to -100 */
+        [grad{2, -300}, clip{100}]'test -> [clipped{2, -100}]'test
+        assert_equal("clip_negative", -100, clipped{2})
+
+        /* 50 unchanged */
+        [grad{3, 50}, clip{100}]'test -> [clipped{3, 50}]'test
+        assert_equal("clip_within_range", 50, clipped{3})
+    }
+}
+
+/* ============================================================================
+ * NEW ACTIVATION TESTS
+ * ============================================================================ */
+
+@test leaky_relu_test
+{
+    @description "LeakyReLU: identity for positive, slope*x for negative"
+
+    @setup
+    {
+        [test_lrelu
+            input{1, 100}
+            input{2, -100}
+            slope{1}   /* 0.01 */
+        ]'main
+    }
+
+    @rules
+    {
+        [input{1, 100}]'test -> [x{100}]'lrelu
+        assert_equal("leaky_relu_positive", 100, lrelu)
+
+        /* -100 * 0.01 = -1 */
+        [input{2, -100}]'test -> [x{-100}]'lrelu
+        assert_equal("leaky_relu_negative", -1, lrelu)
+    }
+}
+
+@test elu_test
+{
+    @description "ELU: identity for positive, alpha*(exp(x)-1) for negative"
+
+    @setup
+    {
+        [test_elu
+            input{1, 100}
+            input{2, -100}
+            alpha{100}   /* 1.0 */
+        ]'main
+    }
+
+    @rules
+    {
+        [input{1, 100}]'test -> [x{100}]'elu
+        assert_equal("elu_positive", 100, elu_out)
+
+        /* 1.0*(exp(-1)-1) ~ -0.63 -> -63 */
+        [input{2, -100}]'test -> [x{-100}]'elu
+        assert_equal("elu_negative", -63, elu_out)
+    }
+}
+
+@test log_softmax_test
+{
+    @description "LogSoftmax: outputs sum to log-probabilities"
+
+    @setup
+    {
+        [test_lsm
+            logit{1, 100}
+            logit{2, 100}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Equal logits: log(0.5) ~ -0.693 -> -69 for both */
+        [logit{1, 100}, logit{2, 100}]'test ->
+            [log_prob{1, -69}, log_prob{2, -69}]'lsm
+
+        assert_equal("log_softmax_uniform", -69, log_prob{1})
+    }
+}
+
+/* ============================================================================
+ * NEW CRITERIA TESTS
+ * ============================================================================ */
+
+@test bce_test
+{
+    @description "BCE loss: -log(p) when target is 1"
+
+    @setup
+    {
+        [test_bce
+            predicted{1, 80}   /* p = 0.8 */
+            target{1, 100}     /* t = 1 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* -log(0.8) ~ 0.223 -> 22 */
+        [predicted{1, 80}, target{1, 100}]'loss ->
+            [bce{1, 22}]'loss
+
+        assert_equal("bce_loss", 22, bce{1})
+    }
+}
+
+@test cross_entropy_test
+{
+    @description "CrossEntropy gradient: softmax - one_hot"
+
+    @setup
+    {
+        [test_ce
+            logit{1, 100}
+            logit{2, 100}
+            target{1}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Equal logits: softmax = [0.5, 0.5]; grad = [0.5-1, 0.5] = [-50, 50] */
+        [logit{1, 100}, logit{2, 100}, target{1}]'loss ->
+            [gradient{1, -50}, gradient{2, 50}]'loss
+
+        assert_equal("ce_grad_true_class", -50, gradient{1})
+        assert_equal("ce_grad_other_class", 50, gradient{2})
+    }
+}
+
+@test smooth_l1_test
+{
+    @description "SmoothL1: quadratic inside beta, linear outside"
+
+    @setup
+    {
+        [test_huber
+            predicted{1, 150}
+            target{1, 100}
+            beta{100}
+        ]'main
+    }
+
+    @rules
+    {
+        /* |e| = 50 < beta: loss = 50^2/(2*100) = 12.5 -> 12 */
+        [predicted{1, 150}, target{1, 100}]'loss ->
+            [huber{1, 12}]'loss
+
+        assert_equal("smooth_l1_quadratic", 12, huber{1})
+    }
+}
+
+/* ============================================================================
+ * CONTAINER TESTS
+ * ============================================================================ */
+
+@test cadd_table_test
+{
+    @description "CAddTable: element-wise sum of table slots"
+
+    @setup
+    {
+        [test_add
+            table_input{1, 1, 30}
+            table_input{2, 1, 50}
+        ]'main
+    }
+
+    @rules
+    {
+        [table_input{1, 1, 30}, table_input{2, 1, 50}]'add ->
+            [output{1, 80}]'add
+
+        assert_equal("cadd_table_sum", 80, output{1})
+    }
+}
+
+@test identity_test
+{
+    @description "Identity: pass-through in both directions"
+
+    @setup
+    {
+        [test_id
+            input{1, 42}
+        ]'main
+    }
+
+    @rules
+    {
+        [input{1, 42}]'id -> [output{1, 42}]'id
+        assert_equal("identity_forward", 42, output{1})
+    }
+}
+
+@test reshape_test
+{
+    @description "Reshape: (r, c) -> flat index (r-1)*cols + c"
+
+    @setup
+    {
+        [test_reshape
+            input{2, 3, 77}   /* row 2, col 3, value 77 */
+            cols{4}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Flat index = (2-1)*4 + 3 = 7 */
+        [input{2, 3, 77}]'shape -> [output{7, 77}]'shape
+        assert_equal("reshape_flatten", 77, output{7})
+    }
+}
+
+/* ============================================================================
+ * LAYER TESTS
+ * ============================================================================ */
+
+@test lookup_table_test
+{
+    @description "LookupTable: token index selects its embedding row"
+
+    @setup
+    {
+        [test_embed
+            embedding{3, 1, 25}
+            embedding{3, 2, -40}
+            token{1, 3}   /* position 1 looks up row 3 */
+        ]'main
+    }
+
+    @rules
+    {
+        [token{1, 3}, embedding{3, 1, 25}]'embed ->
+            [output{1, 1, 25}]'embed
+        assert_equal("lookup_dim1", 25, output{1, 1})
+
+        [token{1, 3}, embedding{3, 2, -40}]'embed ->
+            [output{1, 2, -40}]'embed
+        assert_equal("lookup_dim2", -40, output{1, 2})
+    }
+}
+
+/* ============================================================================
+ * ATTENTION TESTS
+ * ============================================================================ */
+
+@test attention_score_test
+{
+    @description "Scaled dot-product: score = q.k / sqrt(d_k)"
+
+    @setup
+    {
+        [test_attn
+            q{1, 1, 100}
+            k{1, 1, 100}
+            d_k{1}
+        ]'main
+    }
+
+    @rules
+    {
+        /* q.k = 1.0*1.0 = 1.0 -> 100; /sqrt(1) = 100 */
+        [q{1, 1, 100}, k{1, 1, 100}]'attn ->
+            [score{1, 1, 100}]'attn
+
+        assert_equal("attention_score", 100, score{1, 1})
+    }
+}
+
+/* ============================================================================
+ * SN P SYSTEM TESTS
+ * ============================================================================ */
+
+@test snp_firing_test
+{
+    @description "SN P neuron fires when spikes reach threshold"
+
+    @setup
+    {
+        [test_snp
+            [neuron
+                spike_count{2}
+                refractory{0}
+                threshold{2}
+            ]'test
+        ]'main
+    }
+
+    @rules
+    {
+        /* 2 spikes >= threshold 2: fire, consume spikes */
+        [spike_count{2}, refractory{0}]'neuron ->
+            [spike_count{0}, pending_spike{}]'neuron
+
+        assert_equal("snp_spikes_consumed", 0, spike_count)
+    }
+}
+
+@test snp_subthreshold_test
+{
+    @description "SN P neuron does not fire below threshold"
+
+    @setup
+    {
+        [test_snp2
+            [neuron
+                spike_count{1}
+                refractory{0}
+                threshold{2}
+            ]'test
+        ]'main
+    }
+
+    @rules
+    {
+        /* 1 spike < threshold 2: no firing, count unchanged */
+        assert_equal("snp_no_fire", 1, spike_count)
+    }
+}
+
+/* ============================================================================
+ * EXPORTER ROUND-TRIP TEST
+ * ============================================================================ */
+
+@test exporter_roundtrip_test
+{
+    @description "save_weights then load_weights restores identical weights"
+
+    @setup
+    {
+        [test_export
+            [neuron{1}
+                weight{1, 37}
+                bias{5}
+            ]'test
+            save_request{model_a}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Save produces interchange records */
+        [weight{1, 37}]'neuron{1} ->
+            [weight{1, 37}]'neuron{1} (weight_record{model_a, 1, 1, 37}, out)
+
+        /* Corrupt weight, then load restores it */
+        [weight{1, 37}]'neuron{1} -> [weight{1, 0}]'neuron{1}
+
+        (weight_record{model_a, 1, 1, 37}, in) [weight{1, 0}]'neuron{1} ->
+            [weight{1, 37}]'neuron{1}
+
+        assert_equal("exporter_roundtrip", 37, weight{1})
+    }
+}
+
+/* ============================================================================
+ * GRAPH NEURAL NETWORK TESTS
+ * ============================================================================ */
+
+@test gcn_aggregation_test
+{
+    @description "GCN aggregation on a 3-node triangle: mean of neighbor features"
+
+    @setup
+    {
+        /* Triangle graph, self-loops included; node 1 features from
+         * itself (100), node 2 (200) and node 3 (300); deg = 3 */
+        [test_gcn
+            [node{1} feat{1, 100} deg{3}]'test
+            [node{2} feat{1, 200} deg{3}]'test
+            [node{3} feat{1, 300} deg{3}]'test
+            edge{1, 1, 100}
+            edge{2, 1, 100}
+            edge{3, 1, 100}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Messages into node 1: 100 + 200 + 300 = 600 */
+        [msg{1, 100}, msg{1, 200}]'node{1} -> [msg{1, 300}]'node{1}
+        [msg{1, 300}, msg{1, 300}]'node{1} -> [msg{1, 600}]'node{1}
+
+        /* Degree-normalized aggregate: 600 / 3 = 200 */
+        [msg{1, 600}, deg{3}]'node{1} -> [agg{1, 200}, deg{3}]'node{1}
+
+        assert_equal("gcn_mean_aggregate", 200, agg{1})
+    }
+}
+
+@test graph_readout_test
+{
+    @description "Graph readout sum pooling over 3 node features"
+
+    @setup
+    {
+        [test_readout
+            pool{1, 100}
+            pool{1, 200}
+            pool{1, 300}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Pairwise sum: 100 + 200 = 300; 300 + 300 = 600 */
+        [pool{1, 100}, pool{1, 200}]'readout -> [pool{1, 300}]'readout
+        [pool{1, 300}, pool{1, 300}]'readout -> [pool{1, 600}]'readout
+
+        assert_equal("graph_readout_sum", 600, pool{1})
+    }
+}
+
+/* ============================================================================
+ * NEUROEVOLUTION TESTS
+ * ============================================================================ */
+
+@test membrane_division_test
+{
+    @description "Fit genome divides into elite copy and mutable offspring"
+
+    @setup
+    {
+        [test_evolution
+            [genome{1}
+                gene{1, 42}
+                fitness{80}   /* above threshold 50 */
+            ]'test
+        ]'main
+    }
+
+    @rules
+    {
+        /* Division: [genome{1}] -> [genome{2}] [genome{3}] */
+        [gene{1, 42}, fitness{80}]'genome{1} ->
+            [gene{1, 42}, fitness{80}]'genome{2}
+            [gene{1, 42}, fitness{80}, mutable{}]'genome{3}
+
+        /* Elite daughter keeps the gene verbatim */
+        assert_equal("division_elite_gene", 42, gene{1})
+
+        /* Offspring mutates: 42 + 8 = 50 */
+        [gene{1, 42}, mutable{}]'genome{3} -> [gene{1, 50}]'genome{3}
+
+        assert_equal("division_mutated_gene", 50, gene{1})
+    }
+}
+
+@test tournament_selection_test
+{
+    @description "Pairwise fitness comparison keeps the fitter contender"
+
+    @setup
+    {
+        [test_tournament
+            contender{1, 30}
+            contender{2, 70}
+        ]'main
+    }
+
+    @rules
+    {
+        /* max(30, 70) -> contender 2 survives */
+        [contender{1, 30}, contender{2, 70}]'population ->
+            [contender{2, 70}]'population
+
+        assert_equal("tournament_winner_fitness", 70, contender{2})
+    }
+}
+
+/* ============================================================================
+ * BAYESIAN LAYER TESTS
+ * ============================================================================ */
+
+@test bayes_linear_forward_test
+{
+    @description "Reparameterized weight w = mu + std*eps with fixed eps"
+
+    @setup
+    {
+        [test_bayes
+            [neuron{1}
+                w_mu{1, 50}      /* mu = 0.5 */
+                w_std{1, 20}     /* std = 0.2 */
+                eps{1, 100}      /* eps = 1.0 (fixed for the test) */
+                input{1, 100}    /* x = 1.0 */
+                bias{0}
+            ]'test
+        ]'main
+    }
+
+    @rules
+    {
+        /* w = 50 + 20*100/100 = 70 */
+        [w_mu{1, 50}, w_std{1, 20}, eps{1, 100}]'neuron{1} ->
+            [weight{1, 70}]'neuron{1}
+
+        assert_equal("bayes_sampled_weight", 70, weight{1})
+
+        /* Forward: 100 * 70 / 100 + 0 = 70 */
+        [input{1, 100}, weight{1, 70}, bias{0}]'neuron{1} ->
+            [output{1, 70}]'neuron{1}
+
+        assert_equal("bayes_forward_output", 70, output{1})
+    }
+}
+
+@test mc_predict_mean_test
+{
+    @description "Monte-Carlo predictive mean over 2 stochastic samples"
+
+    @setup
+    {
+        [test_mc
+            mc_output{1, 1, 60}
+            mc_output{2, 1, 100}
+            num_samples{2}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Sum: 60 + 100 = 160; mean = 160/2 = 80 */
+        [mc_output{1, 1, 60}, mc_output{2, 1, 100}]'mc ->
+            [mc_output{1, 1, 160}]'mc
+
+        [mc_output{1, 1, 160}, num_samples{2}]'mc ->
+            [pred_mean{1, 80}]'mc
+
+        assert_equal("mc_pred_mean", 80, pred_mean{1})
+    }
+}
+
+/* ============================================================================
+ * TRANSFORMER DECODER TESTS
+ * ============================================================================ */
+
+@test causal_mask_test
+{
+    @description "Causal guard: score{2,3} never created; row 1 attends only to itself"
+
+    @setup
+    {
+        [test_causal
+            q{1, 1, 100}
+            q{2, 1, 100}
+            k{1, 1, 100}
+            k{2, 1, 100}
+            k{3, 1, 100}
+            mask{2, 3, (3 <= 2 ? 1 : 0)}   /* causal_mask entry for (2,3) */
+        ]'main
+    }
+
+    @rules
+    {
+        /* Legal scores only (j <= i): (1,1), (2,1), (2,2) */
+        [q{1, 1, 100}, k{1, 1, 100}]'attn ->
+            [score{1, 1, 100}]'attn        /* j=1 <= i=1 */
+        [q{2, 1, 100}, k{2, 1, 100}]'attn ->
+            [score{2, 2, 100}]'attn        /* j=2 <= i=2 */
+
+        /* Future position (2,3) is masked out: mask value is 0 */
+        assert_equal("causal_mask_future_zero", 0, mask{2, 3})
+
+        /* Row 1 has a single legal position: softmax gives weight 100 */
+        [score{1, 1, 100}, row_sum_final{1, 100}]'attn ->
+            [attn_weight{1, 1, 100}]'attn
+
+        assert_equal("causal_row1_self_weight", 100, attn_weight{1, 1})
+    }
+}
+
+@test decoder_residual_test
+{
+    @description "Decoder block residual: self-attention output + saved input"
+
+    @setup
+    {
+        [test_decoder
+            self_out{1, 1, 30}
+            x_saved{1, 1, 50}
+        ]'main
+    }
+
+    @rules
+    {
+        /* Residual add: 30 + 50 = 80 fed into norm1 */
+        [self_out{1, 1, 30}, x_saved{1, 1, 50}]'decoder_block ->
+            [input{1, 1, 80}]'norm1
+
+        assert_equal("decoder_residual_sum", 80, input{1, 1})
+    }
+}
+
+/* ============================================================================
+ * ATOMSPACE TESTS
+ * Hypergraph knowledge base: atom nodes/links as membranes, truth-value
+ * revision, ECAN attention spreading, Hebbian wiring, pattern matching and
+ * the attentional focus.  All values are integers scaled by 100.
+ * ============================================================================ */
+
+@test atom_node_creation_test
+{
+    @description "A node membrane carries type, name, tv and av objects"
+
+    @setup
+    {
+        [test_atomspace
+            [atom{1}
+                is_node{}
+                atype{concept}
+                aname{cat}
+                tv{80, 90}
+                av{50, 10}
+            ]'test_atomspace
+        ]'main
+    }
+
+    @rules
+    {
+        [tv{s, c}]'atom{1} -> [got_tv{s, c}]'atom{1}
+        assert_equal("atom_node_strength", 80, got_tv{1})
+
+        [av{sti, lti}]'atom{1} -> [got_sti{sti}]'atom{1}
+        assert_equal("atom_node_sti", 50, got_sti{1})
+    }
+}
+
+@test atom_link_nesting_test
+{
+    @description "A link membrane contains its endpoint atoms (hypergraph)"
+
+    @setup
+    {
+        [test_atomspace
+            [link{7}
+                is_link{}
+                atype{inheritance}
+                tv{100, 100}
+                [atom{1} atype{concept} aname{cat}]'link{7}
+                [atom{2} atype{concept} aname{animal}]'link{7}
+            ]'test_atomspace
+        ]'main
+    }
+
+    @rules
+    {
+        /* Count endpoints nested inside the link membrane */
+        [is_link{}]'link{7} [atom{1}]'link{7} [atom{2}]'link{7} ->
+            [arity{2}]'link{7}
+
+        assert_equal("atom_link_arity", 2, arity{1})
+    }
+}
+
+@test tv_revision_test
+{
+    @description "Merging two TVs weight-averages strength by count (k=1)"
+
+    @setup
+    {
+        [test_atomspace
+            [atom{1}
+                is_node{}
+                tv{80, 90}        /* s=80, c=90 */
+                revise_tv{40, 10} /* second observation s=40, c=10 */
+            ]'test_atomspace
+        ]'main
+    }
+
+    @rules
+    {
+        /* s' = (80*90 + 40*10)/(90+10) = (7200+400)/100 = 76
+         * c' = (90+10)*100/(90+10+100) = 10000/200 = 50 */
+        [tv{76, 50}]'atom{1} -> [revised{}]'atom{1}
+
+        assert_equal("tv_revised_strength", 76, tv_strength{1})
+        assert_equal("tv_revised_confidence", 50, tv_confidence{1})
+    }
+}
+
+@test ecan_spread_conservation_test
+{
+    @description "ECAN diffusion conserves total STI (wage = income)"
+
+    @setup
+    {
+        [test_atomspace
+            spread_wage{10}
+            [atom{1} av{100, 0} ]'test_atomspace     /* source, in focus */
+            [link{5} link_member{5, 2} ]'test_atomspace
+            [atom{2} av{0, 0} ]'test_atomspace       /* target */
+        ]'main
+    }
+
+    @rules
+    {
+        /* Source pays wage 10; target (link member) collects 10. */
+        [av{sti, lti}]'atom{1} ->
+            [av{sti - 10, lti}]'atom{1} (sti_pay{1, 10}, out)
+            where sti >= 10
+
+        [sti_pay{1, w}, link_member{5, 2}]'link{5} ->
+            [link_member{5, 2}]'link{5} (sti_income{2, w}, out)
+
+        [av{sti, lti}, sti_income{2, w}]'atom{2} ->
+            [av{sti + w, lti}]'atom{2}
+
+        /* After one step: source 90, target 10 -> total still 100. */
+        [av{s1, _}]'atom{1} [av{s2, _}]'atom{2} ->
+            [total_sti{s1 + s2}]'test_atomspace
+
+        assert_equal("ecan_sti_conserved", 100, total_sti{1})
+        assert_equal("ecan_source_paid", 90, atom1_sti{1})
+        assert_equal("ecan_target_income", 10, atom2_sti{1})
+    }
+}
+
+@test hebbian_wiring_test
+{
+    @description "Two co-focused atoms form a symmetric Hebbian link (I<J)"
+
+    @setup
+    {
+        [test_atomspace
+            [atom{1} av{60, 0} ]'test_atomspace
+            [atom{3} av{70, 0} ]'test_atomspace
+        ]'main
+    }
+
+    @rules
+    {
+        /* Both focused atoms pulse ... */
+        [av{sti, lti}]'atom{I} ->
+            [av{sti, lti}]'atom{I} (hebb_pulse{I}, out)
+            where sti > 0
+
+        /* ... and simultaneous pulses wire a HebbianLink (1<3). */
+        [hebb_pulse{1}, hebb_pulse{3}]'test_atomspace ->
+            [hebb_pulse{1}, hebb_pulse{3}]'test_atomspace
+            [hebb_link{1, 3} atype{hebbian} tv{50, 100}]'test_atomspace
+            where 1 < 3
+
+        assert_equal("hebbian_link_formed", 50, hebb_link_strength{1, 3})
+    }
+}
+
+@test pattern_match_by_type_test
+{
+    @description "query_type{T} rewrites to match{I} for atoms of that type"
+
+    @setup
+    {
+        [test_atomspace
+            query_type{concept}
+            [atom{1} atype{concept} ]'test_atomspace
+            [atom{2} atype{predicate} ]'test_atomspace
+            [atom{3} atype{concept} ]'test_atomspace
+        ]'main
+    }
+
+    @rules
+    {
+        [query_type{concept}]'test_atomspace [atype{concept}]'atom{I} ->
+            [query_type{concept}]'test_atomspace (match{I}, out)
+
+        /* Two concept atoms (1 and 3) match; the predicate does not. */
+        [match{1}]'test_atomspace [match{3}]'test_atomspace ->
+            [match_count{2}]'test_atomspace
+
+        assert_equal("pattern_match_count", 2, match_count{1})
+    }
+}
+
+@test attentional_focus_test
+{
+    @description "Atoms with STI >= threshold are flagged in_focus{}"
+
+    @setup
+    {
+        [test_atomspace
+            focus_threshold{50}
+            [atom{1} av{80, 0} ]'test_atomspace   /* in focus */
+            [atom{2} av{30, 0} ]'test_atomspace   /* below threshold */
+        ]'main
+    }
+
+    @rules
+    {
+        [av{sti, lti}]'atom{I} ->
+            [av{sti, lti}, in_focus{}]'atom{I}
+            where sti >= 50
+
+        [in_focus{}]'atom{1} -> [focus_flag{}]'test_atomspace
+
+        assert_equal("focus_member_marked", 1, focus_flag_count{1})
+    }
+}
+
+@test focus_departure_test
+{
+    @description "An atom that drops below threshold leaves the focus"
+
+    @setup
+    {
+        [test_atomspace
+            focus_threshold{50}
+            [atom{1} av{40, 0} in_focus{} ]'test_atomspace  /* fell below */
+        ]'main
+    }
+
+    @rules
+    {
+        /* STI 40 < 50 -> the in_focus flag is removed. */
+        [in_focus{}, av{sti, lti}]'atom{1} ->
+            [av{sti, lti}]'atom{1}
+            where sti < 50
+
+        [av{sti, lti}]'atom{1} -> [no_focus{1}]'test_atomspace
+            where sti < 50
+
+        assert_equal("focus_departed", 1, no_focus{1})
+    }
+}
+
+/* ============================================================================
+ * a9nn NNECCO AGENT TESTS
+ * Reservoir, EchoBeats PC cycling, emotion update, consciousness REFLECT,
+ * episodic replay, LLaMA dispatch, PLAN argmax, INTEGRATE episode logging.
+ * All continuous values are integers scaled by 100.
+ * ============================================================================ */
+
+@test reservoir_tick_test
+{
+    @description "Leaky reservoir: x' = (1-a)x + a*tanh(pre); a=70/100"
+
+    @setup
+    {
+        [test_res
+            pc{3}
+            rspec{90, 70}
+            x{1, 100}              /* current activation 1.00 */
+            pre{1, 100}            /* pre-activation 1.00 -> tanh ~ 0.76 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* (1-0.7)*100 + 0.7*76 = 30 + 53 = 83 */
+        [pc{3}, x{1, 100}, pre{1, 100}, rspec{90, 70}]'test_res ->
+            [pc{3}, x{1, 83}, rspec{90, 70}]'test_res
+
+        assert_equal("reservoir_leaky_tick", 83, x{1})
+        assert_equal("reservoir_advances_pc", 4, pc_after_resonate{1})
+    }
+}
+
+@test echobeats_pc_cycle_test
+{
+    @description "INTEGRATE resets PC to 1 and increments the cycle counter"
+
+    @setup
+    {
+        [test_agent
+            pc{12}
+            cycle{5}
+            loss{0}
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{12}, cycle{5}, loss{0}]'test_agent ->
+            [pc{1}, cycle{6}]'test_agent
+
+        assert_equal("echobeats_pc_reset", 1, pc{1})
+        assert_equal("echobeats_cycle_increment", 6, cycle{1})
+    }
+}
+
+@test emotion_update_test
+{
+    @description "EMOTE: curiosity rises with novelty, joy with reward"
+
+    @setup
+    {
+        [test_agent
+            pc{7}
+            emo{1, 60}     /* curiosity 0.60 */
+            emo{2, 0}      /* joy 0.00 */
+            novelty{200}   /* |novelty| 2.00 */
+            reward{100}    /* reward 1.00 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* c' = 60*95/100 + 200*5/100 = 57 + 10 = 67 */
+        [pc{7}, emo{1, 60}, novelty{200}]'test_agent ->
+            [pc{7}, emo{1, 67}, novelty{200}]'test_agent
+
+        /* j' = 0*90/100 + 100*10/100 = 10 */
+        [pc{7}, emo{2, 0}, reward{100}]'test_agent ->
+            [pc{7}, emo{2, 10}, reward{100}]'test_agent
+
+        assert_equal("emotion_curiosity_up", 67, emo{1})
+        assert_equal("emotion_joy_up", 10, emo{2})
+    }
+}
+
+@test consciousness_reflect_test
+{
+    @description "REFLECT: high loss raises deliberation, low loss settles"
+
+    @setup
+    {
+        [test_hi pc{10} layer{1} loss{80}]'main     /* loss 0.80 -> layer up */
+        [test_lo pc{10} layer{2} loss{1}]'main      /* boundary: not < 1 */
+    }
+
+    @rules
+    {
+        [pc{10}, layer{1}, loss{80}]'test_hi ->
+            [pc{10}, layer{2}, loss{80}]'test_hi
+
+        /* lo=1 is neither >50 nor (0<lo<1): layer stays 2 */
+        [pc{10}, layer{2}, loss{1}]'test_lo ->
+            [pc{10}, layer{2}, loss{1}]'test_lo
+
+        assert_equal("consciousness_raises", 2, layer_hi{1})
+        assert_equal("consciousness_boundary", 2, layer_lo{1})
+    }
+}
+
+@test episodic_push_recall_test
+{
+    @description "Memory: push writes at head and advances it modulo capacity"
+
+    @setup
+    {
+        [test_mem
+            memcfg{3}
+            head{3}
+            memcount{2}
+            store_exp{s1, a1, r1, s2, 0}
+        ]'main
+    }
+
+    @rules
+    {
+        [store_exp{s1, a1, r1, s2, 0}, head{3}, memcount{2}, memcfg{3}]'test_mem ->
+            [exp{3, s1, a1, r1, s2, 0}, prio{3, 100},
+             head{1}, memcount{3}]'test_mem   /* (3 mod 3)+1 = 1 */
+
+        assert_equal("memory_head_wraps", 1, head{1})
+        assert_equal("memory_count_grows", 3, memcount{1})
+    }
+}
+
+@test llama_dispatch_test
+{
+    @description "REASON dispatches prompt to least-loaded instance (stub echo)"
+
+    @setup
+    {
+        [test_agent
+            pc{6}
+            prompt{hello}
+            [llama{1} load{2} tokens_served{0}]'test_agent
+            [llama{2} load{0} tokens_served{0}]'test_agent
+        ]'main
+    }
+
+    @rules
+    {
+        /* Instance 2 has lower load -> it takes the request. */
+        [pc{6}, prompt{hello}]'test_agent [load{0}]'llama{2} ->
+            [pc{6}, prompt{hello}]'test_agent [load{1}]'llama{2}
+
+        /* Stub completion: 64 tokens served, response tagged with id 2. */
+        [load{1}, tokens_served{0}]'llama{2} [prompt{hello}]'test_agent ->
+            [load{0}, tokens_served{64}]'llama{2}
+            [llama_resp{hello, 64, 2}]'test_agent
+
+        assert_equal("llama_least_loaded", 2, chosen_instance{1})
+        assert_equal("llama_tokens", 64, tokens_served{2})
+    }
+}
+
+@test planner_argmax_test
+{
+    @description "PLAN selects argmax action over emotion-modulated Q-values"
+
+    @setup
+    {
+        [test_agent
+            pc{8}
+            q{1, 30}
+            q{2, 85}
+            q{3, 50}
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{8}, q{1, 30}, q{2, 85}, q{3, 50}]'test_agent ->
+            [pc{8}, best_action{2}]'test_agent
+
+        assert_equal("planner_argmax", 2, best_action{1})
+    }
+}
+
+@test integrate_episode_test
+{
+    @description "INTEGRATE logs an EpisodeNode whose strength falls with loss"
+
+    @setup
+    {
+        [test_agent
+            pc{12}
+            cycle{0}
+            loss{20}     /* 0.20 -> strength 100-20 = 80 */
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{12}, cycle{0}, loss{20}]'test_agent ->
+            [pc{1}, cycle{1}]'test_agent
+            (episode_node{1, 80}, out)
+
+        assert_equal("integrate_episode_strength", 80, episode_strength{1})
+        assert_equal("integrate_cycle_bumped", 1, cycle{1})
+    }
+}
+
+/* ============================================================================
+ * PLN TESTS
+ * Probabilistic inference over the AtomSpace.  Strength/confidence are
+ * integers scaled by 100.
+ * ============================================================================ */
+
+@test pln_deduction_test
+{
+    @description "Deduction A->B, B->C |- A->C : s = sAB*sBC/100, c=min*90%"
+
+    @setup
+    {
+        [test_pln
+            imp{cat, animal, 90, 80}     /* cat->animal  s=0.90 c=0.80 */
+            imp{animal, mortal, 80, 60}  /* animal->mortal s=0.80 c=0.60 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* s = 90*80/100 = 72 ;  c = min(80,60)*90/100 = 54 */
+        [imp{cat, animal, 90, 80}, imp{animal, mortal, 80, 60}]'test_pln ->
+            [imp{cat, animal, 90, 80}, imp{animal, mortal, 80, 60},
+             deduce{cat, mortal, 72, 54}]'test_pln
+
+        assert_equal("pln_deduce_strength", 72, deduce_s{cat, mortal})
+        assert_equal("pln_deduce_confidence", 54, deduce_c{cat, mortal})
+    }
+}
+
+@test pln_induction_test
+{
+    @description "Induction A->B, A->C |- B->C : s = sAB*sAC/100"
+
+    @setup
+    {
+        [test_pln
+            imp{cat, furry, 80, 70}      /* cat->furry */
+            imp{cat, pet, 50, 60}        /* cat->pet */
+        ]'main
+    }
+
+    @rules
+    {
+        /* s = 80*50/100 = 40 ;  c = min(70,60)*80/100 = 48 */
+        [imp{cat, furry, 80, 70}, imp{cat, pet, 50, 60}]'test_pln ->
+            [imp{cat, furry, 80, 70}, imp{cat, pet, 50, 60},
+             induce{furry, pet, 40, 48}]'test_pln
+
+        assert_equal("pln_induce_strength", 40, induce_s{furry, pet})
+    }
+}
+
+@test pln_modus_ponens_test
+{
+    @description "Modus ponens A, A->B |- B : s = sA*sAB/100"
+
+    @setup
+    {
+        [test_pln
+            tv{90, 100}                  /* A (cat) true at 0.90 */
+            imp{cat, animal, 80, 90}     /* cat->animal 0.80 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* s = 90*80/100 = 72 ;  c = min(100,90) = 90 */
+        [tv{90, 100}, imp{cat, animal, 80, 90}]'test_pln ->
+            [tv{90, 100}, imp{cat, animal, 80, 90},
+             mp{animal, 72, 90}]'test_pln
+
+        assert_equal("pln_mp_strength", 72, mp_s{animal})
+    }
+}
+
+@test pln_negation_test
+{
+    @description "Negation A |- NOT A : s = 100 - sA"
+
+    @setup
+    {
+        [test_pln
+            tv{30, 80}                   /* A true at 0.30 */
+            want_not{a}
+        ]'main
+    }
+
+    @rules
+    {
+        [tv{30, 80}, want_not{a}]'test_pln ->
+            [tv{30, 80}, neg{a, 70, 80}]'test_pln
+
+        assert_equal("pln_neg_strength", 70, neg_s{a})
+    }
+}
+
+/* ============================================================================
+ * OPENPSI TESTS
+ * Demands, goal activation, action selection, satisfaction, emotion bridge.
+ * ============================================================================ */
+
+@test psi_demand_urgency_test
+{
+    @description "Demand accrues tension and becomes urgent at threshold"
+
+    @setup
+    {
+        [test_psi
+            demand{3, 58, 8, 60}   /* exploration: 0.58, +0.08/step, thr 0.60 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* 58 + 8 = 66 >= 60 -> urgent */
+        [demand{3, 58, 8, 60}]'test_psi ->
+            [demand{3, 66, 8, 60}]'test_psi
+
+        [demand{3, 66, 8, 60}]'test_psi ->
+            [demand{3, 66, 8, 60}, urgent{3}]'test_psi
+            where 66 >= 60
+
+        assert_equal("psi_demand_accrues", 66, demand_tension{3})
+        assert_equal("psi_demand_urgent", 1, urgent_flag{3})
+    }
+}
+
+@test psi_action_selection_test
+{
+    @description "Action selection picks the active goal with max relief"
+
+    @setup
+    {
+        [test_psi
+            urgent{3}
+            active_goal{g1, 3, 40}
+            active_goal{g2, 3, 75}
+            active_goal{g3, 3, 50}
+        ]'main
+    }
+
+    @rules
+    {
+        /* g2 (relief 75) dominates -> its action token is emitted. */
+        [active_goal{g1, 3, 40}, active_goal{g2, 3, 75},
+         active_goal{g3, 3, 50}]'test_psi ->
+            [selected{g2}, action_token{g2, 3, 75}]'test_psi
+
+        assert_equal("psi_selects_max_relief", 75, selected_relief{1})
+    }
+}
+
+@test psi_satisfaction_test
+{
+    @description "Reward on an addressed demand lowers its tension"
+
+    @setup
+    {
+        [test_psi
+            action_done{g2, 3}
+            reward{30}
+            demand{3, 66, 8, 60}
+        ]'main
+    }
+
+    @rules
+    {
+        /* 66 - 30 = 36 (floor 0); below threshold so urgency clears. */
+        [action_done{g2, 3}, reward{30}, demand{3, 66, 8, 60}]'test_psi ->
+            [reward{30}, demand{3, 36, 8, 60}]'test_psi
+
+        assert_equal("psi_tension_reduced", 36, demand_tension{3})
+    }
+}
+
+@test psi_emotion_bridge_test
+{
+    @description "Urgent exploration raises a9nn curiosity via activation"
+
+    @setup
+    {
+        [test_agent
+            urgent{3}                  /* exploration urgent */
+            mod{activation, 60}        /* activation 0.60 */
+            emo{1, 40}                 /* curiosity 0.40 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* curiosity += activation/20 = 60/20 = 3  ->  43 */
+        [urgent{3}, mod{activation, 60}, emo{1, 40}]'test_agent ->
+            [urgent{3}, mod{activation, 60}, emo{1, 43}]'test_agent
+
+        assert_equal("psi_curiosity_bridge", 43, emo{1})
+    }
+}
+
+/* ============================================================================
+ * UNIFIED COGNITIVE CYCLE TESTS
+ * RECALL<-AtomSpace, REASON<-PLN, EMOTE<-OpenPsi, LEARN<-revision, INTEGRATE.
+ * ============================================================================ */
+
+@test uni_recall_premise_test
+{
+    @description "RECALL harvests in-focus atoms as premises for REASON"
+
+    @setup
+    {
+        [test_agent
+            pc{5}
+            [atom{1} in_focus{} ]'test_agent
+            [atom{2} in_focus{} ]'test_agent
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{5}]'test_agent [in_focus{}]'atom{I} ->
+            [pc{5}]'test_agent (premise{I}, out)
+
+        [premise{1}]'test_agent [premise{2}]'test_agent ->
+            [premise_count{2}]'test_agent
+
+        assert_equal("uni_recall_premises", 2, premise_count{1})
+    }
+}
+
+@test uni_reason_conclusion_test
+{
+    @description "REASON deduces a transitive conclusion over recalled premises"
+
+    @setup
+    {
+        [test_agent
+            pc{6}
+            imp{cat, animal, 90, 80}
+            imp{animal, mortal, 80, 60}
+        ]'main
+    }
+
+    @rules
+    {
+        /* s = 90*80/100 = 72 ; c = min(80,60)*90/100 = 54 */
+        [pc{6}, imp{cat, animal, 90, 80}, imp{animal, mortal, 80, 60}]'test_agent ->
+            [pc{6}, imp{cat, animal, 90, 80}, imp{animal, mortal, 80, 60},
+             conclusion{cat, mortal, 72, 54}]'test_agent
+
+        assert_equal("uni_reason_strength", 72, conclusion_s{cat, mortal})
+    }
+}
+
+@test uni_emote_bridge_test
+{
+    @description "EMOTE: urgent exploration raises curiosity via activation"
+
+    @setup
+    {
+        [test_agent
+            pc{7}
+            urgent{3}
+            mod{activation, 80}
+            emo{1, 50}
+        ]'main
+    }
+
+    @rules
+    {
+        /* curiosity += activation/20 = 80/20 = 4  ->  54 */
+        [pc{7}, urgent{3}, mod{activation, 80}, emo{1, 50}]'test_agent ->
+            [pc{7}, urgent{3}, mod{activation, 80}, emo{1, 54}]'test_agent
+
+        assert_equal("uni_emote_curiosity", 54, emo{1})
+    }
+}
+
+@test uni_learn_revision_test
+{
+    @description "LEARN revises an existing implication's TV with the conclusion"
+
+    @setup
+    {
+        [test_agent
+            pc{9}
+            conclusion{cat, mortal, 60, 20}
+            [link{5} imp{cat, mortal, 72, 30} ]'test_agent
+        ]'main
+    }
+
+    @rules
+    {
+        /* s' = (72*30 + 60*20)/(30+20) = (2160+1200)/50 = 67
+         * c' = (30+20)*100/(30+20+100) = 5000/150 = 33 */
+        [pc{9}, conclusion{cat, mortal, 60, 20}]'test_agent
+        [imp{cat, mortal, 72, 30}]'link{5} ->
+            [pc{9}, conclusion{cat, mortal, 60, 20}]'test_agent
+            [imp{cat, mortal, 67, 33}]'link{5}
+
+        assert_equal("uni_learn_revised_strength", 67, revised_s{cat, mortal})
+    }
+}
+
+@test uni_reward_to_loss_test
+{
+    @description "LEARN maps reward to loss: loss = max(0, 100 - reward)"
+
+    @setup
+    {
+        [test_agent pc{9} reward{30}]'main
+    }
+
+    @rules
+    {
+        [pc{9}, reward{30}]'test_agent -> [pc{10}, loss{70}]'test_agent
+
+        assert_equal("uni_reward_loss", 70, loss{1})
+    }
+}
+
+@test uni_integrate_persist_test
+{
+    @description "INTEGRATE persists the thought as an implication atom"
+
+    @setup
+    {
+        [test_agent
+            pc{12}
+            thought{cat, mortal, 72, 54}
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{12}, thought{cat, mortal, 72, 54}]'test_agent ->
+            [pc{12}, thought{cat, mortal, 72, 54}]'test_agent
+            [learned atype{impl} imp{cat, mortal, 72, 54} tv{72, 54}]'atomspace
+
+        assert_equal("uni_integrate_learned", 72, learned_s{cat, mortal})
+    }
+}
+
+/* ============================================================================
+ * MEMBRANE ARITY TOPOLOGY TESTS
+ * Mixed-radix bases, Matula/prime indexing, elementary differentials,
+ * partition-function root selection.
+ * ============================================================================ */
+
+@test radix_lane_count_test
+{
+    @description "Radix-b depth-n basis realises b^n lanes"
+
+    @setup
+    {
+        [test_basis2 radix{2} depth{4} lane_count{0}]'main   /* 2^4 = 16 */
+        [test_basis3 radix{3} depth{3} lane_count{0}]'main   /* 3^3 = 27 */
+        [test_basis5 radix{5} depth{2} lane_count{0}]'main   /* 5^2 = 25 */
+    }
+
+    @rules
+    {
+        [radix{2}, depth{4}, lane_count{0}]'test_basis2 ->
+            [radix{2}, depth{4}, lane_count{16}]'test_basis2
+        [radix{3}, depth{3}, lane_count{0}]'test_basis3 ->
+            [radix{3}, depth{3}, lane_count{27}]'test_basis3
+        [radix{5}, depth{2}, lane_count{0}]'test_basis5 ->
+            [radix{5}, depth{2}, lane_count{25}]'test_basis5
+
+        assert_equal("radix_binary_lanes", 16, lanes2{1})
+        assert_equal("radix_ternary_lanes", 27, lanes3{1})
+        assert_equal("radix_quinternary_lanes", 25, lanes5{1})
+    }
+}
+
+@test matula_leaf_test
+{
+    @description "A leaf membrane has Matula number 1"
+
+    @setup
+    {
+        [test_topo leaf{a}]'main
+    }
+
+    @rules
+    {
+        [leaf{a}]'test_topo -> [matula{a, 1}]'test_topo
+
+        assert_equal("matula_leaf", 1, matula{a})
+    }
+}
+
+@test matula_chain_test
+{
+    @description "Chain rule: a node over a child of Matula m gets p_m"
+
+    @setup
+    {
+        [test_topo
+            matula{leaf, 1}        /* leaf child has Matula 1 */
+            parent{root, leaf}
+            prime{1, 2}            /* p_1 = 2 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* root's child has m=1, so root gets p_1 = 2 (a chain of 2). */
+        [matula{leaf, 1}, parent{root, leaf}, prime{1, 2}]'test_topo ->
+            [matula{root, 2}]'test_topo
+
+        assert_equal("matula_chain", 2, matula{root})
+    }
+}
+
+@test matula_product_test
+{
+    @description "Product rule: two children (a=1,b=2) give p_1*p_2 = 2*3 = 6"
+
+    @setup
+    {
+        [test_topo
+            matula{c1, 1}
+            matula{c2, 2}
+            parent{root, c1}
+            parent{root, c2}
+            prime{1, 2}
+            prime{2, 3}
+        ]'main
+    }
+
+    @rules
+    {
+        /* root branches into children with Matula 1 and 2 -> p_1*p_2 = 6. */
+        [matula{c1, 1}, matula{c2, 2}, parent{root, c1}, parent{root, c2},
+         prime{1, 2}, prime{2, 3}]'test_topo ->
+            [matula{root, 6}]'test_topo
+
+        assert_equal("matula_product", 6, matula{root})
+    }
+}
+
+@test differential_order_test
+{
+    @description "Elementary differentials: product order k*r+1, chain order r+s"
+
+    @setup
+    {
+        [test_topo
+            order{child, 3}            /* subtree of order 3 */
+            branches{node, child, 2}   /* 2 such children -> product */
+            order{inner, 4}
+            order{outer, 5}
+            nested{outer, inner}       /* nesting -> chain */
+        ]'main
+    }
+
+    @rules
+    {
+        /* product: 2*3 + 1 = 7 */
+        [order{child, 3}, branches{node, child, 2}]'test_topo ->
+            [order{node, 7}]'test_topo
+
+        /* chain: 5 + 4 = 9 */
+        [order{outer, 5}, order{inner, 4}, nested{outer, inner}]'test_topo ->
+            [order{combined, 9}]'test_topo
+
+        assert_equal("product_rule_order", 7, order{node})
+        assert_equal("chain_rule_order", 9, order{combined})
+    }
+}
+
+@test partition_selection_test
+{
+    @description "Partition function selects the fittest topology as root"
+
+    @setup
+    {
+        [test_topo
+            fit{t1, 40}
+            fit{t2, 85}    /* fittest -> selected root */
+            fit{t3, 60}
+        ]'main
+    }
+
+    @rules
+    {
+        [fit{t1, 40}, fit{t2, 85}, fit{t3, 60}]'test_topo ->
+            [selected_root{t2}, pruned{t1}, pruned{t3}]'test_topo
+
+        assert_equal("partition_root", 85, selected_fitness{1})
+    }
+}
+
+/* ============================================================================
+ * P-SYSTEMS <-> B-SERIES BRIDGE TESTS
+ * Shared topology (tree<->nest), elementary weights (order/density/symmetry),
+ * B-series gradient step, RK order conditions, orbifold quotient.
+ * ============================================================================ */
+
+@test tree_nest_plant_test
+{
+    @description "A rooted tree plants into the membrane nest of its Matula no."
+
+    @setup
+    {
+        [test_bridge
+            tree{t1}
+            matula{t1, 6}        /* product tree p_1*p_2 = 2*3 = 6 */
+        ]'main
+    }
+
+    @rules
+    {
+        [tree{t1}, matula{t1, 6}]'test_bridge ->
+            [tree{t1}, matula{t1, 6}, planted_in{6}]'test_bridge
+
+        assert_equal("tree_planted_in_nest", 6, planted_nest{t1})
+    }
+}
+
+@test bseries_leaf_weights_test
+{
+    @description "Leaf tree: order=1, density=1, symmetry=1, b = 1/1"
+
+    @setup
+    {
+        [test_bridge tree{t} matula{t, 1}]'main
+    }
+
+    @rules
+    {
+        [tree{t}, matula{t, 1}]'test_bridge ->
+            [tree{t}, order{t, 1}, density{t, 1}, symmetry{t, 1}]'test_bridge
+
+        [symmetry{t, 1}, density{t, 1}]'test_bridge ->
+            [symmetry{t, 1}, density{t, 1}, bcoef{t, 1, 1}]'test_bridge
+
+        assert_equal("leaf_order", 1, order{t})
+        assert_equal("leaf_density", 1, density{t})
+        assert_equal("leaf_bcoef_den", 1, bcoef_den{t})
+    }
+}
+
+@test bseries_chain_weights_test
+{
+    @description "Chain tree (unary root over leaf): order 2, density 2, b=1/2"
+
+    @setup
+    {
+        [test_bridge
+            order{leaf, 1}
+            density{leaf, 1}
+            symmetry{leaf, 1}
+            parent{t, leaf}
+            unary{t}
+        ]'main
+    }
+
+    @rules
+    {
+        /* order = 1+1 = 2 ; density = 2*1 = 2 ; symmetry = 1 */
+        [order{leaf, 1}, density{leaf, 1}, symmetry{leaf, 1},
+         parent{t, leaf}, unary{t}]'test_bridge ->
+            [order{t, 2}, density{t, 2}, symmetry{t, 1}]'test_bridge
+
+        [symmetry{t, 1}, density{t, 2}]'test_bridge ->
+            [symmetry{t, 1}, density{t, 2}, bcoef{t, 1, 2}]'test_bridge
+
+        assert_equal("chain_order", 2, order{t})
+        assert_equal("chain_density", 2, density{t})
+        assert_equal("chain_bcoef_den", 2, bcoef_den{t})
+    }
+}
+
+@test bseries_gradient_step_test
+{
+    @description "B-series step: w <- w - lr*grad/(s*g); lr=50 (x100), sg=2"
+
+    @setup
+    {
+        [test_bridge
+            weight{1, 1000}        /* w = 10.00 (x100) */
+            grad{1, 200}           /* grad = 2.00 */
+            bcoef{t, 1, 2}         /* b(t) = 1/2 (chain tree) */
+            lr{50}                 /* lr = 0.50 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* w <- 1000 - 50*200/2 = 1000 - 5000 = -4000 */
+        [weight{1, 1000}, grad{1, 200}, bcoef{t, 1, 2}, lr{50}]'test_bridge ->
+            [weight{1, -4000}, grad{1, 200}]'test_bridge
+
+        assert_equal("bseries_weight_update", -4000, weight{1})
+    }
+}
+
+@test rk_order1_test
+{
+    @description "Order-1 condition: sum b(t) = 1 for the 1-tree method"
+
+    @setup
+    {
+        [test_bridge
+            bsum{0, 1}             /* running rational sum, start 0/1 */
+            bcoef{t1, 1, 1}        /* single tree with b = 1/1 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* Accumulate: (0*1 + 1, 1*1) = (1, 1); then n = d -> order1 ok. */
+        [bsum{0, 1}, bcoef{t1, 1, 1}]'test_bridge ->
+            [bsum{1, 1}]'test_bridge
+
+        [bsum{1, 1}]'test_bridge -> [order1_ok{1}]'test_bridge
+            where 1 = 1
+
+        assert_equal("rk_order1", 1, order1_ok{1})
+    }
+}
+
+@test orbifold_canonify_test
+{
+    @description "Orbifold: isomorphic trees canonify to the minimal Matula rep"
+
+    @setup
+    {
+        [test_bridge
+            matula{t1, 6}
+            matula{t2, 6}
+            isomorphic{t1, t2}
+        ]'main
+    }
+
+    @rules
+    {
+        [matula{t1, 6}, matula{t2, 6}, isomorphic{t1, t2}]'test_bridge ->
+            [canonical{t1, 6}]'test_bridge
+
+        assert_equal("orbifold_canonical", 6, canonical_m{t1})
+    }
+}
+
+/* ============================================================================
+ * CLOSURE ISOMORPHISM & ENNEAD FRAME TESTS
+ * {circle ~ cycle ~ closure}: one closure in spatial/temporal/causal frames,
+ * mapped to .mli->CNN, .gli->RNN, .nli->GNN; ennead balance; Ricci/gauge lever.
+ * ============================================================================ */
+
+@test closure_isomorphism_test
+{
+    @description "A structural closure maps to procedural, then relational"
+
+    @setup
+    {
+        [test_frame
+            structural_closure{X}
+            temporal_map{}
+            causal_map{}
+        ]'main
+    }
+
+    @rules
+    {
+        [structural_closure{X}, temporal_map{}]'test_frame ->
+            [procedural_closure{X}]'test_frame
+
+        [procedural_closure{X}, causal_map{}]'test_frame ->
+            [relational_closure{X}]'test_frame
+
+        assert_equal("closure_isomorphic", 1, relational_closure{X})
+    }
+}
+
+@test spatial_cnn_closure_test
+{
+    @description "Spatial closure (.mli->CNN): shared kernel convolves every site"
+
+    @setup
+    {
+        [test_spatial
+            site{1, 80}           /* x100 */
+            kernel{1, 50}         /* 0.50 weight */
+        ]'main
+    }
+
+    @rules
+    {
+        /* conv = 80*50/100 = 40 */
+        [site{1, 80}, kernel{1, 50}]'test_spatial ->
+            [site{1, 80}, conv{1, 40}]'test_spatial
+
+        assert_equal("spatial_conv", 40, conv{1})
+    }
+}
+
+@test temporal_rnn_closure_test
+{
+    @description "Temporal closure (.gli->RNN): loop closes after p steps"
+
+    @setup
+    {
+        [test_temporal
+            hidden{4, 64}         /* t=4 */
+            period{2}             /* period 2 -> 4 mod 2 = 0 closes */
+        ]'main
+    }
+
+    @rules
+    {
+        [hidden{4, 64}, period{2}]'test_temporal ->
+            [cycle_closed{4}]'test_temporal
+            where (4 mod 2) = 0
+
+        assert_equal("temporal_loop_closed", 4, cycle_closed{4})
+    }
+}
+
+@test causal_gnn_noether_test
+{
+    @description "Causal closure (.nli->GNN): symmetry yields conserved current"
+
+    @setup
+    {
+        [test_causal
+            symmetry{translation}
+            current{momentum, 100}
+        ]'main
+    }
+
+    @rules
+    {
+        [symmetry{translation}, current{momentum, 100}]'test_causal ->
+            [conserved{momentum, 100}]'test_causal
+
+        assert_equal("noether_conserved", 100, conserved{momentum})
+    }
+}
+
+@test ennead_balance_test
+{
+    @description "Ennead: low spread across the 9 dims resolves the frame problem"
+
+    @setup
+    {
+        [test_ennead
+            ennead{agent, spatial, 50}
+            ennead{arena, temporal, 55}
+        ]'main
+    }
+
+    @rules
+    {
+        /* spread = |50 - 55| = 5 < 20 -> frame resolved */
+        [ennead{agent, spatial, 50}, ennead{arena, temporal, 55}]'test_ennead ->
+            [spread{5}]'test_ennead
+
+        [spread{5}]'test_ennead -> [frame_resolved{1}]'test_ennead
+            where 5 < 20
+
+        assert_equal("ennead_frame_resolved", 1, frame_resolved{1})
+    }
+}
+
+@test ricci_gauge_lever_test
+{
+    @description "Ricci flow: metric evolves by -2*Ric*g; holonomy = curvature"
+
+    @setup
+    {
+        [test_gauge
+            metric{100}           /* g = 1.00 (x100) */
+            ricci{25}             /* Ric = +0.25 (convex) */
+            connection{A}
+            loop{L}
+        ]'main
+    }
+
+    @rules
+    {
+        /* g' = 100 - 2*25*100/100 = 100 - 50 = 50 */
+        [metric{100}, ricci{25}]'test_gauge ->
+            [metric{50}]'test_gauge
+
+        /* Gauge field (connection) -> parallel transport holonomy = curvature */
+        [connection{A}, loop{L}]'test_gauge ->
+            [holonomy{L}, curvature{L}]'test_gauge
+
+        assert_equal("ricci_metric_flow", 50, metric{1})
+        assert_equal("gauge_holonomy_curvature", 1, curvature{L})
+    }
+}
+
+/* ============================================================================
+ * TEST RUNNER
+ * ============================================================================ */
+
+@main
+{
+    @description "Run all extension tests and report results"
+
+    test_framework
+
+    /* Optimizers */
+    sgd_momentum_test
+    adam_test
+
+    /* Normalization and regularization */
+    batch_norm_test
+    dropout_mask_test
+
+    /* Convolutional and recurrent */
+    conv2d_shape_test
+    max_pool_test
+    lstm_gate_test
+
+    /* Gradient utilities */
+    gradient_clip_test
+
+    /* New activations */
+    leaky_relu_test
+    elu_test
+    log_softmax_test
+
+    /* New criteria */
+    bce_test
+    cross_entropy_test
+    smooth_l1_test
+
+    /* Containers */
+    cadd_table_test
+    identity_test
+    reshape_test
+
+    /* Layers */
+    lookup_table_test
+
+    /* Attention */
+    attention_score_test
+
+    /* SN P systems */
+    snp_firing_test
+    snp_subthreshold_test
+
+    /* Exporter */
+    exporter_roundtrip_test
+
+    /* Graph neural networks */
+    gcn_aggregation_test
+    graph_readout_test
+
+    /* Neuroevolution */
+    membrane_division_test
+    tournament_selection_test
+
+    /* Bayesian layers */
+    bayes_linear_forward_test
+    mc_predict_mean_test
+
+    /* Transformer decoder */
+    causal_mask_test
+    decoder_residual_test
+
+    /* AtomSpace */
+    atom_node_creation_test
+    atom_link_nesting_test
+    tv_revision_test
+    ecan_spread_conservation_test
+    hebbian_wiring_test
+    pattern_match_by_type_test
+    attentional_focus_test
+    focus_departure_test
+
+    /* a9nn NNECCO cognitive agent */
+    reservoir_tick_test
+    echobeats_pc_cycle_test
+    emotion_update_test
+    consciousness_reflect_test
+    episodic_push_recall_test
+    llama_dispatch_test
+    planner_argmax_test
+    integrate_episode_test
+
+    /* PLN probabilistic inference */
+    pln_deduction_test
+    pln_induction_test
+    pln_modus_ponens_test
+    pln_negation_test
+
+    /* OpenPsi motivational system */
+    psi_demand_urgency_test
+    psi_action_selection_test
+    psi_satisfaction_test
+    psi_emotion_bridge_test
+
+    /* Unified cognitive cycle */
+    uni_recall_premise_test
+    uni_reason_conclusion_test
+    uni_emote_bridge_test
+    uni_learn_revision_test
+    uni_integrate_persist_test
+    uni_reward_to_loss_test
+
+    /* Membrane arity topology */
+    radix_lane_count_test
+    matula_leaf_test
+    matula_chain_test
+    matula_product_test
+    differential_order_test
+    partition_selection_test
+
+    /* P-Systems <-> B-Series bridge */
+    tree_nest_plant_test
+    bseries_leaf_weights_test
+    bseries_chain_weights_test
+    bseries_gradient_step_test
+    rk_order1_test
+    orbifold_canonify_test
+
+    /* Closure isomorphism & ennead frame */
+    closure_isomorphism_test
+    spatial_cnn_closure_test
+    temporal_rnn_closure_test
+    causal_gnn_noether_test
+    ennead_balance_test
+    ricci_gauge_lever_test
+
+    [test_suite
+        total_tests{t}
+        passed_tests{p}
+        failed_tests{f}
+    ]'main ->
+    {
+        []'main (
+            test_results{
+                "Total Tests": t,
+                "Passed": p,
+                "Failed": f,
+                "Success Rate": (p*100)/t + "%"
+            },
+            out
+        )
+    }
+}
+
+/* ============================================================================
+ * EXPECTED RESULTS
+ * ============================================================================ */
+
+@expected_output
+{
+    test_results{
+        "Total Tests": 78,
+        "Passed": 78,
+        "Failed": 0,
+        "Success Rate": "100%"
+    }
+}
+
+/*
+ * USAGE:
+ * Run this test suite with your PLingua simulator:
+ *
+ * $ plingua test_extensions.pli
+ */

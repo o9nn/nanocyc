@@ -1,0 +1,323 @@
+/*
+ * Container Modules in PLingua
+ * Complements the sequential container in nn.pli with the remaining
+ * container types from the Lua/Torch nn reference: Concat, Parallel,
+ * ConcatTable, table arithmetic modules, Identity, and Reshape.
+ *
+ * Containers are membranes holding submodule membranes; routing rules
+ * distribute inputs to branches and merge branch outputs.
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * CONCAT CONTAINER
+ * Applies each branch to the SAME input and concatenates outputs along
+ * the feature dimension. Branch b with output size s_b contributes
+ * outputs at indices offset_b + 1 .. offset_b + s_b.
+ * ============================================================================ */
+
+@module concat_container(num_branches)
+{
+    @initial
+    {
+        [concat
+            for (b = 1; b <= num_branches; b++)
+            {
+                [branch{b}]'concat
+                branch_offset{b, 0}   /* set by configure rules */
+            }
+        ]'main
+    }
+
+    /* Compute cumulative offsets from declared branch sizes */
+    @rules configure
+    {
+        [branch_size{b, s}, branch_offset{b+1, 0}, branch_offset{b, o}]'concat ->
+            [branch_size{b, s}, branch_offset{b+1, o+s}, branch_offset{b, o}]'concat
+    }
+
+    @rules forward
+    {
+        /* Broadcast input to every branch */
+        [input{j, v}]'concat ->
+        {
+            for (b = 1; b <= num_branches; b++)
+            {
+                [input{j, v}]'branch{b}
+            }
+        }
+
+        /* Collect branch outputs with index offsets */
+        [output{j, v}]'branch{b} ->
+            []'branch{b} (branch_out{b, j, v}, out)
+
+        [branch_out{b, j, v}, branch_offset{b, o}]'concat ->
+            [output{o+j, v}, branch_offset{b, o}]'concat
+    }
+
+    @rules backward
+    {
+        /* Route gradient slices back to owning branches */
+        [grad{k, g}, branch_offset{b, o}, branch_size{b, s}]'concat ->
+            [grad{k-o, g}]'branch{b} where k > o, k <= o+s
+
+        /* Sum branch input-gradients (all branches saw the same input) */
+        [grad_input{j, g}]'branch{b} ->
+            []'branch{b} (grad_sum{j, g}, out)
+
+        [grad_sum{j, g1}, grad_sum{j, g2}]'concat ->
+            [grad_sum{j, g1+g2}]'concat
+    }
+}
+
+/* ============================================================================
+ * PARALLEL CONTAINER
+ * Splits the input by slot: slot b of the input table goes to branch b;
+ * branch outputs are gathered back into an output table.
+ * ============================================================================ */
+
+@module parallel_container(num_branches)
+{
+    @initial
+    {
+        [parallel
+            for (b = 1; b <= num_branches; b++)
+            {
+                [branch{b}]'parallel
+            }
+        ]'main
+    }
+
+    @rules forward
+    {
+        /* Route slot b of the input table to branch b */
+        [table_input{b, j, v}]'parallel ->
+            [input{j, v}]'branch{b}
+
+        /* Gather branch outputs into output table */
+        [output{j, v}]'branch{b} ->
+            []'branch{b} (table_output{b, j, v}, out)
+    }
+
+    @rules backward
+    {
+        /* Route gradient slot b back to branch b */
+        [table_grad{b, j, g}]'parallel ->
+            [grad{j, g}]'branch{b}
+
+        /* Gather branch input-gradients */
+        [grad_input{j, g}]'branch{b} ->
+            []'branch{b} (table_grad_input{b, j, g}, out)
+    }
+}
+
+/* ============================================================================
+ * CONCAT TABLE
+ * Applies each branch to the same input, producing a TABLE of outputs
+ * (one slot per branch) rather than concatenating them.
+ * ============================================================================ */
+
+@module concat_table(num_branches)
+{
+    @initial
+    {
+        [ctable
+            for (b = 1; b <= num_branches; b++)
+            {
+                [branch{b}]'ctable
+            }
+        ]'main
+    }
+
+    @rules forward
+    {
+        /* Broadcast input to all branches */
+        [input{j, v}]'ctable ->
+        {
+            for (b = 1; b <= num_branches; b++)
+            {
+                [input{j, v}]'branch{b}
+            }
+        }
+
+        /* Collect each branch output into its own table slot */
+        [output{j, v}]'branch{b} ->
+            []'branch{b} (table_output{b, j, v}, out)
+    }
+
+    @rules backward
+    {
+        /* Route table gradient slot b into branch b */
+        [table_grad{b, j, g}]'ctable ->
+            [grad{j, g}]'branch{b}
+
+        /* Sum input-gradients across branches (shared input) */
+        [grad_input{j, g1}, grad_input{j, g2}]'ctable ->
+            [grad_input{j, g1+g2}]'ctable
+    }
+}
+
+/* ============================================================================
+ * TABLE ARITHMETIC MODULES
+ * Element-wise operations across the slots of an input table.
+ * ============================================================================ */
+
+/* CAddTable: output_j = sum over slots b of table_input{b, j, v} */
+@module cadd_table
+{
+    @rules forward
+    {
+        [table_input{b1, j, v1}, table_input{b2, j, v2}]'add ->
+            [table_input{b1, j, v1+v2}]'add where b1 < b2
+
+        [table_input{b, j, v}]'add ->
+            [output{j, v}]'add where single_slot_remaining
+    }
+
+    @rules backward
+    {
+        /* Gradient copies to every slot */
+        [grad{j, g}]'add ->
+        {
+            [table_grad{b, j, g}]'add
+        }
+    }
+}
+
+/* CSubTable: output_j = slot1_j - slot2_j (two-slot tables) */
+@module csub_table
+{
+    @rules forward
+    {
+        [table_input{1, j, v1}, table_input{2, j, v2}]'sub ->
+            [output{j, v1-v2}]'sub
+    }
+
+    @rules backward
+    {
+        [grad{j, g}]'sub ->
+            [table_grad{1, j, g}, table_grad{2, j, -g}]'sub
+    }
+}
+
+/* CMulTable: output_j = product over slots (values scaled by 100) */
+@module cmul_table
+{
+    @rules forward
+    {
+        [table_input{b1, j, v1}, table_input{b2, j, v2}]'mul ->
+            [table_input{b1, j, round(v1*v2/100)}]'mul where b1 < b2
+
+        [table_input{b, j, v}]'mul ->
+            [output{j, v}]'mul where single_slot_remaining
+    }
+
+    @rules backward
+    {
+        /* Two-slot case: d/dv1 = v2*g, d/dv2 = v1*g */
+        [grad{j, g}, saved_input{1, j, v1}, saved_input{2, j, v2}]'mul ->
+            [table_grad{1, j, round(v2*g/100)},
+             table_grad{2, j, round(v1*g/100)}]'mul
+    }
+}
+
+/* CMaxTable / CMinTable: element-wise max/min over slots */
+@module cmax_table
+{
+    @rules forward
+    {
+        [table_input{b1, j, v1}, table_input{b2, j, v2}]'maxt ->
+            [table_input{b1, j, max(v1, v2)}]'maxt where b1 < b2
+
+        [table_input{b, j, v}]'maxt ->
+            [output{j, v}]'maxt where single_slot_remaining
+    }
+}
+
+@module cmin_table
+{
+    @rules forward
+    {
+        [table_input{b1, j, v1}, table_input{b2, j, v2}]'mint ->
+            [table_input{b1, j, min(v1, v2)}]'mint where b1 < b2
+
+        [table_input{b, j, v}]'mint ->
+            [output{j, v}]'mint where single_slot_remaining
+    }
+}
+
+/* ============================================================================
+ * IDENTITY
+ * Passes input through unchanged; useful as a branch in Concat/Parallel.
+ * ============================================================================ */
+
+@module identity
+{
+    @rules forward
+    {
+        [input{j, v}]'id -> [output{j, v}]'id
+    }
+
+    @rules backward
+    {
+        [grad{j, g}]'id -> [grad_input{j, g}]'id
+    }
+}
+
+/* ============================================================================
+ * RESHAPE / VIEW
+ * Re-indexes objects from a 2D layout (r, c) to flat index and back.
+ * P-Systems analog of tensor reshape via object re-indexing.
+ * ============================================================================ */
+
+@module reshape(rows, cols)
+{
+    @rules flatten
+    {
+        /* (r, c) -> flat index (r-1)*cols + c */
+        [input{r, c, v}]'shape ->
+            [output{(r-1)*cols + c, v}]'shape
+    }
+
+    @rules unflatten
+    {
+        /* flat index k -> (r, c) with r = ceil(k/cols) */
+        [input{k, v}]'shape ->
+            [output{((k-1) / cols) + 1, ((k-1) % cols) + 1, v}]'shape
+    }
+
+    @rules backward
+    {
+        /* Gradient re-indexes in the inverse direction */
+        [grad{k, g}]'shape ->
+            [grad_input{((k-1) / cols) + 1, ((k-1) % cols) + 1, g}]'shape
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Container Modules in PLingua"
+    version: "1.0.0"
+    description: "Concat, Parallel, table-op and reshape containers"
+    depends: ["nn.pli"]
+
+    modules: [
+        "concat_container(num_branches)",
+        "parallel_container(num_branches)",
+        "concat_table(num_branches)",
+        "cadd_table",
+        "csub_table",
+        "cmul_table",
+        "cmax_table",
+        "cmin_table",
+        "identity",
+        "reshape(rows, cols)"
+    ]
+}

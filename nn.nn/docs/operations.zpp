@@ -1,0 +1,779 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Z++ Formal Specification: Core Operations                                  │
+│                                                                             │
+│ This specification formalizes the operations of the neural network system, │
+│ including forward propagation, backward propagation, training, and         │
+│ parameter updates. All operations maintain the system state invariants     │
+│ defined in system_state.zpp.                                               │
+│                                                                             │
+│ Depends on: data_model.zpp, system_state.zpp                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 1: FORWARD PROPAGATION OPERATIONS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ForwardInput ──────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ input? : Tensor                                                             │
+│                                                                             │
+│ -- Input shape must match expected input shape of root module              │
+│ let rootMod == topology.registry.modules(topology.rootModule) in           │
+│     -- Shape compatibility will be enforced by specific module types       │
+│     true                                                                    │
+│                                                                             │
+│ -- Store input in computation state                                        │
+│ computation'.lastInput = input?                                             │
+│                                                                             │
+│ -- Clear previous forward cache                                            │
+│ computation'.forwardCache.moduleOutputs = ∅                                 │
+│ computation'.forwardCache.moduleInputs = ∅                                  │
+│ computation'.forwardCache.activations = ∅                                   │
+│                                                                             │
+│ -- Invalidate gradients (they're from previous forward pass)              │
+│ computation'.gradientValid = false                                          │
+│ computation'.backwardCache = computation.backwardCache                      │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│                                                                             │
+│ -- Topology and training state unchanged                                   │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Prepares the system for a forward pass by storing input and clearing caches.
+
+┌─ ModuleForward ─────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ moduleId? : ModuleIdentifier                                                │
+│ input? : Tensor                                                             │
+│ output! : Tensor                                                            │
+│                                                                             │
+│ moduleId? ∈ dom topology.registry.modules                                   │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     -- Output computation depends on module type (see specific schemas)    │
+│     -- Store input and output in cache                                     │
+│     computation'.forwardCache.moduleInputs =                                │
+│         computation.forwardCache.moduleInputs ∪ {moduleId? ↦ input?}       │
+│     ∧ computation'.forwardCache.moduleOutputs =                             │
+│         computation.forwardCache.moduleOutputs ∪ {moduleId? ↦ output!}     │
+│     ∧ output! = m.output                                                    │
+│                                                                             │
+│ -- Other caches unchanged                                                  │
+│ computation'.forwardCache.activations = computation.forwardCache.activations│
+│ computation'.backwardCache = computation.backwardCache                      │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│ computation'.gradientValid = computation.gradientValid                      │
+│                                                                             │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Performs forward pass through a single module, caching input and output.
+
+┌─ LinearForward ─────────────────────────────────────────────────────────────┐
+│ ModuleForward                                                               │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     m.moduleType = SimpleLayer                                              │
+│     ∧ m.inputSize > 0 ∧ m.outputSize > 0                                   │
+│     ∧ input?.shape = [m.inputSize] ∨ input?.shape = [*, m.inputSize]      │
+│     ∧ output!.shape = [m.outputSize] ∨ output!.shape = [*, m.outputSize]  │
+│     ∧ -- y = Wx + b                                                        │
+│       ∀ i : 1..m.outputSize •                                              │
+│           output!.data(i) = m.bias.data(i) +                               │
+│               Σ [j : 1..m.inputSize | m.weight.data(i-1, j-1) × input?.data(j)] │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Forward pass for Linear layer: y = Wx + b
+
+┌─ SigmoidForward ────────────────────────────────────────────────────────────┐
+│ ModuleForward                                                               │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     m.moduleType = TransferFunction                                         │
+│     ∧ TensorCompatible(input?, output!)                                    │
+│     ∧ ∀ i : dom input?.data •                                              │
+│           output!.data(i) = 1 / (1 + e^(-input?.data(i)))                 │
+│     ∧ ∀ i : dom output!.data • 0 < output!.data(i) < 1                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Forward pass for Sigmoid: σ(x) = 1/(1 + e^(-x))
+
+┌─ ReLUForward ───────────────────────────────────────────────────────────────┐
+│ ModuleForward                                                               │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     m.moduleType = TransferFunction                                         │
+│     ∧ TensorCompatible(input?, output!)                                    │
+│     ∧ ∀ i : dom input?.data •                                              │
+│           output!.data(i) = max(0, input?.data(i))                         │
+│     ∧ ∀ i : dom output!.data • output!.data(i) ≥ 0                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Forward pass for ReLU: max(0, x)
+
+┌─ SequentialForward ─────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ containerId? : ModuleIdentifier                                             │
+│ input? : Tensor                                                             │
+│ output! : Tensor                                                            │
+│                                                                             │
+│ containerId? ∈ dom topology.registry.modules                                │
+│ let container == topology.registry.modules(containerId?) in                │
+│     container.moduleType = Container                                        │
+│     ∧ #container.subModules ≥ 1                                            │
+│     -- Forward through each sub-module in sequence                         │
+│     ∧ ∃ intermediates : seq Tensor |                                        │
+│           #intermediates = #container.subModules + 1                        │
+│           ∧ intermediates(1) = input?                                       │
+│           ∧ output! = intermediates(#intermediates)                         │
+│           ∧ ∀ i : 1..#container.subModules •                               │
+│               let mid == container.subModules(i).moduleId in                │
+│               computation'.forwardCache.moduleInputs(mid) = intermediates(i)│
+│               ∧ computation'.forwardCache.moduleOutputs(mid) = intermediates(i+1) │
+│                                                                             │
+│ computation'.forwardCache.activations = computation.forwardCache.activations│
+│ computation'.backwardCache = computation.backwardCache                      │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│ computation'.gradientValid = computation.gradientValid                      │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Forward pass through Sequential container: chains outputs to inputs.
+
+┌─ ConvNdForward[Rank : ℕ₁] ──────────────────────────────────────────────────┐
+│ ModuleForward                                                               │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     m.moduleType = ConvolutionalLayer                                       │
+│     -- input?: inChannels tensors of rank Rank with common shape inShape   │
+│     ∧ #input?.shape = Rank + 1 ∧ input?.shape(1) = m.inChannels           │
+│     ∧ let inShape == tail input?.shape in                                   │
+│       let outShape == (λ i : 1..Rank •                                      │
+│               ⌊(inShape(i) + 2·m.padding(i)                                │
+│                 − m.dilation(i)·(m.kernelShape(i) − 1) − 1)               │
+│                / m.stride(i)⌋ + 1) in                                       │
+│         -- Lowering: unfold (im2col) → matrix multiply → fold              │
+│         ∃ columns : Matrix |                                                │
+│             columns.rows = m.inChannels × Π m.kernelShape                  │
+│             ∧ columns.cols = Π outShape                                     │
+│             -- column c gathers the (zero-padded) input window at output   │
+│             -- coordinate c: in(i) = out(i)·s(i) − p(i) + k(i)·d(i)        │
+│             ∧ output!.shape = ⟨m.outChannels⟩ ⌢ outShape                   │
+│             ∧ flatten(output!) = m.weight ×ₘ columns +ᵦ m.bias             │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Rank-parametric convolution forward: one schema for all ranks, replacing
+  per-rank Temporal/Spatial/Volumetric forward schemas. The same GEMM kernel
+  serves 1D, 2D, 3D, 4D, 5D and beyond; only the unfold is rank-recursive.
+  Reference implementation: lang/pl/nn_nd.pl (convnd_forward/3).
+
+┌─ PoolNdForward[Rank : ℕ₁] ──────────────────────────────────────────────────┐
+│ ModuleForward                                                               │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     -- Same output shape law as ConvNdForward with dilation = 1            │
+│     -- Each output element reduces its input window with m.mode:           │
+│     m.mode = max ⇒ out(c) = max{window(c)}                                 │
+│     ∧ m.mode = avg ⇒ out(c) = (Σ window(c)) / #window(c)                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Rank-parametric pooling forward: reduction over an arbitrary window of
+  dimensions. Reference implementation: lang/pl/nn_nd.pl (poolnd_forward/3).
+
+┌─ FractalForward ────────────────────────────────────────────────────────────┐
+│ ModuleForward                                                               │
+│ mask? : seq {0, 1}                                                          │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?) in                           │
+│     -- concat_avg join: average outputs of active branches                 │
+│     #mask? = #m.branches ∧ (∃ i • mask?(i) = 1)                            │
+│     ∧ let active == {i : 1..#m.branches | mask?(i) = 1} in                 │
+│         output! = (Σ i : active • branchOutput(i)) / #active               │
+│     -- Deterministic evaluation sets mask? = ⟨1, 1, ..., 1⟩;               │
+│     -- drop-path training samples mask? per step (≥ 1 branch active)       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Forward pass through a fractal concat_avg join with optional drop-path
+  branch masking. Reference: lang/pl/nn_nd.pl (concat_avg_forward/3,
+  drop_path_forward/4).
+
+┌─ CompleteForward ───────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ input? : Tensor                                                             │
+│ output! : Tensor                                                            │
+│                                                                             │
+│ -- First, prepare with ForwardInput                                        │
+│ ∃ SystemState₀ • ForwardInput[SystemState₀/SystemState']                   │
+│                                                                             │
+│ -- Then, forward through root module                                       │
+│ let rootId == topology.rootModule in                                        │
+│     ModuleForward[rootId/moduleId?, input?/input?, output!/output!]        │
+│     ∨ SequentialForward[rootId/containerId?, input?/input?, output!/output!] │
+│                                                                             │
+│ -- Store final output                                                      │
+│ computation'.lastOutput = output!                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Complete forward pass through the entire network from input to output.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 2: LOSS COMPUTATION
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ComputeLoss ───────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ prediction? : Tensor                                                        │
+│ target? : Tensor                                                            │
+│ criterion? : Criterion                                                      │
+│ loss! : ℝ                                                                   │
+│                                                                             │
+│ -- Loss computation depends on criterion type                              │
+│ loss! = criterion?.lossValue                                                │
+│ loss! ≥ 0                                                                   │
+│                                                                             │
+│ -- Store loss in computation state                                         │
+│ computation'.lastLoss = loss!                                               │
+│                                                                             │
+│ -- Everything else unchanged                                               │
+│ computation'.forwardCache = computation.forwardCache                        │
+│ computation'.backwardCache = computation.backwardCache                      │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.gradientValid = computation.gradientValid                      │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Computes loss using specified criterion.
+
+┌─ MSELoss ───────────────────────────────────────────────────────────────────┐
+│ ComputeLoss                                                                 │
+│                                                                             │
+│ TensorCompatible(prediction?, target?)                                      │
+│ criterion?.moduleType = CriterionType                                       │
+│ loss! = (1 / #prediction?.data) ×                                          │
+│         Σ [i : dom prediction?.data |                                       │
+│            (prediction?.data(i) - target?.data(i))²]                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Mean Squared Error loss computation.
+
+┌─ ClassNLLLoss ──────────────────────────────────────────────────────────────┐
+│ ComputeLoss                                                                 │
+│ targetClass? : ℤ                                                            │
+│                                                                             │
+│ prediction?.ndim = 1                                                        │
+│ 0 ≤ targetClass? < #prediction?.data                                       │
+│ criterion?.moduleType = CriterionType                                       │
+│ -- prediction should be log probabilities                                  │
+│ ∀ i : dom prediction?.data • prediction?.data(i) ≤ 0                      │
+│ loss! = -prediction?.data(targetClass?)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Negative Log Likelihood loss for classification.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 3: BACKWARD PROPAGATION OPERATIONS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ BackwardOutput ────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ criterion? : Criterion                                                      │
+│ gradOutput! : Tensor                                                        │
+│                                                                             │
+│ -- Gradient from criterion (loss gradient w.r.t. prediction)               │
+│ gradOutput! = criterion?.gradInput                                          │
+│                                                                             │
+│ -- Clear backward cache                                                    │
+│ computation'.backwardCache.moduleGradInputs = ∅                             │
+│ computation'.backwardCache.moduleGradOutputs = ∅                            │
+│ computation'.backwardCache.parameterGradients = ∅                           │
+│                                                                             │
+│ -- Forward cache unchanged                                                 │
+│ computation'.forwardCache = computation.forwardCache                        │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│ computation'.gradientValid = false                                          │
+│                                                                             │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Initiates backward pass by computing gradient from loss criterion.
+
+┌─ ModuleBackward ────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ moduleId? : ModuleIdentifier                                                │
+│ gradOutput? : Tensor                                                        │
+│ gradInput! : Tensor                                                         │
+│                                                                             │
+│ moduleId? ∈ dom topology.registry.modules                                   │
+│ moduleId? ∈ dom computation.forwardCache.moduleInputs                       │
+│ let m == topology.registry.modules(moduleId?),                             │
+│     input == computation.forwardCache.moduleInputs(moduleId?) in           │
+│     -- Gradient computation depends on module type                         │
+│     -- Store gradients in cache                                            │
+│     computation'.backwardCache.moduleGradOutputs =                          │
+│         computation.backwardCache.moduleGradOutputs ∪                       │
+│         {moduleId? ↦ gradOutput?}                                           │
+│     ∧ computation'.backwardCache.moduleGradInputs =                         │
+│         computation.backwardCache.moduleGradInputs ∪                        │
+│         {moduleId? ↦ gradInput!}                                            │
+│     ∧ gradInput! = m.gradInput                                              │
+│     -- If module has parameters, compute parameter gradients               │
+│     ∧ (dom m.parameters ≠ ∅ ⇒                                              │
+│         ∀ pname : dom m.parameters •                                        │
+│             (moduleId?, pname) ∈ dom computation'.backwardCache.parameterGradients) │
+│                                                                             │
+│ computation'.forwardCache = computation.forwardCache                        │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│ computation'.gradientValid = computation.gradientValid                      │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Performs backward pass through a single module.
+
+┌─ LinearBackward ────────────────────────────────────────────────────────────┐
+│ ModuleBackward                                                              │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?),                             │
+│     input == computation.forwardCache.moduleInputs(moduleId?) in           │
+│     m.moduleType = SimpleLayer                                              │
+│     -- Gradient w.r.t. input: gradInput = W^T × gradOutput                │
+│     ∧ ∀ j : 1..m.inputSize •                                               │
+│           gradInput!.data(j) = Σ [i : 1..m.outputSize |                    │
+│               m.weight.data(i-1, j-1) × gradOutput?.data(i)]               │
+│     -- Gradient w.r.t. weight: gradWeight = gradOutput × input^T          │
+│     ∧ ∀ i : 1..m.outputSize, j : 1..m.inputSize •                         │
+│           let gradWeight == computation'.backwardCache.parameterGradients   │
+│               (moduleId?, "weight") in                                      │
+│           gradWeight.data(i-1, j-1) = gradOutput?.data(i) × input.data(j)  │
+│     -- Gradient w.r.t. bias: gradBias = gradOutput                        │
+│     ∧ ∀ i : 1..m.outputSize •                                             │
+│           let gradBias == computation'.backwardCache.parameterGradients     │
+│               (moduleId?, "bias") in                                        │
+│           gradBias.data(i) = gradOutput?.data(i)                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Backward pass for Linear layer: computes gradients w.r.t. inputs and params.
+
+┌─ SigmoidBackward ───────────────────────────────────────────────────────────┐
+│ ModuleBackward                                                              │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?),                             │
+│     output == computation.forwardCache.moduleOutputs(moduleId?) in         │
+│     m.moduleType = TransferFunction                                         │
+│     ∧ TensorCompatible(gradOutput?, gradInput!)                            │
+│     -- Gradient: dσ/dx = σ(x) × (1 - σ(x))                                │
+│     ∧ ∀ i : dom gradOutput?.data •                                         │
+│           gradInput!.data(i) = gradOutput?.data(i) ×                        │
+│               output.data(i) × (1 - output.data(i))                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Backward pass for Sigmoid: gradient is σ(x)(1-σ(x)) × gradOutput
+
+┌─ ReLUBackward ──────────────────────────────────────────────────────────────┐
+│ ModuleBackward                                                              │
+│                                                                             │
+│ let m == topology.registry.modules(moduleId?),                             │
+│     input == computation.forwardCache.moduleInputs(moduleId?) in           │
+│     m.moduleType = TransferFunction                                         │
+│     ∧ TensorCompatible(gradOutput?, gradInput!)                            │
+│     -- Gradient: 1 if x > 0, else 0                                       │
+│     ∧ ∀ i : dom gradOutput?.data •                                         │
+│           gradInput!.data(i) = if input.data(i) > 0                         │
+│                                then gradOutput?.data(i)                     │
+│                                else 0                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Backward pass for ReLU: gradient passes through where input > 0
+
+┌─ SequentialBackward ────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ containerId? : ModuleIdentifier                                             │
+│ gradOutput? : Tensor                                                        │
+│ gradInput! : Tensor                                                         │
+│                                                                             │
+│ containerId? ∈ dom topology.registry.modules                                │
+│ let container == topology.registry.modules(containerId?) in                │
+│     container.moduleType = Container                                        │
+│     ∧ #container.subModules ≥ 1                                            │
+│     -- Backward through each sub-module in reverse order                   │
+│     ∧ ∃ gradIntermediates : seq Tensor |                                    │
+│           #gradIntermediates = #container.subModules + 1                    │
+│           ∧ gradIntermediates(#gradIntermediates) = gradOutput?            │
+│           ∧ gradInput! = gradIntermediates(1)                               │
+│           ∧ ∀ i : #container.subModules..1 •                               │
+│               let mid == container.subModules(i).moduleId in                │
+│               computation'.backwardCache.moduleGradOutputs(mid) =           │
+│                   gradIntermediates(i+1)                                    │
+│               ∧ computation'.backwardCache.moduleGradInputs(mid) =          │
+│                   gradIntermediates(i)                                      │
+│                                                                             │
+│ computation'.forwardCache = computation.forwardCache                        │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│ computation'.gradientValid = computation.gradientValid                      │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Backward pass through Sequential: propagates gradients in reverse order.
+
+┌─ CompleteBackward ──────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ criterion? : Criterion                                                      │
+│                                                                             │
+│ -- Must have valid forward pass first                                      │
+│ computation.lastOutput.shape ≠ []                                           │
+│                                                                             │
+│ -- First, get gradient from criterion                                      │
+│ ∃ SystemState₀, gradOut : Tensor •                                          │
+│     BackwardOutput[SystemState₀/SystemState', gradOut/gradOutput!]          │
+│                                                                             │
+│ -- Then, backward through root module                                      │
+│ let rootId == topology.rootModule in                                        │
+│     ∃ gradIn : Tensor •                                                     │
+│         ModuleBackward[rootId/moduleId?, gradOut/gradOutput?, gradIn/gradInput!] │
+│         ∨ SequentialBackward[rootId/containerId?, gradOut/gradOutput?, gradIn/gradInput!] │
+│                                                                             │
+│ -- Mark gradients as valid                                                 │
+│ computation'.gradientValid = true                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Complete backward pass through entire network, computing all gradients.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 4: PARAMETER UPDATE OPERATIONS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ZeroGradients ─────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│                                                                             │
+│ -- Zero all parameter gradients in all modules                             │
+│ ∀ mid : dom topology.registry.modules,                                      │
+│   pname : dom topology.registry.modules(mid).parameters •                   │
+│     let p == topology'.registry.modules(mid).parameters(pname) in          │
+│         ∀ i : dom p.gradient.data • p.gradient.data(i) = 0                │
+│                                                                             │
+│ -- Clear backward cache                                                    │
+│ computation'.backwardCache.moduleGradInputs = ∅                             │
+│ computation'.backwardCache.moduleGradOutputs = ∅                            │
+│ computation'.backwardCache.parameterGradients = ∅                           │
+│ computation'.gradientValid = false                                          │
+│                                                                             │
+│ computation'.forwardCache = computation.forwardCache                        │
+│ computation'.lastInput = computation.lastInput                              │
+│ computation'.lastOutput = computation.lastOutput                            │
+│ computation'.lastLoss = computation.lastLoss                                │
+│ topology'.rootModule = topology.rootModule                                  │
+│ topology'.parentChild = topology.parentChild                                │
+│ topology'.depth = topology.depth                                            │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Zeros all accumulated gradients, preparing for next backward pass.
+
+┌─ SGDUpdate ─────────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│                                                                             │
+│ -- Must have valid gradients                                               │
+│ computation.gradientValid = true                                            │
+│ mode = Training                                                             │
+│ training.optimizer.optimizerType = SGD                                      │
+│                                                                             │
+│ -- Update all parameters: θ' = θ - lr × ∇θ                                │
+│ ∀ mid : dom topology.registry.modules,                                      │
+│   pname : dom topology.registry.modules(mid).parameters •                   │
+│     let p == topology.registry.modules(mid).parameters(pname),             │
+│         p' == topology'.registry.modules(mid).parameters(pname),           │
+│         lr == training.optimizer.learningRate in                            │
+│     ∀ i : dom p.value.data •                                               │
+│         p'.value.data(i) = p.value.data(i) - lr × p.gradient.data(i)       │
+│                                                                             │
+│ -- Increment iteration count                                               │
+│ training'.optimizer.iterations = training.optimizer.iterations + 1          │
+│                                                                             │
+│ training'.dataset = training.dataset                                        │
+│ training'.batchSize = training.batchSize                                    │
+│ training'.currentEpoch = training.currentEpoch                              │
+│ training'.maxEpochs = training.maxEpochs                                    │
+│ training'.currentBatch = training.currentBatch                              │
+│ training'.totalBatches = training.totalBatches                              │
+│ training'.optimizer.optimizerType = training.optimizer.optimizerType        │
+│ training'.optimizer.learningRate = training.optimizer.learningRate          │
+│ training'.optimizer.momentum = training.optimizer.momentum                  │
+│ training'.optimizer.velocities = training.optimizer.velocities              │
+│ training'.trainingLosses = training.trainingLosses                          │
+│ training'.validationLosses = training.validationLosses                      │
+│ topology' = topology                                                        │
+│ computation' = computation                                                  │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Stochastic Gradient Descent parameter update: θ = θ - lr × ∇θ
+
+┌─ MomentumUpdate ────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│                                                                             │
+│ computation.gradientValid = true                                            │
+│ mode = Training                                                             │
+│ training.optimizer.optimizerType = SGD                                      │
+│ training.optimizer.momentum > 0                                             │
+│                                                                             │
+│ -- Update with momentum: v' = μv - lr×∇θ, θ' = θ + v'                     │
+│ ∀ mid : dom topology.registry.modules,                                      │
+│   pname : dom topology.registry.modules(mid).parameters •                   │
+│     let p == topology.registry.modules(mid).parameters(pname),             │
+│         p' == topology'.registry.modules(mid).parameters(pname),           │
+│         lr == training.optimizer.learningRate,                              │
+│         μ == training.optimizer.momentum,                                   │
+│         v == training.optimizer.velocities(pname),                          │
+│         v' == training'.optimizer.velocities(pname) in                      │
+│     ∀ i : dom p.value.data •                                               │
+│         v'.data(i) = μ × v.data(i) - lr × p.gradient.data(i)              │
+│         ∧ p'.value.data(i) = p.value.data(i) + v'.data(i)                 │
+│                                                                             │
+│ training'.optimizer.iterations = training.optimizer.iterations + 1          │
+│ training'.dataset = training.dataset                                        │
+│ training'.batchSize = training.batchSize                                    │
+│ training'.currentEpoch = training.currentEpoch                              │
+│ training'.maxEpochs = training.maxEpochs                                    │
+│ training'.currentBatch = training.currentBatch                              │
+│ training'.totalBatches = training.totalBatches                              │
+│ training'.optimizer.optimizerType = training.optimizer.optimizerType        │
+│ training'.optimizer.learningRate = training.optimizer.learningRate          │
+│ training'.optimizer.momentum = training.optimizer.momentum                  │
+│ topology' = topology                                                        │
+│ computation' = computation                                                  │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  SGD with momentum: v = μv - lr×∇θ, θ = θ + v
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 5: TRAINING LOOP OPERATIONS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ GetBatch ──────────────────────────────────────────────────────────────────┐
+│ ΞSystemState                                                                │
+│ batchInputs! : seq Tensor                                                   │
+│ batchTargets! : seq Tensor                                                  │
+│                                                                             │
+│ let startIdx == training.currentBatch × training.batchSize,                │
+│     endIdx == min(startIdx + training.batchSize, training.dataset.size) in │
+│     #batchInputs! = endIdx - startIdx                                       │
+│     ∧ #batchTargets! = endIdx - startIdx                                   │
+│     ∧ ∀ i : 1..#batchInputs! •                                             │
+│         batchInputs!(i) = training.dataset.samples(startIdx + i).input      │
+│         ∧ batchTargets!(i) = training.dataset.samples(startIdx + i).target │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Retrieves current batch of training samples.
+
+┌─ TrainStep ─────────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ criterion? : Criterion                                                      │
+│ batchLoss! : ℝ                                                              │
+│                                                                             │
+│ mode = Training                                                             │
+│                                                                             │
+│ -- Get current batch                                                       │
+│ ∃ batchInputs, batchTargets : seq Tensor •                                  │
+│     GetBatch[batchInputs/batchInputs!, batchTargets/batchTargets!]         │
+│                                                                             │
+│ -- Zero gradients                                                          │
+│     ∧ ∃ S₁ : SystemState • ZeroGradients[S₁/SystemState']                  │
+│                                                                             │
+│ -- Accumulate loss and gradients over batch                                │
+│     ∧ batchLoss! = 0                                                        │
+│     ∧ ∀ i : dom batchInputs •                                              │
+│         ∃ S₂, S₃ : SystemState, out : Tensor, loss : ℝ •                   │
+│             CompleteForward[S₂/SystemState', batchInputs(i)/input?, out/output!] │
+│             ∧ ComputeLoss[S₃/SystemState', out/prediction?,                │
+│                 batchTargets(i)/target?, criterion?/criterion?, loss/loss!] │
+│             ∧ CompleteBackward[criterion?/criterion?]                       │
+│             ∧ batchLoss! = batchLoss! + loss                               │
+│                                                                             │
+│ -- Average loss over batch                                                 │
+│     ∧ batchLoss! = batchLoss! / #batchInputs                               │
+│                                                                             │
+│ -- Update parameters                                                       │
+│     ∧ (training.optimizer.momentum = 0 ⇒ SGDUpdate                         │
+│        ∨ training.optimizer.momentum > 0 ⇒ MomentumUpdate)                 │
+│                                                                             │
+│ -- Record loss                                                             │
+│ training'.trainingLosses = training.trainingLosses ⌢ ⟨batchLoss!⟩          │
+│                                                                             │
+│ -- Advance to next batch                                                   │
+│ training'.currentBatch = (training.currentBatch + 1) mod training.totalBatches │
+│ training'.currentEpoch = if training'.currentBatch = 0                      │
+│                          then training.currentEpoch + 1                     │
+│                          else training.currentEpoch                         │
+│                                                                             │
+│ training'.dataset = training.dataset                                        │
+│ training'.batchSize = training.batchSize                                    │
+│ training'.maxEpochs = training.maxEpochs                                    │
+│ training'.totalBatches = training.totalBatches                              │
+│ training'.optimizer = training'.optimizer                                   │
+│ training'.validationLosses = training.validationLosses                      │
+│ topology' = topology'                                                       │
+│ computation' = computation'                                                 │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Performs one complete training step: forward, loss, backward, update.
+
+┌─ ValidateModel ─────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ validationSet? : Dataset                                                    │
+│ criterion? : Criterion                                                      │
+│ avgLoss! : ℝ                                                                │
+│                                                                             │
+│ -- Switch to evaluation mode                                               │
+│ ∃ S₁ : SystemState • SetEvaluationMode[S₁/SystemState']                    │
+│                                                                             │
+│ -- Compute average loss over validation set                                │
+│ avgLoss! = 0                                                                │
+│ ∧ ∀ i : dom validationSet?.samples •                                        │
+│     ∃ S₂, S₃ : SystemState, out : Tensor, loss : ℝ •                       │
+│         CompleteForward[S₂/SystemState',                                    │
+│             validationSet?.samples(i).input/input?, out/output!]           │
+│         ∧ ComputeLoss[S₃/SystemState', out/prediction?,                    │
+│             validationSet?.samples(i).target/target?,                       │
+│             criterion?/criterion?, loss/loss!]                              │
+│         ∧ avgLoss! = avgLoss! + loss                                       │
+│                                                                             │
+│ avgLoss! = avgLoss! / validationSet?.size                                  │
+│                                                                             │
+│ -- Record validation loss                                                  │
+│ training'.validationLosses = training.validationLosses ⌢ ⟨avgLoss!⟩        │
+│                                                                             │
+│ -- Switch back to training mode                                            │
+│ ∃ S₄ : SystemState • SetTrainingMode[S₄/SystemState']                      │
+│                                                                             │
+│ training'.dataset = training.dataset                                        │
+│ training'.batchSize = training.batchSize                                    │
+│ training'.currentEpoch = training.currentEpoch                              │
+│ training'.maxEpochs = training.maxEpochs                                    │
+│ training'.currentBatch = training.currentBatch                              │
+│ training'.totalBatches = training.totalBatches                              │
+│ training'.optimizer = training.optimizer                                    │
+│ training'.trainingLosses = training.trainingLosses                          │
+│ topology' = topology'                                                       │
+│ computation' = computation                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Validates model on validation set without updating parameters.
+
+┌─ TrainEpoch ────────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ criterion? : Criterion                                                      │
+│ epochLoss! : ℝ                                                              │
+│                                                                             │
+│ let startBatch == training.currentBatch in                                  │
+│     epochLoss! = 0                                                          │
+│     ∧ ∀ i : 1..training.totalBatches •                                     │
+│         ∃ S : SystemState, batchLoss : ℝ •                                  │
+│             TrainStep[S/SystemState', criterion?/criterion?,                │
+│                 batchLoss/batchLoss!]                                       │
+│             ∧ epochLoss! = epochLoss! + batchLoss                          │
+│                                                                             │
+│     ∧ epochLoss! = epochLoss! / training.totalBatches                      │
+│     ∧ training'.currentEpoch = training.currentEpoch + 1                   │
+│     ∧ training'.currentBatch = 0                                            │
+│                                                                             │
+│ training'.dataset = training.dataset                                        │
+│ training'.batchSize = training.batchSize                                    │
+│ training'.maxEpochs = training.maxEpochs                                    │
+│ training'.totalBatches = training.totalBatches                              │
+│ training'.optimizer = training'.optimizer                                   │
+│ training'.trainingLosses = training'.trainingLosses                         │
+│ training'.validationLosses = training.validationLosses                      │
+│ topology' = topology'                                                       │
+│ computation' = computation'                                                 │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Trains for one complete epoch (all batches in dataset).
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 6: INFERENCE OPERATIONS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ Predict ───────────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ input? : Tensor                                                             │
+│ output! : Tensor                                                            │
+│                                                                             │
+│ -- Ensure in evaluation mode                                               │
+│ mode = Evaluation                                                           │
+│                                                                             │
+│ -- Forward pass only, no backward                                          │
+│ CompleteForward[input?/input?, output!/output!]                             │
+│                                                                             │
+│ -- State unchanged except computation cache                                │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Makes a prediction on new input without computing gradients.
+
+┌─ BatchPredict ──────────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│ inputs? : seq Tensor                                                        │
+│ outputs! : seq Tensor                                                       │
+│                                                                             │
+│ mode = Evaluation                                                           │
+│ #inputs? > 0                                                                │
+│ #outputs! = #inputs?                                                        │
+│                                                                             │
+│ ∀ i : dom inputs? •                                                         │
+│     ∃ S : SystemState •                                                     │
+│         Predict[S/SystemState', inputs?(i)/input?, outputs!(i)/output!]    │
+│                                                                             │
+│ topology' = topology                                                        │
+│ training' = training                                                        │
+│ mode' = mode                                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Makes predictions on a batch of inputs.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 7: OPERATIONS SUMMARY
+══════════════════════════════════════════════════════════════════════════════
+
+This specification defines the complete operational semantics of the neural
+network system:
+
+**Forward Propagation**:
+- ForwardInput: Prepare for forward pass
+- ModuleForward: Forward through single module (with specific implementations)
+- LinearForward, SigmoidForward, ReLUForward: Specific forward operations
+- SequentialForward: Forward through container
+- CompleteForward: End-to-end forward pass
+
+**Loss Computation**:
+- ComputeLoss: Generic loss computation
+- MSELoss, ClassNLLLoss: Specific loss functions
+
+**Backward Propagation**:
+- BackwardOutput: Initiate backward from criterion
+- ModuleBackward: Backward through single module (with specific implementations)
+- LinearBackward, SigmoidBackward, ReLUBackward: Specific gradient computations
+- SequentialBackward: Backward through container in reverse
+- CompleteBackward: End-to-end backward pass
+
+**Parameter Updates**:
+- ZeroGradients: Clear accumulated gradients
+- SGDUpdate: Standard gradient descent
+- MomentumUpdate: SGD with momentum
+
+**Training Loop**:
+- GetBatch: Retrieve training batch
+- TrainStep: Single training iteration (forward, backward, update)
+- ValidateModel: Evaluate on validation set
+- TrainEpoch: Complete epoch of training
+
+**Inference**:
+- Predict: Single prediction
+- BatchPredict: Batch predictions
+
+All operations maintain the SystemState invariants and ensure:
+- Shape consistency
+- Gradient validity
+- Mode consistency
+- Cache coherence
+- Training progress tracking

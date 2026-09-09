@@ -1,0 +1,23 @@
+{
+  "description": "Cross-implementation consistency fixture. A fixed 2-2-1 sigmoid MLP. Every port (a9nn, scm, rkt, raku, pl, isa) constructs this exact network and asserts the forward output and MSE loss to the given tolerance. Semantics: layer output = sigmoid(W . x + b) for every layer; loss = mean squared error. Reference values computed in double precision; the Isabelle/HOL port uses exact rational arithmetic with a truncated-series sigmoid, so it uses tolerance_isa.",
+  "architecture": [2, 2, 1],
+  "activation": "sigmoid",
+  "loss": "mse",
+  "tolerance": 1e-6,
+  "tolerance_isa": 1e-3,
+  "weights": [
+    [
+      { "weights": [0.5, -0.5], "bias": 0.1 },
+      { "weights": [-0.25, 0.75], "bias": -0.2 }
+    ],
+    [
+      { "weights": [0.6, -0.4], "bias": 0.05 }
+    ]
+  ],
+  "cases": [
+    { "input": [0, 0], "target": [0], "expected_output": [0.5460989866], "expected_loss": 0.2982241032 },
+    { "input": [0, 1], "target": [1], "expected_output": [0.5092822253], "expected_loss": 0.2408039344 },
+    { "input": [1, 0], "target": [1], "expected_output": [0.5699505688], "expected_loss": 0.1849425133 },
+    { "input": [1, 1], "target": [0], "expected_output": [0.5337512224], "expected_loss": 0.2848903675 }
+  ]
+}

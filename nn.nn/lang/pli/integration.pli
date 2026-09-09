@@ -1,0 +1,761 @@
+/*
+ * PLingua Integration Module
+ * Connects the P-Systems neural network implementation with existing
+ * PLingua tools, simulators, and standard P-Systems infrastructure.
+ *
+ * Provides:
+ *   1. Standard PLingua rule-set annotations compatible with pLinguaCore
+ *   2. Interface adaptors for external data ingestion
+ *   3. Export bridges (CSV, JSON, DOT, PNML)
+ *   4. Interoperability with Membrane Designer tools
+ *   5. Multi-membrane simulation harness
+ *   6. Standard P-Systems type system helpers
+ *   7. Benchmark suite and performance profiler
+ *   8. Module registry and dependency resolver
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * MODULE REGISTRY
+ * Tracks which modules are loaded, their versions, and dependencies.
+ * ============================================================================ */
+
+@module module_registry
+{
+    @initial
+    {
+        [registry
+            /* Core modules */
+            module{nn,                "1.0.0", []}
+            module{momentum_adam_rmsprop, "1.0.0", [nn]}
+            module{batch_normalization,   "1.0.0", [nn]}
+            module{dropout,               "1.0.0", [nn]}
+            module{convolutional,         "1.0.0", [nn]}
+            module{recurrent,             "1.0.0", [nn]}
+            module{backpropagation,       "1.0.0", [nn]}
+            module{visualization,         "1.0.0", [nn]}
+            module{integration,           "1.0.0", [nn]}
+
+            /* v2.1 extension modules */
+            module{activations,           "1.0.0", [nn]}
+            module{criteria,              "1.0.0", [nn]}
+            module{containers,            "1.0.0", [nn]}
+            module{layers,                "1.0.0", [nn]}
+            module{attention,             "1.0.0", [nn, batch_normalization]}
+            module{snp,                   "1.0.0", []}
+
+            /* v2.2 extension modules */
+            module{gnn,                   "1.0.0", [nn]}
+            module{neuroevolution,        "1.0.0", [nn, integration, gnn]}
+            module{bayesian,              "1.0.0", [nn, criteria, dropout]}
+            module{transformer_decoder,   "1.0.0", [nn, attention,
+                                                    batch_normalization,
+                                                    layers, activations]}
+
+            /* v2.3 extension modules */
+            module{atomspace,             "1.0.0", [nn, integration]}
+            module{a9nn,                  "1.0.0", [nn, atomspace,
+                                                    integration]}
+
+            /* v2.4 extension modules */
+            module{pln,                   "1.0.0", [atomspace, integration]}
+            module{openpsi,               "1.0.0", [atomspace, integration,
+                                                    a9nn]}
+
+            /* v2.5 extension modules */
+            module{unified,               "1.0.0", [a9nn, atomspace, pln,
+                                                    openpsi, integration]}
+            module{topology,              "1.0.0", [integration]}
+
+            /* v2.6 extension modules */
+            module{bseries,               "1.0.0", [topology,
+                                                    backpropagation,
+                                                    integration]}
+
+            /* v2.7 extension modules */
+            module{closures,              "1.0.0", [topology, integration]}
+        ]'main
+    }
+
+    /* Resolve: check all dependencies are registered */
+    @rules check_dependency
+    {
+        [module{name, ver, deps}]'registry ->
+        {
+            for (dep in deps)
+            {
+                [module{dep, dver, ddeps}]'registry ->
+                    [dep_ok{name, dep}]'registry
+                /* Emit error if missing */
+                [dep_ok{name, dep}]'registry ->
+                    []'registry
+                    where not_exists dep_ok{name, dep}
+                [dep_error{name, dep}]'registry ->
+                    []'registry (error{missing_dep, name, dep}, out)
+            }
+        }
+    }
+
+    /* List all registered modules */
+    @rules list_modules
+    {
+        [query_modules{}]'registry ->
+        {
+            [module{name, ver, deps}]'registry ->
+                []'registry (module_info{name, ver, deps}, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * PLINGUA RULE-SET COMPATIBILITY LAYER
+ * Provides wrappers for pLinguaCore-compatible rule annotations.
+ * Supports P-System types: active, symport, antiport, dissolution, division
+ * ============================================================================ */
+
+@module plingua_compat
+{
+    /* Standard evolution rule wrapper */
+    @macro evolution_rule(lhs, rhs, membrane)
+    {
+        [lhs]'membrane -> [rhs]'membrane
+    }
+
+    /* Symport rule: move objects across membrane boundary */
+    @macro symport_in(objects, membrane)
+    {
+        (objects, in) -> [objects]'membrane
+    }
+
+    @macro symport_out(objects, membrane)
+    {
+        [objects]'membrane -> (objects, out)
+    }
+
+    /* Antiport rule: exchange objects across membrane boundary */
+    @macro antiport(objects_in, objects_out, membrane)
+    {
+        [objects_out]'membrane (objects_in, in) ->
+        [objects_in]'membrane (objects_out, out)
+    }
+
+    /* Dissolution rule: dissolve membrane, objects go to parent */
+    @macro dissolve(membrane, objects)
+    {
+        [objects]'membrane -> objects     /* membrane dissolved */
+    }
+
+    /* Division rule: one membrane becomes two */
+    @macro divide(membrane, left_objects, right_objects)
+    {
+        [membrane] -> [left_objects]'new_left [right_objects]'new_right
+    }
+
+    /* Probabilistic rule: fire lhs -> rhs with probability p (0-100).
+     * Maps onto native probabilistic P-System rules where supported;
+     * otherwise uses the random-guard convention (see bayesian.pli). */
+    @macro prob_rule(p, lhs, rhs, membrane)
+    {
+        [lhs]'membrane -> [rhs]'membrane where random(0, 100) < p
+    }
+
+    /* Priority annotation */
+    @macro high_priority(rule)
+    {
+        @priority(1) rule
+    }
+
+    @macro low_priority(rule)
+    {
+        @priority(99) rule
+    }
+}
+
+/* ============================================================================
+ * DATA INGESTION INTERFACE
+ * Standard interface for loading training data from external sources.
+ * Objects are created from data injected via the environment membrane.
+ * ============================================================================ */
+
+@module data_ingestion
+{
+    @initial
+    {
+        [data_if
+            source{none}
+            format{raw}
+            batch_size{32}
+            current_batch{0}
+        ]'main
+    }
+
+    /* Configure data source */
+    @rules configure_source
+    {
+        [set_source{src, fmt, bs}]'data_if ->
+            [source{src}, format{fmt}, batch_size{bs}]'data_if
+    }
+
+    /* Consume raw input samples from environment */
+    @rules ingest_csv
+    {
+        /* CSV row: fields separated by comma */
+        [csv_row{batch, row, fields}, format{csv}]'data_if ->
+        {
+            for (col = 1; col <= length(fields); col++)
+            {
+                [input{batch, row, col, fields[col]}]'data_if
+            }
+        }
+    }
+
+    /* JSON array format */
+    @rules ingest_json
+    {
+        [json_sample{batch, row, keys, values}, format{json}]'data_if ->
+        {
+            for (k = 1; k <= length(keys); k++)
+            {
+                [input{batch, row, keys[k], values[k]}]'data_if
+            }
+        }
+    }
+
+    /* Normalise inputs to [-1, 1] range */
+    @rules normalise_input
+    {
+        [input{b, r, c, v}, data_min{dm}, data_max{dmax}]'data_if ->
+            [input_norm{b, r, c, (v - dm) * 2 / (dmax - dm) - 1}]'data_if
+    }
+
+    /* Batch dispatch: send one batch at a time to network */
+    @rules dispatch_batch
+    {
+        [input_norm{batch, r, c, v}, current_batch{cb}]'data_if ->
+            []'data_if (input{r, c, v}, out)
+            where batch == cb
+        [current_batch{cb}]'data_if ->
+            [current_batch{cb + 1}]'data_if
+    }
+}
+
+/* ============================================================================
+ * EXPORT BRIDGES
+ * Convert P-Systems objects to standard interchange formats.
+ * ============================================================================ */
+
+@module exporter
+{
+    @initial
+    {
+        [export]'main
+    }
+
+    /* -------- CSV export -------- */
+    @rules export_weights_csv
+    {
+        [export_request{csv, layer}]'export ->
+        {
+            [weight{j, w}]'layer ->
+                []'layer (csv_row{layer, j, w}, out)
+        }
+    }
+
+    /* -------- JSON export -------- */
+    @rules export_weights_json
+    {
+        [export_request{json, layer}]'export ->
+        {
+            /* Emit JSON object header */
+            []'export (json_begin{layer}, out)
+            [weight{j, w}]'layer ->
+                []'layer (json_field{layer, concat("w", j), w}, out)
+            []'export (json_end{layer}, out)
+        }
+    }
+
+    /* -------- DOT graph export (membrane topology) -------- */
+    @rules export_dot
+    {
+        [export_request{dot}]'export ->
+        {
+            []'export (dot_line{"digraph NN_membranes {"}, out)
+            [membrane_id{id, parent, depth}]'export ->
+                []'export (dot_line{
+                    concat("  \"", parent, "\" -> \"", id, "\";")
+                }, out)
+            []'export (dot_line{"}"}, out)
+        }
+    }
+
+    /* -------- PNML (Petri Net Markup Language) adapter -------- */
+    /* Maps membrane rules to Petri net transitions */
+    @rules export_pnml
+    {
+        [export_request{pnml}]'export ->
+        {
+            []'export (pnml_header{
+                "<?xml version=\"1.0\"?><pnml><net id=\"nn_net\">"
+            }, out)
+            /* Each rule becomes a transition */
+            [rule_def{id, lhs, rhs}]'export ->
+                []'export (pnml_transition{id, lhs, rhs}, out)
+            []'export (pnml_footer{"</net></pnml>"}, out)
+        }
+    }
+
+    /* -------- Weights as numpy-compatible flat array -------- */
+    @rules export_flat_array
+    {
+        [export_request{flat, layer}]'export ->
+        {
+            [weight{j, w}]'layer ->
+                []'layer (flat_val{layer, j, w}, out)
+        }
+    }
+
+    /* -------- Weight snapshot (save trained model) --------
+     * Interchange format shared with the pl/rkt/scm ports:
+     *   weight_record{layer_id, neuron_id, input_index, value}
+     *   bias_record{layer_id, neuron_id, value}
+     * Values use the x100 integer scaling convention.
+     */
+    @rules save_weights
+    {
+        [save_request{model_id}]'export ->
+        {
+            /* Snapshot every weight in every neuron of every layer */
+            [weight{j, w}]'neuron{i} ->
+                [weight{j, w}]'neuron{i}
+                (weight_record{model_id, i, j, w}, out)
+
+            [bias{b}]'neuron{i} ->
+                [bias{b}]'neuron{i}
+                (bias_record{model_id, i, b}, out)
+
+            /* End-of-snapshot marker for consumers */
+            []'export (save_complete{model_id}, out)
+        }
+    }
+
+    /* -------- Weight import (load trained model) --------
+     * Restores weight/bias objects from interchange records,
+     * replacing any existing values (round-trip with save_weights).
+     */
+    @rules load_weights
+    {
+        [load_request{model_id}]'export ->
+        {
+            /* Replace existing weights with recorded values */
+            (weight_record{model_id, i, j, w}, in)
+                [weight{j, old_w}]'neuron{i} ->
+                [weight{j, w}]'neuron{i}
+
+            (bias_record{model_id, i, b}, in)
+                [bias{old_b}]'neuron{i} ->
+                [bias{b}]'neuron{i}
+
+            /* Signal completion */
+            []'export (load_complete{model_id}, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * SIMULATION HARNESS
+ * Sets up and runs a complete simulation with configurable stepping.
+ * Compatible with both sequential and parallel P-Systems semantics.
+ * ============================================================================ */
+
+@module simulation_harness(max_steps, mode)
+{
+    /*
+     * mode: sequential | parallel | async
+     *   sequential: one rule fires per step (for debugging)
+     *   parallel:   maximally parallel (standard P-Systems)
+     *   async:      asynchronous P-Systems (non-deterministic)
+     */
+
+    @initial
+    {
+        [sim
+            max_steps{max_steps}
+            sim_mode{mode}
+            current_step{0}
+            status{running}
+        ]'main
+    }
+
+    /* Sequential stepping */
+    @rules step_sequential
+    {
+        [current_step{s}, max_steps{m}, sim_mode{sequential}, status{running}]'sim ->
+        {
+            /* Fire exactly one rule from the rule set */
+            pick_one_rule{}
+            [current_step{s + 1}]'sim
+        }
+        [current_step{s}, max_steps{m}]'sim ->
+            [status{halted}]'sim
+            where s >= m
+    }
+
+    /* Parallel stepping */
+    @rules step_parallel
+    {
+        [current_step{s}, max_steps{m}, sim_mode{parallel}, status{running}]'sim ->
+        {
+            /* Fire all applicable rules simultaneously */
+            apply_all_rules{}
+            [current_step{s + 1}]'sim
+        }
+        [current_step{s}, max_steps{m}]'sim ->
+            [status{halted}]'sim
+            where s >= m
+    }
+
+    /* Halt condition: no applicable rules */
+    @rules detect_halt
+    {
+        [no_rules_applicable{}]'sim ->
+            [status{halted}]'sim
+    }
+
+    /* Emit step completion event */
+    @rules emit_step
+    {
+        [current_step{s}, status{running}]'sim ->
+            []'sim (step_complete{s}, out)
+    }
+
+    /* Report final state */
+    @rules report_halt
+    {
+        [status{halted}, current_step{s}]'sim ->
+            []'sim (simulation_done{s}, out)
+    }
+}
+
+/* ============================================================================
+ * PERFORMANCE PROFILER
+ * Measures rule firing frequency and object counts per membrane.
+ * ============================================================================ */
+
+@module profiler
+{
+    @initial
+    {
+        [prof
+            step{0}
+        ]'main
+    }
+
+    /* Count rule firings per rule name */
+    @rules count_rule_fire
+    {
+        [rule_fired{name}, rule_count{name, c}]'prof ->
+            [rule_count{name, c + 1}]'prof
+        [rule_fired{name}]'prof ->
+            [rule_count{name, 1}]'prof
+            where not_exists rule_count{name}
+    }
+
+    /* Count objects per membrane */
+    @rules count_objects
+    {
+        [object_created{membrane, type}, obj_count{membrane, type, c}]'prof ->
+            [obj_count{membrane, type, c + 1}]'prof
+        [object_created{membrane, type}]'prof ->
+            [obj_count{membrane, type, 1}]'prof
+            where not_exists obj_count{membrane, type}
+    }
+
+    /* Emit profiling report */
+    @rules emit_report
+    {
+        [report_request{}]'prof ->
+        {
+            [rule_count{name, c}]'prof ->
+                []'prof (profile_entry{rule, name, c}, out)
+            [obj_count{mem, type, c}]'prof ->
+                []'prof (profile_entry{object, mem, type, c}, out)
+        }
+    }
+
+    /* Timing: record wall-clock step */
+    @rules record_step_time
+    {
+        [step_start{s}, step_end{s, dur}]'prof ->
+            [step_time{s, dur}]'prof
+    }
+
+    @rules advance_step
+    {
+        [step{s}]'prof -> [step{s + 1}]'prof
+    }
+}
+
+/* ============================================================================
+ * STANDARD P-SYSTEMS TYPE HELPERS
+ * Wrappers for common P-Systems constructs used throughout the NN modules.
+ * ============================================================================ */
+
+@module ps_types
+{
+    /* Multiset union */
+    @macro multiset_union(ms1, ms2)
+    {
+        ms1 + ms2
+    }
+
+    /* Multiset difference */
+    @macro multiset_diff(ms1, ms2)
+    {
+        ms1 - ms2
+    }
+
+    /* Test membership */
+    @macro in_multiset(obj, ms)
+    {
+        ms[obj] > 0
+    }
+
+    /* Create numbered object sequence */
+    @macro sequence(prefix, n)
+    {
+        for (i = 1; i <= n; i++)
+        {
+            prefix{i}
+        }
+    }
+
+    /* Broadcast object to all child membranes */
+    @macro broadcast(obj, parent, children)
+    {
+        [obj]'parent ->
+        {
+            for (child in children)
+            {
+                [obj]'child
+            }
+        }
+    }
+
+    /* Reduce: collect results from all children */
+    @macro reduce_sum(result_obj, children)
+    {
+        for (child in children)
+        {
+            [result_obj{v}]'child ->
+                (result_obj{v}, out)
+        }
+        [result_obj{v1}, result_obj{v2}]'parent ->
+            [result_obj{v1 + v2}]'parent
+    }
+
+    /* Conditional membrane creation */
+    @macro conditional_membrane(condition, membrane_def)
+    {
+        [trigger{}]'parent ->
+            [membrane_def]'parent
+            where condition
+    }
+}
+
+/* ============================================================================
+ * INTEROPERABILITY WITH MEMBRANE DESIGNER
+ * Provides hooks for GUI-based membrane design tools.
+ * ============================================================================ */
+
+@module membrane_designer_bridge
+{
+    @initial
+    {
+        [md_bridge]'main
+    }
+
+    /* Import membrane structure from designer XML */
+    @rules import_structure
+    {
+        [xml_structure{xml}]'md_bridge ->
+        {
+            /* Parse membrane hierarchy from XML */
+            for (membrane in xml.membranes)
+            {
+                [new_membrane{membrane.id, membrane.parent, membrane.depth}]'md_bridge
+            }
+            for (rule in xml.rules)
+            {
+                [new_rule{rule.id, rule.lhs, rule.rhs, rule.membrane}]'md_bridge
+            }
+        }
+    }
+
+    /* Export structure to designer format */
+    @rules export_structure
+    {
+        [export_to_designer{}]'md_bridge ->
+        {
+            [membrane_id{id, parent, depth}]'md_bridge ->
+                []'md_bridge (designer_membrane{id, parent, depth}, out)
+            [rule_def{id, lhs, rhs, mem}]'md_bridge ->
+                []'md_bridge (designer_rule{id, lhs, rhs, mem}, out)
+        }
+    }
+
+    /* Live update: synchronize objects with designer UI */
+    @rules sync_objects
+    {
+        [sync_request{membrane_id}]'md_bridge ->
+        {
+            /* Enumerate all objects in target membrane */
+            [object{type, key, value}]'target_membrane ->
+                []'target_membrane (designer_object{membrane_id, type, key, value}, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * BENCHMARK SUITE
+ * Standard benchmarks for comparing PLingua NN implementations.
+ * ============================================================================ */
+
+@module benchmark_suite
+{
+    @initial
+    {
+        [bench
+            results{}
+        ]'main
+    }
+
+    /* Benchmark 1: XOR solve time */
+    @benchmark xor_benchmark
+    {
+        @description "Measure steps to solve XOR problem to >95% accuracy"
+        @network xor_network
+        @metric steps_to_95pct_accuracy
+        @timeout_steps 10000
+    }
+
+    /* Benchmark 2: Forward pass throughput */
+    @benchmark forward_pass_throughput
+    {
+        @description "Measure objects processed per computation step"
+        @network binary_classifier(10, 20)
+        @metric objects_per_step
+        @num_samples 1000
+    }
+
+    /* Benchmark 3: Backprop convergence */
+    @benchmark backprop_convergence
+    {
+        @description "Steps for loss to reach < 0.01 on training set"
+        @network multiclass_classifier(4, 8, 3)
+        @metric steps_to_convergence
+        @timeout_steps 50000
+    }
+
+    /* Benchmark 4: Memory footprint */
+    @benchmark memory_footprint
+    {
+        @description "Count of objects in membrane at peak"
+        @network bn_network(10, 20, 5)
+        @metric peak_object_count
+    }
+
+    /* Run all benchmarks */
+    @rules run_all
+    {
+        [run_benchmarks{}]'bench ->
+        {
+            for (b in benchmarks)
+            {
+                [run{b}]'bench ->
+                    []'bench (bench_result{b, time, metric}, out)
+            }
+        }
+    }
+}
+
+/* ============================================================================
+ * COMPLETE INTEGRATION EXAMPLE
+ * Demonstrates end-to-end usage of all modules together.
+ * ============================================================================ */
+
+@model integrated_nn_system(input_size, hidden_size, output_size)
+{
+    @membrane_structure
+    {
+        [main
+            /* Core network */
+            [network
+                [layer1  linear_layer(input_size, hidden_size)]'network
+                [bn1     batch_norm(hidden_size, 1, 10)]'network
+                [act1    relu_activation]'network
+                [drop1   dropout(20)]'network
+                [layer2  linear_layer(hidden_size, output_size)]'network
+                [out     softmax]'network
+            ]'main
+
+            /* Optimizer */
+            [optimizer adam(1, 90, 99, 1)]'main
+
+            /* Gradient tools */
+            [clip      gradient_clip_by_norm(1000)]'main
+            [accumulator gradient_accumulator(4)]'main
+
+            /* Data pipeline */
+            [data      data_ingestion]'main
+
+            /* Visualization */
+            [vis       visualization_dashboard(network)]'main
+
+            /* Export */
+            [exporter  exporter]'main
+
+            /* Simulation control */
+            [sim       simulation_harness(100000, parallel)]'main
+
+            /* Profiling */
+            [profiler  profiler]'main
+
+            /* Registry */
+            [registry  module_registry]'main
+        ]
+    }
+
+    @info
+    {
+        description: "Fully integrated neural network P-System"
+        modules: [nn, optimizers, batch_norm, dropout, backprop, visualization]
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "PLingua Integration Module"
+    version: "1.0.0"
+    description: "Integration layer connecting P-Systems NN with PLingua tools"
+    features: [
+        "Module registry and dependency resolver",
+        "PLingua rule-set compatibility layer",
+        "Data ingestion (CSV, JSON) interface",
+        "Export bridges (CSV, JSON, DOT, PNML, flat array)",
+        "Multi-mode simulation harness (sequential, parallel, async)",
+        "Performance profiler",
+        "Standard P-Systems type helpers",
+        "Membrane Designer bridge",
+        "Benchmark suite",
+        "Complete integration example"
+    ]
+    dependencies: [
+        "pLinguaCore >= 4.0",
+        "Membrane Designer >= 2.0 (optional)"
+    ]
+}

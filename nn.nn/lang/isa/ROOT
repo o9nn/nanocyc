@@ -1,0 +1,32 @@
+(* Isabelle session for the pure Isabelle/HOL neural network library.
+   Build with:  isabelle build -D .          (from lang/isa)
+   or:          isabelle build -D lang/isa   (from the repository root)
+
+   A successful build type-checks the library, re-runs every proof in
+   NN_Properties, and executes all eval-based tests in NN_Test and the
+   value-based demos in NN_Demo / NN_Examples. *)
+
+session NN = "HOL-Library" +
+  description "
+    Pure Isabelle/HOL neural network library derived from the Z++ formal
+    specifications in docs/*.zpp and the sibling functional implementations
+    (lang/scm, lang/rkt, lang/raku).
+  "
+  options [document = false]
+  theories
+    NN_Types
+    NN_Vector
+    NN_Matrix
+    NN_Activations
+    NN_Network
+    NN_Loss
+    NN_Backprop
+    NN_Training
+    NN_Modules
+    NN_Properties
+    NN_Exec
+    NN
+    NN_Test
+    NN_Consistency
+    NN_Demo
+    NN_Examples

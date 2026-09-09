@@ -1,0 +1,538 @@
+/*
+ * Test Suite for Neural Network Implementation in PLingua
+ * Tests all major components of the nn.pli implementation
+ */
+
+@model<testing>
+
+/* Include the main neural network module */
+@import "nn.pli"
+
+/* ============================================================================
+ * TEST FRAMEWORK
+ * Simple testing utilities for P-Systems
+ * ============================================================================ */
+
+@module test_framework
+{
+    /* Test result accumulator */
+    @initial
+    {
+        [test_suite
+            total_tests{0}
+            passed_tests{0}
+            failed_tests{0}
+        ]'main
+    }
+    
+    /* Assert equal: check if two values are equal */
+    @rules assert_equal(name, expected, actual)
+    {
+        [test_name{name}, expected{e}, actual{a}]'test ->
+        {
+            /* Pass if equal (within epsilon for floats) */
+            [result{pass}]'test where abs(e - a) < 0.01
+            [total_tests{t}]'suite -> [total_tests{t+1}, passed_tests{p+1}]'suite
+            
+            /* Fail if not equal */
+            [result{fail}]'test where abs(e - a) >= 0.01
+            [total_tests{t}]'suite -> [total_tests{t+1}, failed_tests{f+1}]'suite
+            []'test (error{name, e, a}, out)
+        }
+    }
+    
+    /* Report test results */
+    @rules report
+    {
+        [total_tests{t}, passed_tests{p}, failed_tests{f}]'suite ->
+        {
+            []'suite (test_summary{
+                total: t,
+                passed: p,
+                failed: f,
+                success_rate: (p*100)/t
+            }, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * ACTIVATION FUNCTION TESTS
+ * ============================================================================ */
+
+@test sigmoid_test
+{
+    @description "Test sigmoid activation function"
+    
+    @setup
+    {
+        [test_sigmoid
+            input{0, 0}
+            input{1, 100}
+            input{2, -100}
+            input{3, 50}
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Test sigmoid(0) ≈ 0.5 */
+        [input{0, 0}]'test -> [x{0}]'sigmoid
+        [sig{s}]'sigmoid -> []'sigmoid (output{0, s}, out)
+        assert_equal("sigmoid(0)", 50, output{0})
+        
+        /* Test sigmoid(large positive) ≈ 1.0 */
+        [input{1, 100}]'test -> [x{100}]'sigmoid
+        [sig{s}]'sigmoid -> []'sigmoid (output{1, s}, out)
+        assert_equal("sigmoid(100)", 100, output{1})
+        
+        /* Test sigmoid(large negative) ≈ 0.0 */
+        [input{2, -100}]'test -> [x{-100}]'sigmoid
+        [sig{s}]'sigmoid -> []'sigmoid (output{2, s}, out)
+        assert_equal("sigmoid(-100)", 0, output{2})
+    }
+}
+
+@test tanh_test
+{
+    @description "Test tanh activation function"
+    
+    @setup
+    {
+        [test_tanh
+            input{0, 0}
+            input{1, 100}
+            input{2, -100}
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Test tanh(0) = 0 */
+        [input{0, 0}]'test -> [x{0}]'tanh
+        [tanh_out{t}]'tanh -> []'tanh (output{0, t}, out)
+        assert_equal("tanh(0)", 0, output{0})
+        
+        /* Test tanh(large positive) ≈ 1.0 */
+        [input{1, 100}]'test -> [x{100}]'tanh
+        [tanh_out{t}]'tanh -> []'tanh (output{1, t}, out)
+        assert_equal("tanh(100)", 100, output{1})
+        
+        /* Test tanh(large negative) ≈ -1.0 */
+        [input{2, -100}]'test -> [x{-100}]'tanh
+        [tanh_out{t}]'tanh -> []'tanh (output{2, t}, out)
+        assert_equal("tanh(-100)", -100, output{2})
+    }
+}
+
+@test relu_test
+{
+    @description "Test ReLU activation function"
+    
+    @setup
+    {
+        [test_relu
+            input{0, 50}
+            input{1, -50}
+            input{2, 0}
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Test ReLU(positive) = positive */
+        [input{0, 50}]'test -> [x{50}]'relu
+        [relu{r}]'relu -> []'relu (output{0, r}, out)
+        assert_equal("relu(50)", 50, output{0})
+        
+        /* Test ReLU(negative) = 0 */
+        [input{1, -50}]'test -> [x{-50}]'relu
+        [relu{r}]'relu -> []'relu (output{1, r}, out)
+        assert_equal("relu(-50)", 0, output{1})
+        
+        /* Test ReLU(0) = 0 */
+        [input{2, 0}]'test -> [x{0}]'relu
+        [relu{r}]'relu -> []'relu (output{2, r}, out)
+        assert_equal("relu(0)", 0, output{2})
+    }
+}
+
+/* ============================================================================
+ * LAYER TESTS
+ * ============================================================================ */
+
+@test linear_layer_test
+{
+    @description "Test linear/dense layer forward pass"
+    
+    @setup
+    {
+        [test_linear
+            /* Create a simple 2x1 linear layer */
+            [layer linear_layer(2, 1)
+                [neuron{1}
+                    weight{1, 10}
+                    weight{2, 20}
+                    bias{5}
+                ]'layer
+            ]'test
+            
+            /* Test input: [3, 2] */
+            input{1, 30}  /* scaled by 10 */
+            input{2, 20}  /* scaled by 10 */
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Forward pass: 10*30 + 20*20 + 5 = 300 + 400 + 5 = 705 */
+        [input{1, 30}, input{2, 20}]'test -> 
+            [input{1, 30}, input{2, 20}]'layer
+        
+        [output{1, o}]'layer ->
+            []'layer (result{o}, out)
+        
+        assert_equal("linear_forward", 705, result)
+    }
+}
+
+/* ============================================================================
+ * LOSS FUNCTION TESTS
+ * ============================================================================ */
+
+@test mse_loss_test
+{
+    @description "Test Mean Squared Error loss"
+    
+    @setup
+    {
+        [test_mse
+            [mse_criterion
+                predicted{1, 30}
+                predicted{2, 40}
+                target{1, 32}
+                target{2, 38}
+            ]'test
+        ]'main
+    }
+    
+    @rules
+    {
+        /* MSE = ((30-32)^2 + (40-38)^2) / 2 = (4 + 4) / 2 = 4 */
+        [predicted{1, 30}, target{1, 32}]'mse ->
+            [error{1, -2}]'mse
+        
+        [predicted{2, 40}, target{2, 38}]'mse ->
+            [error{2, 2}]'mse
+        
+        [error{1, -2}]'mse -> [squared_error{1, 4}]'mse
+        [error{2, 2}]'mse -> [squared_error{2, 4}]'mse
+        
+        [squared_error{1, 4}, squared_error{2, 4}]'mse ->
+            [total_loss{4}]'mse
+        
+        assert_equal("mse_loss", 4, total_loss)
+    }
+}
+
+@test nll_loss_test
+{
+    @description "Test Negative Log Likelihood loss"
+    
+    @setup
+    {
+        [test_nll
+            [nll_criterion
+                predicted{0, 10}   /* 0.1 probability */
+                predicted{1, 70}   /* 0.7 probability */
+                predicted{2, 20}   /* 0.2 probability */
+                target{1}          /* true class is 1 */
+            ]'test
+        ]'main
+    }
+    
+    @rules
+    {
+        /* NLL = -log(0.7) ≈ 0.357 */
+        [predicted{1, 70}, target{1}]'nll ->
+            [nll{-log(0.70)}]'nll
+        
+        assert_equal("nll_loss", 36, nll{round(-100*log(0.70))})
+    }
+}
+
+/* ============================================================================
+ * SOFTMAX TESTS
+ * ============================================================================ */
+
+@test softmax_test
+{
+    @description "Test Softmax normalization"
+    
+    @setup
+    {
+        [test_softmax
+            [softmax
+                logit{1, 100}
+                logit{2, 200}
+                logit{3, 100}
+                max_logit{200}
+            ]'test
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Apply softmax */
+        [logit{1, 100}, max_logit{200}]'softmax ->
+            [exp_value{1, exp(-100)}]'softmax
+        
+        [logit{2, 200}, max_logit{200}]'softmax ->
+            [exp_value{2, exp(0)}]'softmax
+        
+        [logit{3, 100}, max_logit{200}]'softmax ->
+            [exp_value{3, exp(-100)}]'softmax
+        
+        /* Sum should be close to 1 after normalization */
+        [exp_value{1, e1}, exp_value{2, e2}, exp_value{3, e3}]'softmax ->
+        {
+            [sum_exp{e1 + e2 + e3}]'softmax
+            
+            [exp_value{1, e1}, sum_exp{s}]'softmax ->
+                [probability{1, e1/s}]'softmax
+            
+            /* Check probabilities sum to 1 */
+            [probability{1, p1}, probability{2, p2}, probability{3, p3}]'softmax ->
+                [sum_prob{p1 + p2 + p3}]'softmax
+            
+            assert_equal("softmax_sum", 100, sum_prob{round(100*(p1+p2+p3))})
+        }
+    }
+}
+
+/* ============================================================================
+ * INTEGRATION TESTS
+ * ============================================================================ */
+
+@test xor_network_test
+{
+    @description "Test XOR network structure"
+    
+    @setup
+    {
+        [test_xor
+            xor_network
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Test network has correct structure */
+        [xor_network
+            [input_layer]'xor
+            [hidden_activation]'xor
+            [output_layer]'xor
+            [output_activation]'xor
+        ]'test ->
+        {
+            assert_equal("xor_layers", 4, count_layers)
+        }
+        
+        /* Test with sample input [0, 0] -> should learn to output 0 */
+        [input{1, 0}, input{2, 0}]'xor ->
+            [input{1, 0}, input{2, 0}]'input_layer
+        
+        /* Check output exists (value depends on training) */
+        [output{1, o}]'output_activation ->
+            []'output_activation (xor_output{o}, out)
+    }
+}
+
+@test sequential_network_test
+{
+    @description "Test sequential network composition"
+    
+    @setup
+    {
+        [test_sequential
+            sequential_network([
+                linear_layer(2, 3),
+                relu_activation,
+                linear_layer(3, 1),
+                sigmoid_activation
+            ])
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Test network has 4 layers */
+        [network
+            [layer{1}]'network
+            [layer{2}]'network
+            [layer{3}]'network
+            [layer{4}]'network
+        ]'test ->
+        {
+            assert_equal("sequential_layers", 4, count_layers)
+        }
+        
+        /* Test data flows through layers */
+        [input{1, 50}]'test -> [input{1, 50}]'layer{1}
+        [output{j, v}]'layer{1} -> [input{j, v}]'layer{2}
+        [output{j, v}]'layer{2} -> [input{j, v}]'layer{3}
+        [output{j, v}]'layer{3} -> [input{j, v}]'layer{4}
+        
+        /* Final output should exist */
+        [result{j, v}]'layer{4} ->
+            []'layer{4} (final_output{v}, out)
+    }
+}
+
+@test training_loop_test
+{
+    @description "Test training loop execution"
+    
+    @setup
+    {
+        [test_training
+            train_network(
+                linear_layer(2, 1),
+                [
+                    {features: [0, 0], label: 0},
+                    {features: [1, 1], label: 1}
+                ],
+                epochs: 2,
+                learning_rate: 10  /* 0.1 scaled by 100 */
+            )
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Verify training loop runs for specified epochs */
+        [hyperparams{epochs, lr}]'training ->
+        {
+            assert_equal("epochs", 2, epochs)
+            assert_equal("learning_rate", 10, lr)
+        }
+        
+        /* Verify weights get updated */
+        [weights{w_initial}]'training -> [weights{w_initial}]'net
+        /* ... training happens ... */
+        [weights{w_final}]'net ->
+        {
+            /* Weights should have changed */
+            assert_not_equal("weights_updated", w_initial, w_final)
+        }
+    }
+}
+
+/* ============================================================================
+ * GRADIENT TESTS
+ * ============================================================================ */
+
+@test gradient_computation_test
+{
+    @description "Test gradient computation for backpropagation"
+    
+    @setup
+    {
+        [test_gradient
+            [neuron{1}
+                output{50}
+                grad{10}
+                weight{1, 20}
+                input{1, 30}
+            ]'test
+        ]'main
+    }
+    
+    @rules
+    {
+        /* Compute weight gradient: grad * input = 10 * 30 = 300 */
+        [grad{10}, input{1, 30}]'neuron{1} ->
+            [weight_grad{1, 300}]'neuron{1}
+        
+        assert_equal("weight_gradient", 300, weight_grad{1})
+        
+        /* Compute input gradient: grad * weight = 10 * 20 = 200 */
+        [grad{10}, weight{1, 20}]'neuron{1} ->
+            [input_grad{1, 200}]'neuron{1}
+        
+        assert_equal("input_gradient", 200, input_grad{1})
+    }
+}
+
+/* ============================================================================
+ * TEST RUNNER
+ * ============================================================================ */
+
+@main
+{
+    @description "Run all tests and report results"
+    
+    /* Initialize test suite */
+    test_framework
+    
+    /* Run all tests */
+    sigmoid_test
+    tanh_test
+    relu_test
+    linear_layer_test
+    mse_loss_test
+    nll_loss_test
+    softmax_test
+    xor_network_test
+    sequential_network_test
+    training_loop_test
+    gradient_computation_test
+    
+    /* Report results */
+    [test_suite
+        total_tests{t}
+        passed_tests{p}
+        failed_tests{f}
+    ]'main ->
+    {
+        []'main (
+            test_results{
+                "Total Tests": t,
+                "Passed": p,
+                "Failed": f,
+                "Success Rate": (p*100)/t + "%"
+            },
+            out
+        )
+    }
+}
+
+/* ============================================================================
+ * EXPECTED RESULTS
+ * ============================================================================ */
+
+@expected_output
+{
+    test_results{
+        "Total Tests": 11,
+        "Passed": 11,
+        "Failed": 0,
+        "Success Rate": "100%"
+    }
+}
+
+/*
+ * USAGE:
+ * Run this test suite with your PLingua simulator:
+ * 
+ * $ plingua test_nn.pli
+ * 
+ * All tests should pass, demonstrating that:
+ * - Activation functions work correctly
+ * - Layers compute forward passes accurately
+ * - Loss functions compute correct values
+ * - Softmax normalization works
+ * - Network composition is correct
+ * - Training loop executes properly
+ * - Gradients are computed correctly
+ */

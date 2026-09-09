@@ -1,0 +1,202 @@
+/*
+ * openpsi.pli - OpenPsi motivational & action-selection system in P-Systems
+ *
+ * OpenPsi is OpenCog's motivational layer, based on Dietrich Dorner's Psi
+ * theory: an agent has internal DEMANDS (drives) whose tension rises over
+ * time, GOALS that promise to reduce specific demands, MODULATORS that tune
+ * the affect/cognition balance, and an ACTION-SELECTION loop that picks the
+ * action best satisfying the most urgent demand.  This is the P-Systems
+ * counterpart of ReZorg/plingua's examples/opencog/opencog_openpsi.pli, in
+ * nn.nn's pure @module/@rules dialect.
+ *
+ * Crucially, OpenPsi CLOSES THE LOOP with the a9nn agent: the composite
+ * modulator state maps directly onto a9nn's emotion_unit channels, so
+ * motivation *drives* felt emotion, and action outcomes feed back as reward.
+ *
+ * All continuous values are integers scaled by 100.
+ *
+ * Demands (built-in drives, from Psi theory / OpenCog):
+ *   1 competence    (effectance -- mastering the environment)
+ *   2 integrity     (self-consistency / preservation)
+ *   3 exploration   (curiosity / novelty-seeking)
+ *   4 affiliation   (social connection)
+ *
+ * Demand dynamics:
+ *   tension{d} rises each step by demand_rate{d}; when tension exceeds the
+ *   demand's threshold the demand becomes URGENT.  A successful action that
+ *   addresses demand d reduces tension{d} by satisfaction (negative reward).
+ *
+ * Modulators (Psi affect parameters):
+ *   activation     -- arousal / readiness to act
+ *   resolution     -- precision / depth of processing
+ *   selection      -- threshold for committing to an action
+ *   securing       -- tendency to re-check / secure progress
+ * These combine into the agent's emotional state (cf. a9nn emotion_unit).
+ */
+
+@model<membrane_computing>
+
+@import "atomspace.pli"
+@import "integration.pli"
+
+/* ============================================================================
+ * DEMAND SYSTEM
+ * Each demand is a demand{d, tension, rate, threshold} object.  Tension
+ * accrues by rate every cycle; a demand fires urgent{d} when tension >=
+ * threshold.  Maximally parallel: ALL demands update in one step.
+ * ============================================================================ */
+
+@module psi_demands
+{
+    @initial
+    {
+        [psi
+            /* demand{id, tension, rate, threshold} -- x100 */
+            demand{1, 20, 5, 70}    /* competence */
+            demand{2, 50, 2, 90}    /* integrity  */
+            demand{3, 40, 8, 60}    /* exploration */
+            demand{4, 30, 4, 65}    /* affiliation */
+        ]'agent
+    }
+
+    @rules accrue
+    {
+        /* Tension rises by rate each motivational cycle. */
+        [demand{d, t, r, th}]'psi ->
+            [demand{d, min(100, t + r), r, th}]'psi
+
+        /* A demand at/over threshold becomes urgent. */
+        [demand{d, t, r, th}]'psi ->
+            [demand{d, t, r, th}, urgent{d}]'psi
+            where t >= th
+    }
+}
+
+/* ============================================================================
+ * GOAL HIERARCHY
+ * A goal targets a demand: goal{g, d, expected_relief}.  A goal is a
+ * candidate for action when its demand is urgent.  Sub-goals decompose a
+ * goal: subgoal{g, sg}.
+ * ============================================================================ */
+
+@module psi_goals
+{
+    @rules activate
+    {
+        /* A goal whose demand is urgent becomes an active goal. */
+        [urgent{d}, goal{g, d, relief}]'psi ->
+            [urgent{d}, goal{g, d, relief}, active_goal{g, d, relief}]'psi
+    }
+}
+
+/* ============================================================================
+ * ACTION SELECTION
+ * Among active goals, select the one offering the greatest expected relief
+ * for the most urgent demand.  Maximally-parallel argmax: the winner is the
+ * active_goal whose relief is not exceeded by any other.  The selected goal
+ * emits an action_token for the agent's PLAN beat to consume.
+ * ============================================================================ */
+
+@module psi_action_selection
+{
+    @rules select
+    {
+        /* Candidate: an active goal with no rival offering more relief. */
+        [active_goal{g, d, relief}]'psi ->
+            [active_goal{g, d, relief},
+             action_token{g, d, relief}]'psi
+            where forall_max active_goal{g, relief}
+    }
+
+    @rules precondition
+    {
+        /* Only execute if the action's precondition holds in the context. */
+        [action_token{g, d, relief}, precond_ok{g}]'psi ->
+            [action_token{g, d, relief}, precond_met{g}]'psi
+
+        [action_token{g, d, relief}, precond_bad{g}]'psi ->
+            [action_token{g, d, relief}, precond_failed{g}]'psi
+    }
+}
+
+/* ============================================================================
+ * SATISFACTION UPDATE
+ * When the chosen action succeeds (reward from the environment), reduce the
+ * addressed demand's tension by the satisfaction delivered.  This is the
+ * feedback edge: action outcome -> lower drive tension.
+ * ============================================================================ */
+
+@module psi_satisfaction
+{
+    @rules satisfy
+    {
+        /* reward r on demand d lowers its tension (floor 0). */
+        [action_done{g, d}, reward{r}, demand{d, t, rate, th}]'psi ->
+            [reward{r}, demand{d, max(0, t - r), rate, th}]'psi
+
+        /* Clearing urgency once tension falls below threshold. */
+        [urgent{d}, demand{d, t, rate, th}]'psi ->
+            [demand{d, t, rate, th}]'psi
+            where t < th
+    }
+}
+
+/* ============================================================================
+ * MODULATORS -> EMOTION  (the a9nn bridge)
+ * Psi modulators combine into affect.  We map them onto a9nn emotion_unit
+ * channels so motivation is *felt*:
+ *   high activation + urgent exploration  ->  curiosity up
+ *   satisfaction delivered (reward)       ->  joy up
+ *   many urgent demands (overload)        ->  fear up
+ *   low activation, no urgent demand      ->  boredom (low curiosity)
+ * ============================================================================ */
+
+@module psi_modulators
+{
+    @initial
+    {
+        [psi
+            mod{activation, 60}
+            mod{resolution, 50}
+            mod{selection, 50}
+            mod{securing, 50}
+        ]'agent
+    }
+
+    @rules modulate
+    {
+        /* Urgent exploration raises activation (arousal to explore). */
+        [urgent{3}, mod{activation, a}]'psi ->
+            [urgent{3}, mod{activation, min(100, a + 10)}]'psi
+
+        /* Satisfaction raises joy via the a9nn emotion bridge. */
+        [action_done{g, d}, reward{r}, emo{2, j}]'agent ->
+            [reward{r}, emo{2, min(100, j + r/10)}]'agent
+
+        /* Urgent exploration feeds curiosity (a9nn channel 1). */
+        [urgent{3}, mod{activation, a}, emo{1, c}]'agent ->
+            [urgent{3}, mod{activation, a},
+             emo{1, min(100, c + a/20)}]'agent
+    }
+}
+
+/* ============================================================================
+ * PSI CYCLE (composite)
+ * One motivational cycle = accrue -> activate goals -> select action ->
+ * (agent acts) -> satisfaction update -> modulate.  Phase-locked by a
+ * psi_pc register so the stages compose with the a9nn EchoBeats loop.
+ * ============================================================================ */
+
+@model openpsi_system
+{
+    @model<membrane_computing>
+
+    [agent
+        psi_pc{1}
+        psi_demands
+        psi_goals
+        psi_action_selection
+        psi_satisfaction
+        psi_modulators
+    ]'main
+}

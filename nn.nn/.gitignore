@@ -1,0 +1,13 @@
+build/
+THNN_h.lua
+
+# Scheme compiled files
+*.go
+*.scm~
+*~
+
+# Raku precompiled files
+.precomp/
+
+# MkDocs build output (mkdocs build)
+site/

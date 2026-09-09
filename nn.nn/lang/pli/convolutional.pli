@@ -1,0 +1,496 @@
+/*
+ * Convolutional Layers in PLingua
+ * P-Systems membrane computing implementation of 2-D convolutional layers.
+ *
+ * A 2D convolutional layer slides a kernel of shape (kH x kW) over an input
+ * feature map of shape (C_in x H x W) producing an output of shape
+ * (C_out x H_out x W_out).
+ *
+ * Key objects in the membrane:
+ *   input{c, r, col, v}            -- input feature map  (channel, row, col)
+ *   kernel{oc, ic, kr, kc, w}      -- kernel weights     (out_ch, in_ch, kr, kc)
+ *   bias{oc, b}                    -- bias per output channel
+ *   output{oc, r, col, v}          -- output feature map
+ *   grad_out{oc, r, col, g}        -- upstream gradient (backward)
+ *   grad_in{ic, r, col, g}         -- downstream gradient (backward)
+ *   grad_kernel{oc, ic, kr, kc, g} -- kernel gradient
+ *
+ * Padding and stride are stored as membrane objects.
+ *
+ * Implemented variants:
+ *   conv2d          -- standard 2-D convolution
+ *   depthwise_conv2d -- depthwise separable convolution (channel-wise)
+ *   transpose_conv2d -- transposed convolution (upsampling)
+ *   max_pool2d       -- max-pooling
+ *   avg_pool2d       -- average-pooling
+ *   global_avg_pool  -- global average pooling (spatial → 1×1)
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * 2-D CONVOLUTION
+ * output[oc, r, c] = bias[oc]
+ *   + sum_{ic, kr, kc} kernel[oc,ic,kr,kc] * input[ic, r*s+kr, c*s+kc]
+ * where s = stride, and indices are padded by `padding` zeros.
+ * ============================================================================ */
+
+@module conv2d(in_channels, out_channels, kernel_h, kernel_w, stride, padding)
+{
+    @initial
+    {
+        [conv
+            in_ch{in_channels}
+            out_ch{out_channels}
+            kH{kernel_h}
+            kW{kernel_w}
+            stride{stride}
+            padding{padding}
+            /* Xavier initialisation: scale = sqrt(2 / (fan_in + fan_out)) */
+            for (oc = 1; oc <= out_channels; oc++)
+            {
+                bias{oc, 0}
+                for (ic = 1; ic <= in_channels; ic++)
+                {
+                    for (kr = 1; kr <= kernel_h; kr++)
+                    {
+                        for (kc = 1; kc <= kernel_w; kc++)
+                        {
+                            kernel{oc, ic, kr, kc,
+                                random(-50, 50) * 100 /
+                                    (in_channels * kernel_h * kernel_w + out_channels * kernel_h * kernel_w)
+                            }
+                        }
+                    }
+                }
+            }
+        ]'main
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* FORWARD PASS                                                             */
+    /* ----------------------------------------------------------------------- */
+
+    /* Compute each partial product and accumulate into output */
+    @rules forward_product
+    {
+        [input{ic, r_in, c_in, v},
+         kernel{oc, ic, kr, kc, w},
+         stride{s}, padding{pad}]'conv ->
+            /* Output position (r_out, c_out) = ((r_in - kr + pad) / s, ...) */
+            [partial{oc,
+                     (r_in - kr + pad) / s + 1,
+                     (c_in - kc + pad) / s + 1,
+                     v * w}]'conv
+            where (r_in - kr + pad) mod s == 0
+              and (c_in - kc + pad) mod s == 0
+              and (r_in - kr + pad) / s >= 0
+              and (c_in - kc + pad) / s >= 0
+    }
+
+    /* Sum partials */
+    @rules accum_partials
+    {
+        [partial{oc, r, c, p1}, partial{oc, r, c, p2}]'conv ->
+            [partial{oc, r, c, p1 + p2}]'conv
+    }
+
+    /* Add bias and emit output */
+    @rules add_bias
+    {
+        [partial{oc, r, c, s}, bias{oc, b}]'conv ->
+            [output{oc, r, c, s + b}]'conv
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* BACKWARD PASS                                                            */
+    /* ----------------------------------------------------------------------- */
+
+    /* Gradient w.r.t. kernel:  dL/dW[oc,ic,kr,kc] = sum_{r,c} dL/dy * x   */
+    @rules grad_kernel
+    {
+        [grad_out{oc, r_out, c_out, g},
+         input{ic, r_in, c_in, v},
+         stride{s}, padding{pad_val}]'conv ->   /* pad_val avoids shadowing the param */
+            [grad_kernel{oc, ic,
+                         r_in - r_out * s + pad_val - 1,
+                         c_in - c_out * s + pad_val - 1,
+                         g * v}]'conv
+            where r_in - r_out * s + pad_val - 1 >= 1
+              and c_in - c_out * s + pad_val - 1 >= 1
+              and r_in - r_out * s + pad_val - 1 <= kernel_h
+              and c_in - c_out * s + pad_val - 1 <= kernel_w
+    }
+
+    /* Sum kernel gradients */
+    @rules accum_grad_kernel
+    {
+        [grad_kernel{oc, ic, kr, kc, g1}, grad_kernel{oc, ic, kr, kc, g2}]'conv ->
+            [grad_kernel{oc, ic, kr, kc, g1 + g2}]'conv
+    }
+
+    /* Gradient w.r.t. bias: dL/db[oc] = sum_{r,c} dL/dy[oc,r,c] */
+    @rules grad_bias
+    {
+        [grad_out{oc, r, c, g}, bias_grad{oc, bg}]'conv ->
+            [bias_grad{oc, bg + g}]'conv
+        [grad_out{oc, r, c, g}]'conv ->
+            [bias_grad{oc, g}]'conv
+            where not_exists bias_grad{oc}
+    }
+
+    /* Gradient w.r.t. input: dL/dx (full convolution with flipped kernel) */
+    @rules grad_input
+    {
+        [grad_out{oc, r_out, c_out, g},
+         kernel{oc, ic, kr, kc, w},
+         stride{s}]'conv ->
+            [grad_in{ic,
+                     r_out * s + kr - 1,
+                     c_out * s + kc - 1,
+                     g * w}]'conv
+    }
+
+    @rules accum_grad_input
+    {
+        [grad_in{ic, r, c, g1}, grad_in{ic, r, c, g2}]'conv ->
+            [grad_in{ic, r, c, g1 + g2}]'conv
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* WEIGHT UPDATE                                                            */
+    /* ----------------------------------------------------------------------- */
+
+    @rules update_kernel
+    {
+        [kernel{oc, ic, kr, kc, w}, grad_kernel{oc, ic, kr, kc, g}, lr{l}]'conv ->
+            [kernel{oc, ic, kr, kc, w - (l * g) / 100}]'conv
+    }
+
+    @rules update_bias
+    {
+        [bias{oc, b}, bias_grad{oc, bg}, lr{l}]'conv ->
+            [bias{oc, b - (l * bg) / 100}]'conv
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* CLEANUP                                                                  */
+    /* ----------------------------------------------------------------------- */
+
+    @rules cleanup
+    {
+        [partial{oc, r, c, p}]'conv       -> []'conv
+        [grad_kernel{oc, ic, kr, kc, g}]'conv -> []'conv
+        [bias_grad{oc, bg}]'conv           -> []'conv
+    }
+}
+
+/* ============================================================================
+ * DEPTHWISE SEPARABLE CONVOLUTION
+ * Factored as:  depthwise (per-channel) → pointwise (1×1 across channels)
+ * ============================================================================ */
+
+@module depthwise_conv2d(channels, kernel_h, kernel_w, stride, padding)
+{
+    @initial
+    {
+        [dw_conv
+            stride{stride}
+            padding{padding}
+            for (c = 1; c <= channels; c++)
+            {
+                bias{c, 0}
+                for (kr = 1; kr <= kernel_h; kr++)
+                {
+                    for (kc = 1; kc <= kernel_w; kc++)
+                    {
+                        kernel{c, c, kr, kc, random(-50, 50)}
+                    }
+                }
+            }
+        ]'main
+    }
+
+    /* Forward: each channel convolved independently */
+    @rules forward
+    {
+        [input{c, r_in, c_in, v},
+         kernel{c, c, kr, kc, w},
+         stride{s}, padding{pad}]'dw_conv ->
+            [partial{c,
+                     (r_in - kr + pad) / s + 1,
+                     (c_in - kc + pad) / s + 1,
+                     v * w}]'dw_conv
+            where (r_in - kr + pad) mod s == 0
+              and (c_in - kc + pad) mod s == 0
+              and (r_in - kr + pad) / s >= 0
+    }
+
+    @rules accum_partials
+    {
+        [partial{c, r, col, p1}, partial{c, r, col, p2}]'dw_conv ->
+            [partial{c, r, col, p1 + p2}]'dw_conv
+    }
+
+    @rules add_bias
+    {
+        [partial{c, r, col, s}, bias{c, b}]'dw_conv ->
+            [output{c, r, col, s + b}]'dw_conv
+    }
+}
+
+/* Pointwise (1×1) convolution module */
+@module pointwise_conv(in_channels, out_channels)
+{
+    @import conv2d(in_channels, out_channels, 1, 1, 1, 0)
+}
+
+/* ============================================================================
+ * TRANSPOSED CONVOLUTION (upsampling / "deconvolution")
+ * output[ic, r*s + kr, c*s + kc] += kernel[oc,ic,kr,kc] * input[oc,r,c]
+ * ============================================================================ */
+
+@module transpose_conv2d(in_channels, out_channels, kernel_h, kernel_w, stride)
+{
+    @initial
+    {
+        [tconv
+            in_ch{in_channels}
+            out_ch{out_channels}
+            kH{kernel_h}
+            kW{kernel_w}
+            stride{stride}
+            for (ic = 1; ic <= in_channels; ic++)
+            {
+                for (oc = 1; oc <= out_channels; oc++)
+                {
+                    for (kr = 1; kr <= kernel_h; kr++)
+                    {
+                        for (kc = 1; kc <= kernel_w; kc++)
+                        {
+                            kernel{ic, oc, kr, kc, random(-50, 50)}
+                        }
+                    }
+                }
+            }
+        ]'main
+    }
+
+    @rules forward
+    {
+        [input{oc, r, c, v},
+         kernel{oc, ic, kr, kc, w},
+         stride{s}]'tconv ->
+            [partial{ic, r * s + kr - 1, c * s + kc - 1, v * w}]'tconv
+    }
+
+    @rules accum_partials
+    {
+        [partial{ic, r, c, p1}, partial{ic, r, c, p2}]'tconv ->
+            [partial{ic, r, c, p1 + p2}]'tconv
+    }
+
+    @rules emit_output
+    {
+        [partial{ic, r, c, s}]'tconv ->
+            [output{ic, r, c, s}]'tconv
+    }
+}
+
+/* ============================================================================
+ * MAX POOLING 2D
+ * output[c, r, col] = max over (kr, kc) in patch of input[c, r*s+kr, c*s+kc]
+ * ============================================================================ */
+
+@module max_pool2d(kernel_h, kernel_w, stride)
+{
+    @initial
+    {
+        [max_pool
+            kH{kernel_h}
+            kW{kernel_w}
+            stride{stride}
+        ]'main
+    }
+
+    /* Collect all values in each pooling window */
+    @rules collect_window
+    {
+        [input{c, r_in, c_in, v}, stride{s}]'max_pool ->
+            [window_val{c,
+                        (r_in / s),
+                        (c_in / s),
+                        r_in, c_in, v}]'max_pool
+    }
+
+    /* Compute max across window (iterative maximum) */
+    @rules compute_max
+    {
+        [window_val{c, r_out, c_out, r1, c1, v1},
+         window_val{c, r_out, c_out, r2, c2, v2}]'max_pool ->
+            [window_val{c, r_out, c_out, r1, c1, v1}]'max_pool
+            where v1 >= v2
+        [window_val{c, r_out, c_out, r1, c1, v1},
+         window_val{c, r_out, c_out, r2, c2, v2}]'max_pool ->
+            [window_val{c, r_out, c_out, r2, c2, v2}]'max_pool
+            where v2 > v1
+    }
+
+    /* Emit output and record argmax for backward */
+    @rules emit_max
+    {
+        [window_val{c, r_out, c_out, r_in, c_in, v}]'max_pool ->
+            [output{c, r_out, c_out, v},
+             argmax{c, r_out, c_out, r_in, c_in}]'max_pool
+    }
+
+    /* Backward: route gradient only to argmax position */
+    @rules backward
+    {
+        [grad_out{c, r_out, c_out, g},
+         argmax{c, r_out, c_out, r_in, c_in}]'max_pool ->
+            [grad_in{c, r_in, c_in, g}]'max_pool
+    }
+
+    @rules cleanup
+    {
+        [argmax{c, ro, co, ri, ci}]'max_pool -> []'max_pool
+    }
+}
+
+/* ============================================================================
+ * AVERAGE POOLING 2D
+ * ============================================================================ */
+
+@module avg_pool2d(kernel_h, kernel_w, stride)
+{
+    @initial
+    {
+        [avg_pool
+            kH{kernel_h}
+            kW{kernel_w}
+            stride{stride}
+            pool_area{kernel_h * kernel_w}
+        ]'main
+    }
+
+    @rules collect_and_sum
+    {
+        [input{c, r_in, c_in, v}, stride{s}]'avg_pool ->
+            [window_sum{c, r_in / s, c_in / s, v}]'avg_pool
+        [window_sum{c, r, col, s1}, window_sum{c, r, col, s2}]'avg_pool ->
+            [window_sum{c, r, col, s1 + s2}]'avg_pool
+    }
+
+    @rules emit_avg
+    {
+        [window_sum{c, r, col, s}, pool_area{area}]'avg_pool ->
+            [output{c, r, col, s / area}]'avg_pool
+    }
+
+    /* Backward: distribute gradient uniformly */
+    @rules backward
+    {
+        [grad_out{c, r_out, c_out, g}, pool_area{area}]'avg_pool ->
+            [grad_in_partial{c, r_out, c_out, g / area}]'avg_pool
+    }
+
+    /* Broadcast to original positions */
+    @rules broadcast_grad
+    {
+        [grad_in_partial{c, r_out, c_out, g}, stride{s},
+         kH{kh}, kW{kw}]'avg_pool ->
+            for (kr = 0; kr < kh; kr++)
+            {
+                for (kc = 0; kc < kw; kc++)
+                {
+                    [grad_in{c, r_out * s + kr, c_out * s + kc, g}]'avg_pool
+                }
+            }
+    }
+}
+
+/* ============================================================================
+ * GLOBAL AVERAGE POOLING
+ * Reduces each spatial feature map to a scalar: mean over all (r, c).
+ * ============================================================================ */
+
+@module global_avg_pool
+{
+    @initial
+    {
+        [gap]'main
+    }
+
+    @rules collect_and_sum
+    {
+        [input{c, r, col, v}, channel_sum{c, s}, channel_count{c, n}]'gap ->
+            [channel_sum{c, s + v}, channel_count{c, n + 1}]'gap
+        [input{c, r, col, v}]'gap ->
+            [channel_sum{c, v}, channel_count{c, 1}]'gap
+            where not_exists channel_sum{c}
+    }
+
+    @rules emit_avg
+    {
+        [channel_sum{c, s}, channel_count{c, n}]'gap ->
+            [output{c, 1, 1, s / n}]'gap
+    }
+
+    @rules cleanup
+    {
+        [channel_sum{c, s}]'gap    -> []'gap
+        [channel_count{c, n}]'gap  -> []'gap
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE: LeNet-5 style CNN
+ * Input: 1×32×32 grayscale
+ * Architecture:
+ *   Conv(1,6,5,5) -> AvgPool(2,2) -> Conv(6,16,5,5) -> AvgPool(2,2)
+ *   -> Flatten -> Linear(400,120) -> Linear(120,84) -> Linear(84,10)
+ * ============================================================================ */
+
+@model lenet5
+{
+    @membrane_structure
+    {
+        [main
+            [c1   conv2d(1, 6, 5, 5, 1, 0)]'main
+            [a1   tanh_activation]'main
+            [p1   avg_pool2d(2, 2, 2)]'main
+            [c2   conv2d(6, 16, 5, 5, 1, 0)]'main
+            [a2   tanh_activation]'main
+            [p2   avg_pool2d(2, 2, 2)]'main
+            [fc1  linear_layer(400, 120)]'main
+            [a3   tanh_activation]'main
+            [fc2  linear_layer(120, 84)]'main
+            [a4   tanh_activation]'main
+            [fc3  linear_layer(84, 10)]'main
+            [out  softmax]'main
+        ]
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Convolutional Layers in PLingua"
+    version: "1.0.0"
+    description: "2-D convolutional layers using 2D membrane regions in P-Systems"
+    features: [
+        "Standard Conv2D with forward and backward",
+        "Depthwise separable convolution",
+        "Transposed (upsampling) convolution",
+        "Max Pooling 2D",
+        "Average Pooling 2D",
+        "Global Average Pooling",
+        "LeNet-5 example architecture"
+    ]
+}

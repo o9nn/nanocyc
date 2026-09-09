@@ -1,5 +1,85 @@
 # NanoBrain: Cognitive Architecture Visualization System
 
+## Integrated nn.nn source
+
+The [nn.nn directory](nn.nn/) contains ordinary tracked source from
+[ReZorg/nn.nn](https://github.com/ReZorg/nn.nn), including Torch7 Lua/C modules,
+the standalone pure-Lua a9nn implementation, and Prolog, P-Lingua, Raku, Racket,
+Scheme, and Isabelle/HOL implementations. This is a source import, **not a
+submodule**, and does not connect these implementations to NanoBrain's runtime.
+No frontend dependencies or existing build configurations were changed.
+
+### Provenance and license
+
+- Upstream commit: [`c48e78bd433f354e7c785fceea314f443f67dd77`](https://github.com/ReZorg/nn.nn/commit/c48e78bd433f354e7c785fceea314f443f67dd77).
+- Import date: 2026-09-09.
+- Acquisition: [commit-specific source archive](https://codeload.github.com/ReZorg/nn.nn/tar.gz/c48e78bd433f354e7c785fceea314f443f67dd77),
+  which contains no upstream Git history or `.git` metadata.
+- Downloaded archive SHA-256:
+  `90d54ffddd12b192490145020e9420646b44ece4a08aa63a247e2f73aa8bdd51`.
+- License: BSD three-clause terms in [nn.nn/COPYRIGHT.txt](nn.nn/COPYRIGHT.txt).
+  Original copyright notices and license conditions remain applicable; this
+  import does not relicense the upstream code.
+- Exclusions: upstream repository-specific agent configurations were not
+  imported. All other 464 upstream files are retained unchanged, including
+  documentation, assets, tests, fixtures, and executable permissions.
+- The pinned tree contains no submodules, symlinks, or Git LFS pointers.
+  Its nested workflow is retained for reference only: GitHub Actions does not
+  run workflows under this imported directory. Upstream CI badges describe
+  upstream runs, not validation in NanoBrain.
+
+### Standalone checks and prerequisites
+
+Run the following existing checks from the indicated directories:
+
+```bash
+cd /home/runner/work/nanocyc/nanocyc/nn.nn
+bash lang/c/THNN/check.sh
+bash lang/pli/validate.sh
+
+cd /home/runner/work/nanocyc/nanocyc/nn.nn/lang/a9nn
+lua run_tests.lua
+```
+
+The structural checks require Bash and standard Unix utilities (including
+awk); they do not compile THNN or P-Lingua. The a9nn tests require a Lua
+interpreter, with no Torch dependency; Lua 5.4 was used for import validation.
+Additional language suites and demos are listed in the
+[upstream testing instructions](nn.nn/README.md#continuous-integration--testing).
+They require their respective runtimes: SWI-Prolog, Rakudo, Racket, Guile, or
+Isabelle/HOL. Lua linting uses Luacheck; documentation builds use MkDocs.
+
+The legacy Torch implementation separately requires Torch7/TH, LuaRocks,
+luaffi, moses, a C compiler, Make, and a compatible CMake version. Upstream
+documents `luarocks make rocks/nn-scm-1.rockspec` followed by
+`lua -lnn -e "nn.test()"`, run from
+`/home/runner/work/nanocyc/nanocyc/nn.nn`. The full legacy build was not verified
+in this environment. Use the local rockspec with `luarocks make`, rather than
+fetching the different repository named in its preserved `source.url`.
+Review and provision dependencies separately; no upstream installer or workflow
+is run automatically by this import.
+
+### Updating the imported source
+
+1. Choose an exact upstream commit and acquire its archive in a separate
+   temporary directory; never overwrite the imported directory blindly.
+2. Review license changes, dependencies, install scripts, generated files,
+   secrets, and any new submodules, LFS assets, or symlinks. Materialize required
+   nested source and assets before importing; retain their license notices.
+3. Compare against the recorded snapshot and preserve intentional local
+   changes. Keep the agent-configuration exclusion unless explicitly reviewed.
+   If using a supplied checkout, remove only its Git metadata, never the parent
+   repository's `.git`. Do not introduce gitlinks or submodule configuration.
+4. Import the reviewed files with their permissions, checking that ignore rules
+   have not hidden required source. Keep manifests and language builds local to
+   `/home/runner/work/nanocyc/nanocyc/nn.nn`; do not activate upstream workflows.
+5. Update the commit, date, checksum, exclusions, and validation information
+   above. Run upstream's available tests and NanoBrain's existing frontend
+   checks; compare any failures against the pre-import baseline.
+6. Scan for secrets, review dependency advisories and the diff, and verify that
+   a fresh parent checkout includes all imported files without submodule
+   initialization or access to upstream Git history.
+
 ## 🧠 Engineering Masterpiece of Consciousness Exploration
 
 A revolutionary platform that combines cutting-edge theoretical frameworks to visualize and simulate consciousness emergence through advanced artificial intelligence systems.

@@ -1,0 +1,310 @@
+/*
+ * Neuroevolution via Membrane Division Rules in PLingua
+ * Evolutionary training of neural networks using the native
+ * P-Systems operations:
+ *   - membrane DIVISION  = reproduction (a fit genome membrane
+ *     divides into an elite copy and a mutated offspring)
+ *   - membrane DISSOLUTION = selection death (unfit genomes dissolve)
+ *   - probabilistic evolution rules = mutation
+ *   - antiport communication = crossover between sibling genomes
+ *
+ * Each candidate network is a genome membrane whose gene{k, v}
+ * multiset encodes its weights; NEAT-flavored structural mutations
+ * add/remove edge objects and neuron membranes, tying neuroevolution
+ * to the gnn.pli edge representation for topology evolution.
+ *
+ * Uses the divide/dissolve macros sketched in integration.pli
+ * (plingua_compat) and the random-guard probability convention from
+ * dropout.pli. Numerical convention: values scaled by 100.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * GENOME MEMBRANE
+ * A candidate network: gene{k, v} objects (flattened weights) plus a
+ * fitness{f} object. Encode/decode rules map between a network's
+ * weight objects and the gene multiset.
+ * ============================================================================ */
+
+@module genome_membrane(genome_size)
+{
+    @initial
+    {
+        [genome{1}
+            for (k = 1; k <= genome_size; k++)
+            {
+                gene{k, random(-100, 100)}
+            }
+            fitness{0}
+        ]'main
+    }
+
+    @rules encode
+    {
+        /* Flatten network weights into genes: weight (j -> neuron i)
+         * maps to gene index (i-1)*fan_in + j carried on the object */
+        [weight{i, j, w}, fan_in{n}, do_encode{}]'genome{g} ->
+            [gene{(i-1)*n + j, w}, fan_in{n}]'genome{g}
+    }
+
+    @rules decode
+    {
+        /* Expand genes back into network weights for evaluation */
+        [gene{k, v}, fan_in{n}, do_decode{}]'genome{g} ->
+            [gene{k, v}, fan_in{n},
+             weight{(k-1)/n + 1, (k-1) % n + 1, v}]'genome{g}
+    }
+}
+
+/* ============================================================================
+ * MUTATION
+ * With probability rate (percent), perturb a gene by a uniform draw
+ * in [-magnitude, magnitude] - the random-guard pattern of dropout.pli.
+ * ============================================================================ */
+
+@module mutate(rate, magnitude)
+{
+    @rules point_mutation
+    {
+        /* Mutate: fires with probability rate */
+        [gene{k, v}, mutable{}]'genome{g} ->
+            [gene{k, v + random(-magnitude, magnitude)}, mutable{}]'genome{g}
+            where random(0, 100) < rate
+
+        /* Otherwise the gene is left unchanged */
+        [gene{k, v}, mutable{}]'genome{g} ->
+            [gene{k, v}, mutable{}]'genome{g}
+            where random(0, 100) >= rate
+    }
+
+    @rules finish
+    {
+        [mutable{}]'genome{g} -> []'genome{g} (mutated{g}, out)
+    }
+}
+
+/* ============================================================================
+ * CROSSOVER
+ * Antiport-style exchange between two sibling genome membranes:
+ * genes with index k <= cut stay, genes with k > cut are swapped.
+ * ============================================================================ */
+
+@module crossover(genome_size)
+{
+    @rules one_point
+    {
+        /* Pick a cut point for the mating pair */
+        [pair{g1, g2}]'population ->
+            [pair{g1, g2}, cut{random(1, genome_size)}]'population
+
+        /* Antiport: exchange the tail segments across the two membranes */
+        [gene{k, v1}]'genome{g1} [gene{k, v2}]'genome{g2}
+            (cut{c}, in) ->
+        [gene{k, v2}]'genome{g1} [gene{k, v1}]'genome{g2}
+            where k > c
+
+        [pair{g1, g2}, cut{c}, swap_done{}]'population ->
+            []'population (crossed{g1, g2}, out)
+    }
+}
+
+/* ============================================================================
+ * DIVIDE AND MUTATE - the signature membrane-division rule
+ * A genome whose fitness exceeds the threshold divides into two
+ * daughters: [genome{g}] -> [genome{2g}] [genome{2g+1}]. Daughter 2g
+ * copies the genes verbatim (elitism); daughter 2g+1 receives a
+ * mutable{} token and enters the mutation phase. Genomes below the
+ * threshold dissolve, releasing a died{g} marker to the parent.
+ * ============================================================================ */
+
+@module divide_and_mutate(fitness_threshold)
+{
+    @rules divide
+    {
+        /* Membrane division: reproduction of fit genomes */
+        [fitness{f}]'genome{g} ->
+            [fitness{f}]'genome{2*g} [fitness{f}, mutable{}]'genome{2*g+1}
+            where f >= fitness_threshold
+    }
+
+    @rules dissolve
+    {
+        /* Membrane dissolution: death of unfit genomes; contents are
+         * released to the parent along with a died marker */
+        [fitness{f}]'genome{g} ->
+            died{g}
+            where f < fitness_threshold
+    }
+}
+
+/* ============================================================================
+ * TOURNAMENT SELECTION
+ * Pairwise fitness comparison keeping the max (the reduction idiom of
+ * cmax_table in containers.pli); winners are tagged survive{g}.
+ * ============================================================================ */
+
+@module tournament_selection(pop_size, k)
+{
+    @rules enter_tournament
+    {
+        /* Sample k contenders per tournament round */
+        [fitness{f}]'genome{g} ->
+            [fitness{f}]'genome{g} (contender{g, f}, out)
+            where random(0, pop_size) < k
+    }
+
+    @rules compare
+    {
+        /* Pairwise max: the fitter contender survives the comparison */
+        [contender{g1, f1}, contender{g2, f2}]'population ->
+            [contender{g1, f1}]'population where f1 >= f2
+    }
+
+    @rules declare_winner
+    {
+        [contender{g, f}, round_done{}]'population ->
+            [survive{g}]'population
+    }
+}
+
+/* ============================================================================
+ * NEAT-FLAVORED STRUCTURAL MUTATION
+ * Topology evolution over the gnn.pli edge representation:
+ *   - add_connection: create a new edge{i, j, w} object
+ *   - remove_connection: delete an existing edge
+ *   - add_neuron: split an edge by creating a new neuron membrane
+ *     and rerouting the connection through it
+ * ============================================================================ */
+
+@module structural_mutation(add_conn_rate, del_conn_rate, add_node_rate)
+{
+    @rules add_connection
+    {
+        /* Create a connection between two previously unlinked nodes */
+        [no_edge{i, j}]'genome{g} ->
+            [edge{i, j, random(-100, 100)}]'genome{g}
+            where random(0, 100) < add_conn_rate
+    }
+
+    @rules remove_connection
+    {
+        [edge{i, j, w}]'genome{g} ->
+            [no_edge{i, j}]'genome{g}
+            where random(0, 100) < del_conn_rate
+    }
+
+    @rules add_neuron
+    {
+        /* Split edge (i -> j): membrane creation of a new neuron n
+         * inside the genome; the old edge is replaced by i -> n -> j.
+         * The incoming edge keeps weight 1.0 (100) and the outgoing
+         * edge inherits the old weight, as in NEAT. */
+        [edge{i, j, w}, next_node{n}]'genome{g} ->
+            [[bias{0}]'neuron{n}
+             edge{i, n, 100}, edge{n, j, w}, next_node{n+1}]'genome{g}
+            where random(0, 100) < add_node_rate
+    }
+}
+
+/* ============================================================================
+ * NEUROEVOLUTION LOOP
+ * Orchestrator membrane cycling evaluate -> select -> divide/mutate
+ * phases with a generation counter and phase tokens (the phase-token
+ * pattern used by simulation_harness in integration.pli).
+ * ============================================================================ */
+
+@module neuroevolution_loop(pop_size, generations, mutation_rate)
+{
+    @initial
+    {
+        [population
+            generation{1}
+            phase{evaluate}
+            for (g = 1; g <= pop_size; g++)
+            {
+                [genome{g}
+                    fitness{0}
+                ]'population
+            }
+        ]'main
+    }
+
+    @rules evaluate_phase
+    {
+        /* Decode each genome into a network and measure its loss;
+         * fitness = -loss (higher is better, x100 scaled) */
+        [phase{evaluate}]'population ->
+            [phase{evaluate}, do_decode{}]'genome{g}
+
+        [loss{l}]'genome{g} ->
+            [fitness{-l}]'genome{g}
+
+        [phase{evaluate}, all_evaluated{}]'population ->
+            [phase{select}]'population
+    }
+
+    @rules select_phase
+    {
+        /* Tournament selection tags survivors; the rest dissolve */
+        [phase{select}]'population ->
+            [phase{select}, run_tournament{}]'population
+
+        [survive{g}, phase{select}]'population ->
+            [phase{select}, keep{g}]'population
+
+        [phase{select}, all_selected{}]'population ->
+            [phase{reproduce}]'population
+    }
+
+    @rules reproduce_phase
+    {
+        /* Survivors divide (elite + mutable offspring), then the
+         * offspring mutate with mutation_rate */
+        [keep{g}, phase{reproduce}]'population ->
+            [phase{reproduce}, do_divide{g}]'population
+
+        [mutated{g}, phase{reproduce}]'population ->
+            [phase{reproduce}]'population
+
+        [phase{reproduce}, all_reproduced{}]'population ->
+            [phase{advance}]'population
+    }
+
+    @rules advance_generation
+    {
+        [phase{advance}, generation{gen}]'population ->
+            [phase{evaluate}, generation{gen+1}]'population
+            where gen < generations
+
+        /* Termination: emit the champion genome */
+        [phase{advance}, generation{gen}]'population ->
+            [phase{done}, generation{gen}]'population
+            where gen >= generations
+
+        [phase{done}, fitness{f}]'genome{g} ->
+            []'genome{g} (champion{g, f}, out)
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Neuroevolution via Membrane Division in PLingua"
+    version: "1.0.0"
+    description: "Genome membranes, mutation, crossover, division-based reproduction, tournament selection, NEAT-style topology evolution"
+    depends: ["nn.pli", "integration.pli", "gnn.pli"]
+
+    modules: [
+        "genome_membrane(genome_size)",
+        "mutate(rate, magnitude)",
+        "crossover(genome_size)",
+        "divide_and_mutate(fitness_threshold)",
+        "tournament_selection(pop_size, k)",
+        "structural_mutation(add_conn_rate, del_conn_rate, add_node_rate)",
+        "neuroevolution_loop(pop_size, generations, mutation_rate)"
+    ]
+}

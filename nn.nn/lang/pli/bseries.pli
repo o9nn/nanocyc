@@ -1,0 +1,184 @@
+/*
+ * bseries.pli - P-Systems <-> B-Series Bridge (shared topology / orbifold)
+ *
+ * The capstone of the topology work: a rooted tree (the elementary
+ * differential of a B-series / Runge-Kutta method) and a membrane nest are
+ * THE SAME combinatorial object -- both are nested parentheses, i.e. ordered
+ * rooted trees.  This module plants each rooted tree in its corresponding
+ * membrane nest and threads every branch through its complementary bounded
+ * nest so the two share all distinct interfaces.  The result runs P-System
+ * evolution and B-series gradient descent in the SAME maximally-parallel
+ * transition, uniting the two principal adaptation techniques of ML:
+ *
+ *   - P-System evolution        (discrete, symbolic, membrane rewriting)
+ *   - B-series gradient descent (continuous, numeric, ODE-continuum flow)
+ *
+ * B-series background (Butcher): the solution of  y' = f(y)  expands as
+ *   y(h) = y0 + h * sum_t  b(t)/sigma(t) * F(t)(y0)
+ * over rooted trees t, where F(t) is the elementary differential, sigma(t)
+ * the symmetry (order of the tree's automorphism group), and the b(t) are the
+ * method's weights.  A Runge-Kutta method has  b(t) = Phi(t)/gamma(t),  with
+ * gamma(t) the tree DENSITY (the generalised factorial).  Because the trees
+ * are indexed by Matula numbers (prime factorisation of the nest), every
+ * elementary differential -- and every "j-surface" of the gradient basis --
+ * has an exact INTEGER expression.  Order conditions are finite sums over
+ * trees of order <= p:  order 1: sum b(t)=1;  order 2: sum b(t)*c(t)=1/2;
+ * order 3 adds sum b(t)*c(t)^2=1/3 and sum b(t)*a(t)=1/6.
+ *
+ * The ORBIFOLD: two trees related by a permutation of children are the same
+ * point of the symmetric quotient; the canonical representative is the one
+ * with minimal Matula number.  Selection on this quotient -- picking the
+ * fittest canonical root -- is "natural selection as ROOT selection": the
+ * partition function over the free hyper-multiset of trees chooses the root
+ * of the next developmental step.
+ *
+ * Numerical convention: Matula numbers, orders, densities and symmetries are
+ * exact integers; B-series weights are rationals num/den carried as integer
+ * pairs (no float drift); continuous learning rates are scaled x100.
+ */
+
+@model<membrane_computing>
+
+@import "topology.pli"        /* matula_index, elementary_differentials */
+@import "backpropagation.pli" /* grad{}, weight{} idiom                 */
+@import "integration.pli"
+
+/* ============================================================================
+ * TREE <-> NEST BRIDGE  (shared topology)
+ * Plant a rooted tree in its membrane nest and thread its branches through
+ * the complementary bounded nest.  tree_node{t} pairs with nest{m}; a branch
+ * (edge t -> child c) is threaded so that the tree's branch and the nest's
+ * membrane boundary are one shared interface.
+ * ============================================================================ */
+
+@module tree_nest_bridge
+{
+    @rules plant
+    {
+        /* A rooted tree with Matula number m plants into nest m. */
+        [tree{t}, matula{t, m}]'bridge ->
+            [tree{t}, matula{t, m}, planted_in{m}]'bridge
+
+        /* Threading: a tree branch to child c shares the interface with the
+         * child nest m_c.  The branch and the boundary coincide. */
+        [branch{t, c}, matula{c, mc}]'bridge ->
+            [branch{t, c}, shared_interface{t, c, mc}]'bridge
+    }
+}
+
+/* ============================================================================
+ * ELEMENTARY WEIGHTS  (tree invariants -> B-series coefficient)
+ * order{t, r}    -- number of nodes (order of the differential)
+ * density{t, g}  -- gamma(t): the tree factorial (product of subtree sizes)
+ * symmetry{t, s} -- sigma(t): order of the automorphism group
+ * The RK weight is b(t) = 1 / (sigma(t) * gamma(t)); carried as the integer
+ * pair (1, s*g) so the basis is exact.
+ * ============================================================================ */
+
+@module elementary_weights
+{
+    @rules invariants
+    {
+        /* Leaf: order 1, density 1, symmetry 1. */
+        [tree{t}, matula{t, 1}]'bridge ->
+            [tree{t}, order{t, 1}, density{t, 1}, symmetry{t, 1}]'bridge
+
+        /* Chain (single child): order r+1; density (r+1)*g_child; symmetry
+         * unchanged (no non-trivial automorphism at a unary root). */
+        [order{c, r}, density{c, g}, symmetry{c, s},
+         parent{t, c}, unary{t}]'bridge ->
+            [order{t, r + 1}, density{t, (r + 1) * g},
+             symmetry{t, s}]'bridge
+
+        /* Product (k identical children of order r, density g, symmetry s):
+         * order k*r + 1;  density (k*r+1) * g^k;  symmetry s^k * k!
+         * (the k! is the orbit of the symmetric group permuting identical
+         * children -- the orbifold factor). */
+        [order{c, r}, density{c, g}, symmetry{c, s},
+         branches{t, c, k}]'bridge ->
+            [order{t, k * r + 1},
+             density{t, (k * r + 1) * (g ^ k)},
+             symmetry{t, (s ^ k) * factorial(k)}]'bridge
+    }
+
+    @rules coefficient
+    {
+        /* b(t) = 1 / (sigma * gamma), carried as (num=1, den=s*g). */
+        [symmetry{t, s}, density{t, g}]'bridge ->
+            [symmetry{t, s}, density{t, g},
+             bcoef{t, 1, s * g}]'bridge
+    }
+}
+
+/* ============================================================================
+ * B-SERIES GRADIENT STEP  (uniting evolution & gradient descent)
+ * A gradient step on the loss is a B-series flow on the ODE continuum: each
+ * parameter w is advanced by the sum over active trees of b(t) * F(t), which
+ * for a plain gradient field reduces to a density-weighted gradient.  Because
+ * the P-System applies the rule to every parameter membrane in parallel, the
+ * whole parameter vector is updated in ONE step -- the membrane evolution IS
+ * the integrator's stage.
+ * ============================================================================ */
+
+@module bseries_gradient_step(learning_rate)
+{
+    @rules step
+    {
+        /* w <- w - lr * b(t) * grad.  b(t) = 1/(s*g) enters as a divisor, so
+         * w <- w - lr * grad / (s * g).  lr is scaled x100. */
+        [weight{j, w}, grad{j, g}, bcoef{t, 1, sg}, lr{learning_rate}]'bridge ->
+            [weight{j, w - round(learning_rate * g / sg)},
+             grad{j, g}]'bridge
+            where sg > 0
+    }
+}
+
+/* ============================================================================
+ * RUNGE-KUTTA ORDER CONDITIONS
+ * Verified as finite sums over the active trees.  bsum accumulates sum b(t);
+ * the order-1 condition is bsum = 1 (exact, as integer pairs summed by
+ * common denominator).  Order 2/3 add the c-weighted sums.
+ * ============================================================================ */
+
+@module rk_order_conditions
+{
+    @rules order1
+    {
+        /* Accumulate sum b(t) = sum 1/(s*g) as a rational pair. */
+        [bsum{n, d}, bcoef{t, 1, sg}]'bridge ->
+            [bsum{n * sg + d, d * sg}]'bridge
+
+        /* Order-1 check: sum b(t) = 1  <=>  n = d after reduction. */
+        [bsum{n, d}]'bridge ->
+            [order1_ok{1}]'bridge
+            where n = d
+    }
+}
+
+/* ============================================================================
+ * ORBIFOLD QUOTIENT  (natural selection as root selection)
+ * Trees equivalent under child permutation collapse to one orbifold point;
+ * the canonical representative has the minimal Matula number.  The partition
+ * function over the free hyper-multiset of canonical trees selects the
+ * fittest root for the next developmental step.
+ * ============================================================================ */
+
+@module orbifold_quotient
+{
+    @rules canonify
+    {
+        /* Two trees with equal unordered child-multiset but different orderings
+         * are the same orbifold point: keep the minimal Matula rep. */
+        [matula{t1, m1}, matula{t2, m2}, isomorphic{t1, t2}]'bridge ->
+            [canonical{t1, min(m1, m2)}]'bridge
+    }
+
+    @rules select_root
+    {
+        /* Root selection on the quotient: the fittest canonical tree becomes
+         * the developmental root (see topology.pli partition_selection). */
+        [canonical{t, m}, fit{t, f}]'bridge ->
+            [selected_root{t, m}]'bridge
+            where forall_max fit{t}
+    }
+}

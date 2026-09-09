@@ -1,0 +1,290 @@
+/*
+ * Attention Mechanisms in PLingua
+ * Scaled dot-product attention, multi-head attention, and a minimal
+ * transformer encoder block, built on the softmax, linear and layer_norm
+ * modules of the P-Systems NN library.
+ *
+ * Also demonstrates maximally-parallel batch processing: a batch index b
+ * is carried on every object, so all samples in a batch evolve
+ * concurrently under standard P-Systems maximal parallelism.
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ * Object layout: q{pos, dim, v}, k{pos, dim, v}, v_val{pos, dim, v}
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * SCALED DOT-PRODUCT ATTENTION
+ * Attention(Q, K, V) = softmax(Q*K^T / sqrt(d_k)) * V
+ * ============================================================================ */
+
+@module scaled_dot_product_attention(seq_len, d_k)
+{
+    @rules scores
+    {
+        /* Score s_{i,j} = sum_d q_{i,d} * k_{j,d} / sqrt(d_k) */
+        [q{i, d, qv}, k{j, d, kv}]'attn ->
+            [q{i, d, qv}, k{j, d, kv},
+             score_term{i, j, round(qv*kv/100)}]'attn
+
+        /* Sum terms over the d dimension */
+        [score_term{i, j, t1}, score_term{i, j, t2}]'attn ->
+            [score_term{i, j, t1+t2}]'attn
+
+        /* Scale by 1/sqrt(d_k) */
+        [score_term{i, j, s}, score_done{i, j}]'attn ->
+            [score{i, j, round(s/sqrt(d_k))}]'attn
+    }
+
+    @rules softmax_rows
+    {
+        /* Row-wise max for numerical stability */
+        [score{i, j, s}, row_max{i, m}]'attn ->
+            [score{i, j, s}, row_max{i, max(s, m)}]'attn
+
+        /* Shifted exponentials */
+        [score{i, j, s}, row_max_final{i, m}]'attn ->
+            [exp_score{i, j, exp((s-m)/100)}, row_max_final{i, m}]'attn
+
+        /* Row sums */
+        [exp_score{i, j, e}, row_sum{i, r}]'attn ->
+            [exp_score{i, j, e}, row_sum{i, r+e}]'attn
+
+        /* Attention weights (probabilities scaled by 100) */
+        [exp_score{i, j, e}, row_sum_final{i, r}]'attn ->
+            [attn_weight{i, j, round(100*e/r)}, row_sum_final{i, r}]'attn
+    }
+
+    @rules weighted_values
+    {
+        /* Output o_{i,d} = sum_j attn_weight_{i,j} * v_{j,d} */
+        [attn_weight{i, j, w}, v_val{j, d, vv}]'attn ->
+            [attn_weight{i, j, w}, v_val{j, d, vv},
+             out_term{i, d, round(w*vv/100)}]'attn
+
+        [out_term{i, d, t1}, out_term{i, d, t2}]'attn ->
+            [out_term{i, d, t1+t2}]'attn
+
+        [out_term{i, d, o}, output_ready{i, d}]'attn ->
+            []'attn (attn_output{i, d, o}, out)
+    }
+}
+
+/* ============================================================================
+ * MULTI-HEAD ATTENTION
+ * Splits the model dimension across num_heads parallel attention
+ * membranes, then concatenates and projects head outputs.
+ * Each head is a submembrane - P-Systems runs heads truly in parallel.
+ * ============================================================================ */
+
+@module multi_head_attention(seq_len, d_model, num_heads)
+{
+    @initial
+    {
+        [mha
+            head_dim{d_model / num_heads}
+
+            /* One attention membrane per head */
+            for (h = 1; h <= num_heads; h++)
+            {
+                [head{h}
+                    scaled_dot_product_attention(seq_len, d_model / num_heads)
+
+                    /* Per-head projection weights: W_q, W_k, W_v */
+                    for (d1 = 1; d1 <= d_model; d1++)
+                    {
+                        for (d2 = 1; d2 <= d_model / num_heads; d2++)
+                        {
+                            wq{d1, d2, random(-50, 50)}
+                            wk{d1, d2, random(-50, 50)}
+                            wv{d1, d2, random(-50, 50)}
+                        }
+                    }
+                ]'mha
+            }
+
+            /* Output projection W_o */
+            for (d1 = 1; d1 <= d_model; d1++)
+            {
+                for (d2 = 1; d2 <= d_model; d2++)
+                {
+                    wo{d1, d2, random(-50, 50)}
+                }
+            }
+        ]'main
+    }
+
+    @rules project_inputs
+    {
+        /* Broadcast input embeddings to all heads and project:
+         * q_{p,d2} = sum_d1 x_{p,d1} * wq_{d1,d2} */
+        [x{p, d1, xv}, wq{d1, d2, w}]'head{h} ->
+            [x{p, d1, xv}, wq{d1, d2, w},
+             q_term{p, d2, round(xv*w/100)}]'head{h}
+
+        [q_term{p, d2, t1}, q_term{p, d2, t2}]'head{h} ->
+            [q_term{p, d2, t1+t2}]'head{h}
+
+        [q_term{p, d2, s}, q_done{p, d2}]'head{h} ->
+            [q{p, d2, s}]'head{h}
+
+        /* Analogous rules produce k{p,d2} via wk and v_val{p,d2} via wv */
+        [x{p, d1, xv}, wk{d1, d2, w}]'head{h} ->
+            [x{p, d1, xv}, wk{d1, d2, w},
+             k_term{p, d2, round(xv*w/100)}]'head{h}
+
+        [k_term{p, d2, t1}, k_term{p, d2, t2}]'head{h} ->
+            [k_term{p, d2, t1+t2}]'head{h}
+
+        [k_term{p, d2, s}, k_done{p, d2}]'head{h} ->
+            [k{p, d2, s}]'head{h}
+
+        [x{p, d1, xv}, wv{d1, d2, w}]'head{h} ->
+            [x{p, d1, xv}, wv{d1, d2, w},
+             v_term{p, d2, round(xv*w/100)}]'head{h}
+
+        [v_term{p, d2, t1}, v_term{p, d2, t2}]'head{h} ->
+            [v_term{p, d2, t1+t2}]'head{h}
+
+        [v_term{p, d2, s}, v_done{p, d2}]'head{h} ->
+            [v_val{p, d2, s}]'head{h}
+    }
+
+    @rules concat_heads
+    {
+        /* Head h output dim d maps to concatenated dim (h-1)*head_dim + d */
+        [attn_output{p, d, o}]'head{h} ->
+            []'head{h} (head_out{p, (h-1)*(d_model/num_heads) + d, o}, out)
+    }
+
+    @rules output_projection
+    {
+        /* Final projection: y_{p,d2} = sum_d1 head_out_{p,d1} * wo_{d1,d2} */
+        [head_out{p, d1, o}, wo{d1, d2, w}]'mha ->
+            [head_out{p, d1, o}, wo{d1, d2, w},
+             y_term{p, d2, round(o*w/100)}]'mha
+
+        [y_term{p, d2, t1}, y_term{p, d2, t2}]'mha ->
+            [y_term{p, d2, t1+t2}]'mha
+
+        [y_term{p, d2, s}, y_done{p, d2}]'mha ->
+            []'mha (output{p, d2, s}, out)
+    }
+}
+
+/* ============================================================================
+ * TRANSFORMER ENCODER BLOCK
+ * x -> LayerNorm(x + MultiHeadAttention(x))
+ *   -> LayerNorm( . + FeedForward( . ))
+ * Reuses layer_norm from batch_normalization.pli and linear layers.
+ * ============================================================================ */
+
+@module transformer_encoder_block(seq_len, d_model, num_heads, d_ff)
+{
+    @initial
+    {
+        [encoder
+            [attention  multi_head_attention(seq_len, d_model, num_heads)]'encoder
+            [norm1      layer_norm(d_model, 1)]'encoder
+            [ff1        linear_layer(d_model, d_ff)]'encoder
+            [ff_act     relu_activation]'encoder
+            [ff2        linear_layer(d_ff, d_model)]'encoder
+            [norm2      layer_norm(d_model, 1)]'encoder
+        ]'main
+    }
+
+    @rules residual_1
+    {
+        /* Residual add: attention output + original input, per position */
+        [output{p, d, a}]'attention ->
+            []'attention (attn_out{p, d, a}, out)
+
+        [attn_out{p, d, a}, x_saved{p, d, xv}]'encoder ->
+            [input{p, d, a + xv}]'norm1
+    }
+
+    @rules feed_forward
+    {
+        /* Norm1 output feeds the position-wise feed-forward network */
+        [output{p, d, n}]'norm1 ->
+            [input{d, n}, position{p}]'ff1
+
+        [output{j, v}]'ff1 -> [x{v}, position{p}]'ff_act
+        [relu{v}]'ff_act   -> [input{j, v}, position{p}]'ff2
+    }
+
+    @rules residual_2
+    {
+        /* Second residual: ff output + norm1 output */
+        [output{d, f}, position{p}]'ff2 ->
+            []'ff2 (ff_out{p, d, f}, out)
+
+        [ff_out{p, d, f}, norm1_saved{p, d, n}]'encoder ->
+            [input{p, d, f + n}]'norm2
+
+        /* Final block output */
+        [output{p, d, y}]'norm2 ->
+            []'norm2 (output{p, d, y}, out)
+    }
+}
+
+/* ============================================================================
+ * MAXIMALLY-PARALLEL BATCH PROCESSING
+ * A batch dimension b is prefixed to every data object; because P-Systems
+ * rules fire maximally in parallel, all samples in the batch evolve in
+ * the same computation step - batching is native, not simulated.
+ * ============================================================================ */
+
+@module batch_processor(batch_size)
+{
+    @rules scatter
+    {
+        /* Wrap per-sample inputs with the batch index */
+        [sample{b, j, v}]'batch ->
+            [input{b, j, v}]'batch where b <= batch_size
+    }
+
+    @rules parallel_forward
+    {
+        /* Example batched linear rule: every (b, i, j) combination
+         * fires concurrently in one maximally-parallel step */
+        [input{b, j, v}, weight{j, w}]'neuron{i} ->
+            [sum{b, i, round(v*w/100)}, weight{j, w}]'neuron{i}
+
+        [sum{b, i, s1}, sum{b, i, s2}]'neuron{i} ->
+            [sum{b, i, s1+s2}]'neuron{i}
+
+        [sum{b, i, s}, bias{a}]'neuron{i} ->
+            [bias{a}]'neuron{i} (output{b, i, s+a}, out)
+    }
+
+    @rules gather
+    {
+        /* Average gradients across the batch before the weight update */
+        [grad{b1, j, g1}, grad{b2, j, g2}]'batch ->
+            [grad{b1, j, g1+g2}]'batch where b1 < b2
+
+        [grad{b, j, g}, batch_reduced{j}]'batch ->
+            []'batch (mean_grad{j, round(g/batch_size)}, out)
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Attention Mechanisms in PLingua"
+    version: "1.0.0"
+    description: "Scaled dot-product / multi-head attention, transformer encoder, batching"
+    depends: ["nn.pli", "batch_normalization.pli"]
+
+    modules: [
+        "scaled_dot_product_attention(seq_len, d_k)",
+        "multi_head_attention(seq_len, d_model, num_heads)",
+        "transformer_encoder_block(seq_len, d_model, num_heads, d_ff)",
+        "batch_processor(batch_size)"
+    ]
+}

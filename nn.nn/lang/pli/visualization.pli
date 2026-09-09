@@ -1,0 +1,573 @@
+/*
+ * Membrane Evolution Visualization in PLingua
+ * P-Systems membrane computing implementation for visualizing the evolution
+ * of membrane structures as neural network training progresses.
+ *
+ * Visualization outputs:
+ *   1. Membrane topology snapshots  (ASCII tree / DOT format)
+ *   2. Object multiset histograms   (weight distributions per layer)
+ *   3. Activation heat-maps         (encoded as gradient objects)
+ *   4. Gradient flow diagrams       (per-step communication trace)
+ *   5. Training curve logging       (loss and metric objects over time)
+ *   6. Rule firing trace            (which rules executed each step)
+ *   7. Membrane dissolution / creation events
+ *   8. Interactive query module     (inspect any object at runtime)
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * EVENT LOGGING SUBSYSTEM
+ * Every membrane emits tagged event objects consumed by the logger.
+ * ============================================================================ */
+
+@module event_logger
+{
+    @initial
+    {
+        [logger
+            step{0}
+        ]'main
+    }
+
+    /* Increment global step counter */
+    @rules increment_step
+    {
+        [step{s}]'logger -> [step{s + 1}]'logger
+    }
+
+    /* Generic event: (type, layer, value, step) */
+    @rules log_event
+    {
+        [event{type, layer, value}, step{s}]'logger ->
+            [log_entry{s, type, layer, value}]'logger
+    }
+
+    /* Structured log output: emit to outer environment */
+    @rules emit_log
+    {
+        [log_entry{s, type, layer, value}]'logger ->
+            []'logger (log{s, type, layer, value}, out)
+    }
+}
+
+/* ============================================================================
+ * MEMBRANE TOPOLOGY PRINTER
+ * Traverses the membrane hierarchy and emits topology{depth, id, parent}
+ * objects that can be rendered as a tree or DOT graph.
+ * ============================================================================ */
+
+@module topology_printer
+{
+    @initial
+    {
+        [topo
+            root_id{main}
+            print_trigger{0}
+        ]'main
+    }
+
+    /* Trigger a topology snapshot */
+    @rules trigger_snapshot
+    {
+        [print_trigger{t}]'topo ->
+            [snapshot{t}]'topo
+    }
+
+    /* Emit membrane node for each known membrane */
+    @rules emit_nodes
+    {
+        [snapshot{t}, membrane_id{id, parent, depth}]'topo ->
+            []'topo (topo_node{t, id, parent, depth}, out)
+    }
+
+    /* Emit in DOT format via placeholder rule */
+    @rules emit_dot_header
+    {
+        [snapshot{t}]'topo ->
+            []'topo (dot_open{t, "digraph NN {"}, out)
+    }
+
+    @rules emit_dot_edge
+    {
+        [topo_node{t, id, parent, depth}]'topo ->
+            []'topo (dot_edge{t, parent, id, depth}, out)
+    }
+
+    @rules emit_dot_footer
+    {
+        [snapshot{t}]'topo ->
+            []'topo (dot_close{t, "}"}, out)
+    }
+
+    /* Register a membrane in the topology */
+    @rules register_membrane
+    {
+        [new_membrane{id, parent, depth}]'topo ->
+            [membrane_id{id, parent, depth}]'topo
+    }
+}
+
+/* ============================================================================
+ * WEIGHT DISTRIBUTION VISUALIZER
+ * Computes histogram of weight values per layer and emits bin counts.
+ * ============================================================================ */
+
+@module weight_histogram(num_bins, value_min, value_max)
+{
+    @initial
+    {
+        [whist
+            bins{num_bins}
+            vmin{value_min}
+            vmax{value_max}
+            bin_width{(value_max - value_min) / num_bins}
+        ]'main
+    }
+
+    /* Assign each weight to a histogram bin */
+    @rules bin_weight
+    {
+        [weight{layer, j, w}, vmin{lo}, bin_width{bw}, bins{nb}]'whist ->
+            [bin_count{layer,
+                       min(nb - 1, max(0, floor((w - lo) / bw))),
+                       1}]'whist
+    }
+
+    /* Aggregate bin counts */
+    @rules aggregate_bins
+    {
+        [bin_count{layer, b, c1}, bin_count{layer, b, c2}]'whist ->
+            [bin_count{layer, b, c1 + c2}]'whist
+    }
+
+    /* Emit histogram for rendering */
+    @rules emit_histogram
+    {
+        [bin_count{layer, b, c}, vmin{lo}, bin_width{bw}]'whist ->
+            []'whist (hist_bin{layer, b, lo + b * bw, lo + (b+1) * bw, c}, out)
+    }
+}
+
+/* ============================================================================
+ * ACTIVATION HEATMAP
+ * Records activations{layer, neuron, value} at each time step and
+ * emits a heat-map suitable for external rendering.
+ * Activations are bucketed into intensity levels 0-9.
+ * ============================================================================ */
+
+@module activation_heatmap(num_layers, neurons_per_layer)
+{
+    @initial
+    {
+        [ahmap
+            timestep{0}
+        ]'main
+    }
+
+    /* Record activation at current timestep */
+    @rules record_activation
+    {
+        [activation{layer, neuron, v}, timestep{t}]'ahmap ->
+            [act_record{t, layer, neuron, v}]'ahmap
+    }
+
+    /* Quantise to intensity 0-9 */
+    @rules quantise
+    {
+        [act_record{t, layer, neuron, v}]'ahmap ->
+            [heat_pixel{t, layer, neuron,
+                        min(9, max(0, floor((v + 1000) * 10 / 2000)))}]'ahmap
+    }
+
+    /* Emit heatmap row per layer */
+    @rules emit_row
+    {
+        [heat_pixel{t, layer, neuron, intensity}]'ahmap ->
+            []'ahmap (heatmap_pixel{t, layer, neuron, intensity}, out)
+    }
+
+    @rules advance_timestep
+    {
+        [timestep{t}]'ahmap -> [timestep{t + 1}]'ahmap
+    }
+}
+
+/* ============================================================================
+ * GRADIENT FLOW DIAGRAM
+ * Traces gradient magnitudes flowing backward through each layer.
+ * Produces gradient_flow{step, layer, mean_abs_grad} objects.
+ * ============================================================================ */
+
+@module gradient_flow_trace
+{
+    @initial
+    {
+        [gflow
+            step{0}
+        ]'main
+    }
+
+    /* Collect |grad| per layer */
+    @rules collect_grad_magnitude
+    {
+        [grad{layer, j, g}, grad_abs_sum{layer, s}, grad_count{layer, n}]'gflow ->
+            [grad_abs_sum{layer, s + abs(g)},
+             grad_count{layer, n + 1}]'gflow
+
+        [grad{layer, j, g}]'gflow ->
+            [grad_abs_sum{layer, abs(g)},
+             grad_count{layer, 1}]'gflow
+            where not_exists grad_abs_sum{layer}
+    }
+
+    /* Compute mean and emit */
+    @rules emit_flow
+    {
+        [grad_abs_sum{layer, s}, grad_count{layer, n}, step{t}]'gflow ->
+            []'gflow (gradient_flow{t, layer, s / n}, out)
+    }
+
+    /* ASCII bar-chart encoding (width proportional to log magnitude).
+     * MAX_BAR_LEN=10: the bar string contains exactly 10 '|' characters and
+     * the slice upper-bound is clamped to the same value so they stay in sync.
+     * log(mean_g + 1) * 2 maps gradient magnitudes to a 0-10 bar width.
+     */
+    @define MAX_BAR_LEN = 10
+    @define BAR_CHARS   = "||||||||||"   /* length must equal MAX_BAR_LEN */
+
+    @rules encode_bar
+    {
+        [gradient_flow_bar{t, layer, mean_g}]'gflow ->
+            []'gflow (bar_chart{t, layer,
+                                BAR_CHARS[0 : min(MAX_BAR_LEN,
+                                                  floor(log(mean_g + 1) * 2))]},
+                      out)
+    }
+
+    @rules cleanup
+    {
+        [grad_abs_sum{layer, s}]'gflow  -> []'gflow
+        [grad_count{layer, n}]'gflow    -> []'gflow
+    }
+
+    @rules advance_step
+    {
+        [step{s}]'gflow -> [step{s + 1}]'gflow
+    }
+}
+
+/* ============================================================================
+ * TRAINING CURVE LOGGER
+ * Records (epoch, batch, loss, accuracy) tuples.
+ * Computes moving average for smoother visualization.
+ * ============================================================================ */
+
+@module training_curve_logger(window_size)
+{
+    @initial
+    {
+        [tclog
+            window{window_size}
+            epoch{0}
+            batch{0}
+            loss_buffer_size{0}
+        ]'main
+    }
+
+    /* Log a loss value */
+    @rules log_loss
+    {
+        [new_loss{v}, epoch{e}, batch{b}]'tclog ->
+            [loss_entry{e, b, v}]'tclog
+        [batch{b}]'tclog -> [batch{b + 1}]'tclog
+    }
+
+    /* Compute moving average */
+    @rules moving_average
+    {
+        [loss_entry{e, b, v}, ma_sum{s}, ma_count{n}, window{w}]'tclog ->
+            [ma_sum{s + v}, ma_count{n + 1}]'tclog
+            where n < w
+        [ma_sum{s}, ma_count{n}]'tclog ->
+            [moving_avg{s / n}]'tclog
+    }
+
+    /* Emit training curve point */
+    @rules emit_curve_point
+    {
+        [loss_entry{e, b, v}, moving_avg{ma}]'tclog ->
+            []'tclog (curve_point{e, b, v, ma}, out)
+    }
+
+    /* Log accuracy */
+    @rules log_accuracy
+    {
+        [accuracy{acc}, epoch{e}, batch{b}]'tclog ->
+            []'tclog (acc_point{e, b, acc}, out)
+    }
+
+    /* Epoch boundary */
+    @rules epoch_boundary
+    {
+        [epoch_end{}, epoch{e}]'tclog ->
+            [epoch{e + 1}, batch{0}]'tclog
+    }
+}
+
+/* ============================================================================
+ * RULE FIRING TRACE
+ * Records which rules fired at each computation step.
+ * Useful for debugging P-Systems evolution.
+ * ============================================================================ */
+
+@module rule_trace
+{
+    @initial
+    {
+        [rtrace
+            step{0}
+            trace_enabled{1}
+        ]'main
+    }
+
+    /* Each rule that fires emits a trace event */
+    @rules record_fire
+    {
+        [rule_fired{rule_name, membrane_id}, trace_enabled{1}, step{s}]'rtrace ->
+            [trace_entry{s, rule_name, membrane_id}]'rtrace
+    }
+
+    /* Emit trace entries */
+    @rules emit_trace
+    {
+        [trace_entry{s, rn, mid}]'rtrace ->
+            []'rtrace (rule_event{s, rn, mid}, out)
+    }
+
+    /* Control tracing */
+    @rules enable_trace
+    {
+        [trace_on{}]'rtrace -> [trace_enabled{1}]'rtrace
+    }
+
+    @rules disable_trace
+    {
+        [trace_off{}]'rtrace -> [trace_enabled{0}]'rtrace
+    }
+
+    @rules advance_step
+    {
+        [step{s}]'rtrace -> [step{s + 1}]'rtrace
+    }
+}
+
+/* ============================================================================
+ * MEMBRANE DISSOLUTION/CREATION MONITOR
+ * Fires when membranes are created or dissolved, recording the event.
+ * ============================================================================ */
+
+@module membrane_lifecycle_monitor
+{
+    @initial
+    {
+        [mlmon
+            step{0}
+        ]'main
+    }
+
+    /* Membrane created */
+    @rules on_create
+    {
+        [membrane_created{id, parent}, step{s}]'mlmon ->
+            [step{s}]'mlmon (lifecycle{s, create, id, parent}, out)
+    }
+
+    /* Membrane dissolved */
+    @rules on_dissolve
+    {
+        [membrane_dissolved{id}, step{s}]'mlmon ->
+            [step{s}]'mlmon (lifecycle{s, dissolve, id, none}, out)
+    }
+
+    @rules advance_step
+    {
+        [step{s}]'mlmon -> [step{s + 1}]'mlmon
+    }
+}
+
+/* ============================================================================
+ * INTERACTIVE QUERY MODULE
+ * Allows inspection of any membrane's objects at runtime.
+ * ============================================================================ */
+
+@module membrane_inspector
+{
+    @initial
+    {
+        [inspector]'main
+    }
+
+    /* Query: return all objects of a given type from a target membrane */
+    @rules query_objects
+    {
+        [query{target_membrane, object_type}]'inspector ->
+            []'inspector (query_req{target_membrane, object_type}, out)
+    }
+
+    /* Receive and package query results */
+    @rules package_results
+    {
+        [query_result{target, type, key, value}]'inspector ->
+            []'inspector (inspect{target, type, key, value}, out)
+    }
+
+    /* Dump entire membrane content */
+    @rules dump_membrane
+    {
+        [dump{target}]'inspector ->
+            []'inspector (dump_req{target}, out)
+    }
+
+    /* Pretty-print weight matrix for a layer */
+    @rules print_weights
+    {
+        [print_weights{layer}]'inspector ->
+        {
+            [weight{i, j, w}]'layer ->
+                []'layer (weight_val{layer, i, j, w}, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * ASCII RENDERER
+ * Converts visualization objects into ASCII-art strings for console output.
+ * ============================================================================ */
+
+@module ascii_renderer
+{
+    @initial
+    {
+        [arender]'main
+    }
+
+    /* Render histogram bar */
+    @rules render_hist_bin
+    {
+        [hist_bin{layer, bin, lo, hi, count}]'arender ->
+            []'arender (ascii_line{
+                concat("[", layer, "] bin[",
+                       floor(lo), "..", floor(hi), "]: ",
+                       repeat("#", min(count, 80)))
+            }, out)
+    }
+
+    /* Render loss curve as sparkline */
+    @rules render_sparkline
+    {
+        [curve_point{e, b, loss, ma}]'arender ->
+            []'arender (sparkline_char{e, b,
+                "▁▂▃▄▅▆▇█"[min(7, floor(loss * 8 / 100))]}, out)
+    }
+
+    /* Render gradient flow heatmap row */
+    @rules render_grad_flow
+    {
+        [gradient_flow{t, layer, mean_g}]'arender ->
+            []'arender (ascii_line{
+                concat("step[", t, "] layer[", layer, "]: ",
+                       repeat("|", min(40, floor(log(mean_g + 1) * 5))))
+            }, out)
+    }
+
+    /* Render membrane tree */
+    @rules render_tree_node
+    {
+        [topo_node{t, id, parent, depth}]'arender ->
+            []'arender (ascii_line{
+                concat(repeat("  ", depth), "├── [", id, "]")
+            }, out)
+    }
+}
+
+/* ============================================================================
+ * VISUALIZATION DASHBOARD
+ * Aggregates all visualization modules into a unified dashboard.
+ * ============================================================================ */
+
+@model visualization_dashboard(network)
+{
+    @membrane_structure
+    {
+        [main
+            /* The network being visualized */
+            [net network]'main
+
+            /* Visualization modules */
+            [logger     event_logger]'main
+            [topo       topology_printer]'main
+            [whist      weight_histogram(20, -500, 500)]'main
+            [ahmap      activation_heatmap(4, 64)]'main
+            [gflow      gradient_flow_trace]'main
+            [tclog      training_curve_logger(10)]'main
+            [rtrace     rule_trace]'main
+            [mlmon      membrane_lifecycle_monitor]'main
+            [inspector  membrane_inspector]'main
+            [renderer   ascii_renderer]'main
+        ]
+    }
+
+    /* Wire events from network to visualization modules */
+    @rules forward_events
+    {
+        (activation{layer, neuron, v}, from_net) ->
+            [activation{layer, neuron, v}]'ahmap
+        (grad{layer, j, g}, from_net) ->
+            [grad{layer, j, g}]'gflow
+        (loss{v}, from_net) ->
+            [new_loss{v}]'tclog
+        (weight{layer, j, w}, from_net) ->
+            [weight{layer, j, w}]'whist
+        (rule_fired{rn, mid}, from_net) ->
+            [rule_fired{rn, mid}]'rtrace
+    }
+
+    /* Render outputs */
+    @rules render_outputs
+    {
+        (hist_bin{layer, b, lo, hi, c}, from_whist) ->
+            [hist_bin{layer, b, lo, hi, c}]'renderer
+        (gradient_flow{t, layer, mg}, from_gflow) ->
+            [gradient_flow{t, layer, mg}]'renderer
+        (curve_point{e, b, l, ma}, from_tclog) ->
+            [curve_point{e, b, l, ma}]'renderer
+        (topo_node{t, id, p, d}, from_topo) ->
+            [topo_node{t, id, p, d}]'renderer
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Membrane Evolution Visualization in PLingua"
+    version: "1.0.0"
+    description: "Tools for visualizing P-Systems membrane evolution during NN training"
+    features: [
+        "Membrane topology printer (ASCII tree / DOT graph)",
+        "Weight distribution histograms",
+        "Activation heat-maps",
+        "Gradient flow diagrams",
+        "Training curve logging with moving average",
+        "Rule firing trace",
+        "Membrane lifecycle monitor",
+        "Interactive membrane inspector",
+        "ASCII renderer",
+        "Unified visualization dashboard"
+    ]
+}
