@@ -1,0 +1,371 @@
+/*
+ * a9nn.pli - The NNECCO Cognitive Agent in P-Systems
+ *
+ * A membrane-computing port of lang/a9nn/NNECCOAgent.lua and its supporting
+ * cognitive modules (EchoReservoir, Personality, EpisodicMemory,
+ * LLaMAOrchestrator, CognitiveAgent), layered on the v2.3 atomspace.pli
+ * knowledge base.
+ *
+ * NNECCO = Neural Network Embodied Cognitive Coprocessor Orchestrator.
+ * It fuses deep learning with a cognitive architecture; in this port each
+ * subsystem maps onto a native P-Systems construct:
+ *
+ *   Echo State Reservoir   -> a membrane of leaky-integrator neurons whose
+ *                             recurrent edges are synapse objects; one
+ *                             maximally-parallel step = one reservoir tick.
+ *   EchoBeats (12-step)    -> a program-counter register PC{1..12} gates which
+ *                             rule phase is active, cycling PERCEIVE..INTEGRATE.
+ *   Emotion Processing Unit-> an emotion membrane holding 8 channel objects
+ *                             (curiosity, joy, ...), updated by novelty/reward.
+ *   Consciousness L0-L3    -> a layer register moved by loss-driven rules
+ *                             (meta-cognition, the REFLECT beat).
+ *   Episodic Memory        -> a circular membrane of experience tuples with
+ *                             priority objects (prioritised replay).
+ *   LLaMA Orchestration    -> a pool of 1-9 instance membranes; least-load
+ *                             dispatch is an antiport exchange, and in
+ *                             stub mode each instance echoes its prompt.
+ *   AtomSpace integration  -> the INTEGRATE beat writes an EpisodeNode per
+ *                             cycle into the atomspace.pli hypergraph.
+ *   Hardware registers     -> R0..R4, PC, STA objects in the agent membrane.
+ *
+ * The emergent point: the 12-beat cognitive cycle that Lua runs as a
+ * sequential method call chain becomes, here, a single maximally-parallel
+ * rule system phase-locked by the PC register -- concurrency is the default,
+ * sequencing is the constraint.
+ *
+ * Numerical convention (consistent with nn.pli / atomspace.pli):
+ *   all continuous values are integers scaled by 100. Emotions, trait
+ *   values, STI, Q-values, leak rate and spectral radius are x100.
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+@import "atomspace.pli"
+@import "integration.pli"   /* plingua_compat: antiport, prob_rule macros */
+
+/* ============================================================================
+ * ECHO STATE RESERVOIR
+ * A membrane of N leaky-integrator neurons.  Recurrent connectivity is a set
+ * of synapse{i, j, w} objects; input weights are w_in{d, i}.  Each neuron
+ * holds its activation x{i, v} (x100).  One tick:
+ *   pre(i) = sum_d w_in{d,i}*u{d}  +  sum_j w{j,i}*x{j}
+ *   x'(i)  = (1-a)*x(i) + a*tanh(pre(i))        (leak rate a, x100)
+ * The reservoir is fixed (untrained); only spectral radius scales W_res.
+ * ============================================================================ */
+
+@module echo_reservoir(in_size, reservoir_n, spectral_radius, leak_rate)
+{
+    @initial
+    {
+        [reservoir
+            rspec{spectral_radius, leak_rate}   /* x100 */
+            for (i = 1; i <= reservoir_n; i++)
+            {
+                x{i, 0}                          /* activation, starts at 0 */
+            }
+            /* Sparse recurrent weights: ~15% dense, in [-100,100], then
+             * scaled so the spectral radius hits the target. */
+            for (i = 1; i <= reservoir_n; i++)
+            {
+                for (j = 1; j <= reservoir_n; j++)
+                {
+                    synapse{i, j, random(-100, 100)}
+                        where random(0, 100) > 85
+                }
+            }
+            /* Input weights */
+            for (d = 1; d <= in_size; d++)
+            {
+                for (i = 1; i <= reservoir_n; i++)
+                {
+                    w_in{d, i, random(-100, 100)}
+                }
+            }
+        ]'agent
+    }
+
+    /* RESONATE beat: one reservoir tick, gated by PC = 3. */
+    @rules resonate
+    {
+        /* Leaky integrate-and-activate per neuron (maximally parallel). */
+        [pc{3}, x{i, xi}, pre{i, p}, rspec{sr, a}]'reservoir ->
+            [pc{3}, x{i, round((100-a)*xi/100 + a*tanh_scaled(p)/100)},
+             rspec{sr, a}]'reservoir
+
+        /* Advance the beat when the tick completes. */
+        [pc{3}]'reservoir -> [pc{4}]'reservoir
+    }
+}
+
+/* ============================================================================
+ * EMOTION PROCESSING UNIT
+ * Eight channels matching a9nn EMOTIONS:
+ *   1 curiosity 2 joy 3 surprise 4 fear 5 disgust 6 anger 7 sadness 8 antici.
+ * Each emo{k, v} with v in [0,100].  EMOTE beat (PC=7) updates from the
+ * novelty and reward signals produced earlier in the cycle.
+ * ============================================================================ */
+
+@module emotion_unit
+{
+    @initial
+    {
+        [emotions
+            emo{1, 60}   /* start with mild curiosity, like the Lua agent */
+            emo{2, 0}
+            emo{3, 0}
+            emo{4, 0}
+            emo{5, 0}
+            emo{6, 0}
+            emo{7, 0}
+            emo{8, 0}
+        ]'agent
+    }
+
+    @rules emote
+    {
+        /* Curiosity: decays 5%, rises with novelty.
+         * c' = min(100, max(0, c*95/100 + |novelty|*5/100)) */
+        [pc{7}, emo{1, c}, novelty{nov}]'agent ->
+            [pc{7}, emo{1, min(100, max(0, c*95/100 + abs(nov)*5/100))},
+             novelty{nov}]'agent
+
+        /* Joy: decays 10%, rises with positive reward.
+         * j' = min(100, max(0, j*90/100 + max(0,r)*10/100)) */
+        [pc{7}, emo{2, j}, reward{r}]'agent ->
+            [pc{7}, emo{2, min(100, max(0, j*90/100 + max(0, r)*10/100))},
+             reward{r}]'agent
+
+        /* Surprise: s' = min(100, max(0, |novelty|*50/100)) */
+        [pc{7}, emo{3, s}, novelty{nov}]'agent ->
+            [pc{7}, emo{3, min(100, max(0, abs(nov)*50/100))},
+             novelty{nov}]'agent
+
+        /* Snapshot the emotion vector into register R3, then advance. */
+        [pc{7}]'agent -> [pc{8}]'agent
+    }
+}
+
+/* ============================================================================
+ * CONSCIOUSNESS LAYERS (meta-cognition)
+ *   0 DORMANT  1 REACTIVE  2 DELIBERATE  3 META
+ * REFLECT beat (PC=10) moves the layer based on the cycle's loss:
+ *   loss > 50        -> more deliberation (layer+1, cap 3)
+ *   0 < loss < 1     -> settle toward reactive (layer-1, floor 1)
+ * Mirrors NNECCOAgent:_beat_REFLECT.
+ * ============================================================================ */
+
+@module consciousness(layer0)
+{
+    @initial
+    {
+        [metacog layer{layer0}]'agent
+    }
+
+    @rules reflect
+    {
+        [pc{10}, layer{l}, loss{lo}]'agent ->
+            [pc{10}, layer{min(3, l + 1)}, loss{lo}]'agent
+            where lo > 50
+
+        [pc{10}, layer{l}, loss{lo}]'agent ->
+            [pc{10}, layer{max(1, l - 1)}, loss{lo}]'agent
+            where lo > 0 and lo < 1
+
+        [pc{10}]'agent -> [pc{11}]'agent
+    }
+}
+
+/* ============================================================================
+ * EPISODIC MEMORY (prioritised experience replay)
+ * A circular membrane of exp{idx, state, action, reward, next, done} tuples
+ * plus prio{idx, p} objects.  push writes at head and advances it modulo
+ * capacity; RECALL (PC=5) retrieves the highest-priority experiences.
+ * ============================================================================ */
+
+@module episodic_memory(capacity)
+{
+    @initial
+    {
+        [memory
+            memcfg{capacity}
+            head{1}
+            memcount{0}
+            maxprio{100}
+        ]'agent
+    }
+
+    @rules push
+    {
+        /* Store an experience at the head slot with a priority. */
+        [store_exp{state, action, reward, next, done}, head{h},
+         memcount{n}, memcount{cap}]'memory ->
+            [exp{h, state, action, reward, next, done},
+             prio{h, 100},
+             head{(h mod cap) + 1},
+             memcount{min(n + 1, cap)}]'memory
+    }
+
+    @rules recall
+    {
+        /* RECALL beat: flag the top experiences by priority as recalled{}. */
+        [pc{5}, prio{i, p}]'memory ->
+            [pc{5}, prio{i, p}, recalled{i}]'memory
+            where p >= 100
+
+        [pc{5}]'memory -> [pc{6}]'memory
+    }
+}
+
+/* ============================================================================
+ * LLAMA ORCHESTRATOR (parallel local inference, stub mode)
+ * A pool of num_instances instance membranes, each llama{k} with a load{k,n}
+ * counter.  REASON beat (PC=6) dispatches the prompt to the least-loaded
+ * instance via antiport; in stub mode the instance echoes a canned response
+ * and reports tokens/latency.  Port assignment mirrors the Lua orchestrator:
+ * instance k listens on (base_port + k - 1).
+ * ============================================================================ */
+
+@module llama_pool(num_instances, base_port)
+{
+    @initial
+    {
+        [llamapool
+            poolcfg{num_instances, base_port}
+            for (k = 1; k <= num_instances; k++)
+            {
+                [llama{k}
+                    port{base_port + k - 1}
+                    load{0}
+                    tokens_served{0}
+                ]'llamapool
+            }
+        ]'agent
+    }
+
+    @rules reason
+    {
+        /* Dispatch the prompt to the least-loaded instance: the guard picks
+         * the instance whose load is minimal among the pool. */
+        [pc{6}, prompt{P}]'agent
+        [load{n}]'llama{k} ->
+            [pc{6}, prompt{P}]'agent
+            [load{n + 1}]'llama{k}
+            where forall_min load{k}
+
+        /* Stub-mode completion: echo the prompt, count tokens. */
+        [load{n}, tokens_served{t}]'llama{k} [prompt{P}]'agent ->
+            [load{n - 1}, tokens_served{t + 64}]'llama{k}
+            [llama_resp{P, 64, k}]'agent      /* text, tokens, instance id */
+
+        [pc{6}]'agent -> [pc{7}]'agent
+    }
+}
+
+/* ============================================================================
+ * PLAN BEAT (action selection)
+ * Emotion-modulated context feeds a policy that emits one q{a, v} per
+ * action; the beat selects argmax_a v (greedy when not training).
+ * ============================================================================ */
+
+@module planner(action_size)
+{
+    @rules plan
+    {
+        /* Combine encoded context + emotion vector, then score actions. */
+        [pc{8}, r2{c}, emo{1, cur}]'agent ->
+            [pc{8}, q{a, round((c + cur) * a / 100)}]'agent
+            for (a = 1; a <= action_size; a++)
+
+        /* Greedy argmax over q-values. */
+        [pc{8}, q{a, v}]'agent ->
+            [pc{8}, best_action{a}]'agent
+            where forall_max q{a}
+
+        [pc{8}]'agent -> [pc{9}]'agent
+    }
+}
+
+/* ============================================================================
+ * NNECCO AGENT  (top-level composite)
+ * Wires the subsystems together and runs the 12-beat EchoBeats cycle.
+ * Hardware registers live in the agent membrane:
+ *   R0 input, R1 reservoir state, R2 encoded context, R3 emotions,
+ *   R4 action Q-values, PC program counter, STA status flags.
+ * ============================================================================ */
+
+@model nnecco_agent(state_size, action_size, reservoir_n,
+                    num_llama, base_port, consciousness0)
+{
+    @model<membrane_computing>
+
+    [agent
+        /* Hardware-style virtual registers */
+        reg{r0, 0}
+        reg{r1, 0}
+        reg{r2, 0}
+        reg{r3, 0}
+        reg{r4, 0}
+        pc{1}                 /* EchoBeats program counter: 1..12 */
+        sta{0}                /* status flags */
+        cycle{0}
+
+        layer{consciousness0}
+
+        /* Subsystems */
+        echo_reservoir(state_size, reservoir_n, 90, 70)
+        emotion_unit
+        consciousness(consciousness0)
+        episodic_memory(1000)
+        llama_pool(num_llama, base_port)
+        planner(action_size)
+
+        /* v2.3 knowledge base for the INTEGRATE beat */
+        atomspace_system(50, 10)
+    ]'main
+}
+
+/* ============================================================================
+ * ECHOBEATS CYCLE DRIVER
+ * The 12 phases, gated by the PC register.  Each phase fires its rules then
+ * hands off to the next; INTEGRATE (PC=12) writes an EpisodeNode into the
+ * AtomSpace and resets PC to 1, incrementing the cycle counter.
+ *
+ *   1 PERCEIVE   2 FILTER   3 RESONATE   4 ENCODE
+ *   5 RECALL     6 REASON   7 EMOTE      8 PLAN
+ *   9 LEARN     10 REFLECT 11 EXPRESS   12 INTEGRATE
+ * ============================================================================ */
+
+@module echobeats_driver
+{
+    @rules beat_handoff
+    {
+        /* PERCEIVE -> FILTER */
+        [pc{1}, raw_input{U}]'agent -> [pc{2}, reg{r0, U}]'agent
+
+        /* FILTER -> RESONATE (attenuate sub-threshold features) */
+        [pc{2}, reg{r0, U}]'agent -> [pc{3}, filtered{U}]'agent
+
+        /* RESONATE handled by echo_reservoir (3 -> 4).
+         * ENCODE: compress reservoir state into context register R2. */
+        [pc{4}, reg{r1, S}]'agent -> [pc{5}, reg{r2, S}]'agent
+
+        /* RECALL (5->6), REASON (6->7), EMOTE (7->8), PLAN (8->9)
+         * are advanced by their own modules above. */
+
+        /* LEARN: store the transition, emit a loss estimate. */
+        [pc{9}]'agent -> [pc{10}, loss{0}]'agent
+
+        /* REFLECT (10->11) by consciousness. */
+
+        /* EXPRESS: package the output (LLaMA text if present). */
+        [pc{11}, llama_resp{P, T, K}, best_action{A}]'agent ->
+            [pc{12}, output{P, A}]'agent
+
+        /* INTEGRATE: write an EpisodeNode to the AtomSpace, bump cycle,
+         * and reset PC to 1 for the next EchoBeats cycle. */
+        [pc{12}, cycle{n}, loss{lo}]'agent ->
+            [pc{1}, cycle{n + 1}]'agent
+            (episode_node{n + 1, max(0, 100 - lo)}, out)
+    }
+}

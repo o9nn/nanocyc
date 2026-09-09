@@ -1,0 +1,593 @@
+/*
+ * Recurrent Networks in PLingua
+ * P-Systems membrane computing implementation of recurrent neural networks
+ * using temporal P-Systems (time-step indexed membranes).
+ *
+ * Implemented architectures:
+ *   - Elman RNN (simple/vanilla RNN)
+ *   - Long Short-Term Memory (LSTM)
+ *   - Gated Recurrent Unit (GRU)
+ *   - Bidirectional wrapper
+ *   - Stacked (deep) RNN
+ *
+ * Temporal semantics:
+ *   - Time steps are encoded as objects:  timestep{t}
+ *   - Hidden state h_{t} is passed forward using membrane communication
+ *   - BPTT (Backpropagation Through Time) propagates gradients backward
+ *     through an unrolled membrane chain  h_T -> h_{T-1} -> ... -> h_0
+ *
+ * Fixed-point arithmetic: values are scaled by 1000 internally.
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * ELMAN (VANILLA) RNN
+ *
+ * h_t = tanh(W_h * h_{t-1} + W_x * x_t + b)
+ * y_t = W_y * h_t + b_y
+ * ============================================================================ */
+
+@module elman_rnn(input_size, hidden_size, output_size, seq_len)
+{
+    @initial
+    {
+        [elman
+            input_size{input_size}
+            hidden_size{hidden_size}
+            output_size{output_size}
+            seq_len{seq_len}
+            timestep{1}
+
+            /* Input-to-hidden weights W_x[h, x] */
+            for (h = 1; h <= hidden_size; h++)
+            {
+                for (x = 1; x <= input_size; x++)
+                {
+                    W_x{h, x, random(-100, 100)}
+                }
+            }
+
+            /* Hidden-to-hidden weights W_h[h1, h2] */
+            for (h1 = 1; h1 <= hidden_size; h1++)
+            {
+                for (h2 = 1; h2 <= hidden_size; h2++)
+                {
+                    W_h{h1, h2, random(-100, 100)}
+                }
+                b_h{h1, 0}
+            }
+
+            /* Hidden-to-output weights W_y[o, h] */
+            for (o = 1; o <= output_size; o++)
+            {
+                for (h = 1; h <= hidden_size; h++)
+                {
+                    W_y{o, h, random(-100, 100)}
+                }
+                b_y{o, 0}
+            }
+
+            /* Initial hidden state h_0 = 0 */
+            for (h = 1; h <= hidden_size; h++)
+            {
+                hidden{0, h, 0}
+            }
+        ]'main
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* FORWARD PASS (one time step t)                                          */
+    /* ----------------------------------------------------------------------- */
+
+    /* Compute W_x * x_t  (input contribution) */
+    @rules forward_input
+    {
+        [input{t, x, v}, W_x{h, x, w}, timestep{t}]'elman ->
+            [pre_act_x{t, h, v * w}]'elman
+        [pre_act_x{t, h, s1}, pre_act_x{t, h, s2}]'elman ->
+            [pre_act_x{t, h, s1 + s2}]'elman
+    }
+
+    /* Compute W_h * h_{t-1}  (recurrent contribution) */
+    @rules forward_hidden
+    {
+        [hidden{t_prev, hp, v}, W_h{h, hp, w}, timestep{t}]'elman ->
+            [pre_act_h{t, h, v * w}]'elman
+            where t_prev == t - 1
+        [pre_act_h{t, h, s1}, pre_act_h{t, h, s2}]'elman ->
+            [pre_act_h{t, h, s1 + s2}]'elman
+    }
+
+    /* Compute pre-activation: W_x*x + W_h*h + b */
+    @rules forward_combine
+    {
+        [pre_act_x{t, h, px}, pre_act_h{t, h, ph}, b_h{h, b}]'elman ->
+            [pre_act{t, h, px + ph + b}]'elman
+    }
+
+    /* Apply tanh: h_t = tanh(pre_act).
+     * NOTE: PLingua rule heads do not support intermediate variable bindings,
+     * so exp(z/1000) is computed twice here.  An optimizer targeting a
+     * PLingua runtime may CSE these sub-expressions automatically; alternatively
+     * split this into two rules: first produce exp_pos{t,h,e} / exp_neg{t,h,e},
+     * then combine them. */
+    @rules apply_tanh
+    {
+        [pre_act{t, h, z}]'elman ->
+            [hidden{t, h, (exp(z/1000) - exp(-z/1000)) * 1000 /
+                          (exp(z/1000) + exp(-z/1000))}]'elman
+    }
+
+    /* Compute output: y_t = W_y * h_t + b_y */
+    @rules forward_output
+    {
+        [hidden{t, h, hv}, W_y{o, h, w}]'elman ->
+            [pre_out{t, o, hv * w}]'elman
+        [pre_out{t, o, s1}, pre_out{t, o, s2}]'elman ->
+            [pre_out{t, o, s1 + s2}]'elman
+        [pre_out{t, o, s}, b_y{o, b}]'elman ->
+            [output{t, o, s + b}]'elman
+    }
+
+    /* Advance timestep */
+    @rules advance_time
+    {
+        [timestep{t}, output{t, o, v}]'elman ->
+            [timestep{t + 1}]'elman
+            where t < seq_len
+            /* all outputs at time t have been generated */
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* BACKWARD PASS (BPTT)                                                    */
+    /* ----------------------------------------------------------------------- */
+
+    /* dL/dh_t accumulates from:
+     *   (a) output gradient: dL/dy * W_y
+     *   (b) future hidden gradient: dL/dh_{t+1} * W_h * (1 - h_t^2)  (tanh deriv)
+     */
+
+    @rules bptt_output_grad
+    {
+        [grad_out{t, o, g}, W_y{o, h, w}]'elman ->
+            [grad_h_from_out{t, h, g * w}]'elman
+        [grad_h_from_out{t, h, g1}, grad_h_from_out{t, h, g2}]'elman ->
+            [grad_h_from_out{t, h, g1 + g2}]'elman
+    }
+
+    @rules bptt_recurrent_grad
+    {
+        [grad_h{t_next, h_next, g}, W_h{h_next, h, w}, hidden{t, h, hv}]'elman ->
+            [grad_h_from_rec{t, h, g * w * (1000 - hv * hv / 1000) / 1000}]'elman
+            where t_next == t + 1
+        [grad_h_from_rec{t, h, g1}, grad_h_from_rec{t, h, g2}]'elman ->
+            [grad_h_from_rec{t, h, g1 + g2}]'elman
+    }
+
+    @rules bptt_combine_grad
+    {
+        [grad_h_from_out{t, h, go}, grad_h_from_rec{t, h, gr}]'elman ->
+            [grad_h{t, h, go + gr}]'elman
+        /* At the last timestep (or any step without future gradient), only output grad exists */
+        [grad_h_from_out{t, h, go}]'elman ->
+            [grad_h{t, h, go}]'elman
+            where not_exists grad_h_from_rec{t, h}
+        /* At intermediate steps without output, only recurrent grad exists */
+        [grad_h_from_rec{t, h, gr}]'elman ->
+            [grad_h{t, h, gr}]'elman
+            where not_exists grad_h_from_out{t, h}
+    }
+
+    /* Gradient w.r.t. W_x */
+    @rules grad_W_x
+    {
+        [grad_h{t, h, g}, input{t, x, v}]'elman ->
+            [grad_W_x{h, x, g * v}]'elman
+        [grad_W_x{h, x, g1}, grad_W_x{h, x, g2}]'elman ->
+            [grad_W_x{h, x, g1 + g2}]'elman
+    }
+
+    /* Gradient w.r.t. W_h */
+    @rules grad_W_h
+    {
+        [grad_h{t, h1, g}, hidden{t_prev, h2, hv}]'elman ->
+            [grad_W_h{h1, h2, g * hv}]'elman
+            where t_prev == t - 1
+        [grad_W_h{h1, h2, g1}, grad_W_h{h1, h2, g2}]'elman ->
+            [grad_W_h{h1, h2, g1 + g2}]'elman
+    }
+
+    /* Gradient w.r.t. W_y */
+    @rules grad_W_y
+    {
+        [grad_out{t, o, g}, hidden{t, h, hv}]'elman ->
+            [grad_W_y{o, h, g * hv}]'elman
+        [grad_W_y{o, h, g1}, grad_W_y{o, h, g2}]'elman ->
+            [grad_W_y{o, h, g1 + g2}]'elman
+    }
+
+    /* Weight updates */
+    @rules update_weights
+    {
+        [W_x{h, x, w}, grad_W_x{h, x, g}, lr{l}]'elman ->
+            [W_x{h, x, w - l * g / 1000}]'elman
+        [W_h{h1, h2, w}, grad_W_h{h1, h2, g}, lr{l}]'elman ->
+            [W_h{h1, h2, w - l * g / 1000}]'elman
+        [W_y{o, h, w}, grad_W_y{o, h, g}, lr{l}]'elman ->
+            [W_y{o, h, w - l * g / 1000}]'elman
+    }
+}
+
+/* ============================================================================
+ * LSTM (Long Short-Term Memory)
+ *
+ * Equations (all vectors, element-wise * for Hadamard):
+ *   f_t = sigmoid(W_f * [h_{t-1}, x_t] + b_f)    (forget gate)
+ *   i_t = sigmoid(W_i * [h_{t-1}, x_t] + b_i)    (input gate)
+ *   g_t = tanh(W_g * [h_{t-1}, x_t] + b_g)       (cell gate)
+ *   o_t = sigmoid(W_o * [h_{t-1}, x_t] + b_o)    (output gate)
+ *   c_t = f_t * c_{t-1} + i_t * g_t              (cell state)
+ *   h_t = o_t * tanh(c_t)                        (hidden state)
+ * ============================================================================ */
+
+@module lstm(input_size, hidden_size, seq_len)
+{
+    @initial
+    {
+        [lstm_cell
+            input_size{input_size}
+            hidden_size{hidden_size}
+            seq_len{seq_len}
+            timestep{1}
+
+            /* Weight matrices for [h, x] → gates (rows: hidden_size) */
+            for (gate in {f, i, g, o})
+            {
+                for (h = 1; h <= hidden_size; h++)
+                {
+                    for (j = 1; j <= input_size + hidden_size; j++)
+                    {
+                        W{gate, h, j, random(-100, 100)}
+                    }
+                    b{gate, h, 0}
+                }
+            }
+
+            /* Initial states */
+            for (h = 1; h <= hidden_size; h++)
+            {
+                hidden{0, h, 0}
+                cell{0, h, 0}
+            }
+        ]'main
+    }
+
+    /* ----------------------------------------------------------------------- */
+    /* FORWARD: concatenate [h_{t-1}, x_t] and compute gate pre-activations   */
+    /* ----------------------------------------------------------------------- */
+
+    /* Build concatenated input vector xh = [x_t; h_{t-1}] */
+    @rules build_xh
+    {
+        [input{t, j, v}]'lstm_cell ->
+            [xh{t, j, v}]'lstm_cell
+        [hidden{t_prev, h, hv}, timestep{t}]'lstm_cell ->
+            [xh{t, input_size + h, hv}]'lstm_cell
+            where t_prev == t - 1
+    }
+
+    /* Compute W * xh for each gate */
+    @rules gate_pre_act
+    {
+        [xh{t, j, v}, W{gate, h, j, w}]'lstm_cell ->
+            [pre_gate{gate, t, h, v * w}]'lstm_cell
+        [pre_gate{gate, t, h, s1}, pre_gate{gate, t, h, s2}]'lstm_cell ->
+            [pre_gate{gate, t, h, s1 + s2}]'lstm_cell
+        [pre_gate{gate, t, h, s}, b{gate, h, bv}]'lstm_cell ->
+            [pre_gate_b{gate, t, h, s + bv}]'lstm_cell
+    }
+
+    /* Apply activations */
+    /* Forget, input, output gates: sigmoid */
+    @rules activate_sigmoid_gates
+    {
+        [pre_gate_b{f, t, h, z}]'lstm_cell ->
+            [gate_f{t, h, 100 / (1 + exp(-z / 1000))}]'lstm_cell
+        [pre_gate_b{i, t, h, z}]'lstm_cell ->
+            [gate_i{t, h, 100 / (1 + exp(-z / 1000))}]'lstm_cell
+        [pre_gate_b{o, t, h, z}]'lstm_cell ->
+            [gate_o{t, h, 100 / (1 + exp(-z / 1000))}]'lstm_cell
+    }
+
+    /* Cell gate: tanh */
+    @rules activate_tanh_gate
+    {
+        [pre_gate_b{g, t, h, z}]'lstm_cell ->
+            [gate_g{t, h, (exp(z/1000) - exp(-z/1000)) * 1000 /
+                          (exp(z/1000) + exp(-z/1000))}]'lstm_cell
+    }
+
+    /* Compute cell state: c_t = f_t * c_{t-1} + i_t * g_t */
+    @rules compute_cell
+    {
+        [gate_f{t, h, fv}, cell{t_prev, h, cv},
+         gate_i{t, h, iv}, gate_g{t, h, gv}]'lstm_cell ->
+            [cell{t, h, fv * cv / 100 + iv * gv / 100}]'lstm_cell
+            where t_prev == t - 1
+    }
+
+    /* Compute hidden state: h_t = o_t * tanh(c_t) */
+    @rules compute_hidden
+    {
+        [gate_o{t, h, ov}, cell{t, h, cv}]'lstm_cell ->
+            [hidden{t, h, ov * (exp(cv/1000) - exp(-cv/1000)) * 10 /
+                            (exp(cv/1000) + exp(-cv/1000))}]'lstm_cell
+    }
+
+    /* Emit output (hidden state is the output) */
+    @rules emit_output
+    {
+        [hidden{t, h, hv}]'lstm_cell ->
+            [output{t, h, hv}]'lstm_cell
+    }
+
+    /* Advance time */
+    @rules advance_time
+    {
+        [timestep{t}]'lstm_cell ->
+            [timestep{t + 1}]'lstm_cell
+            where t < seq_len
+    }
+}
+
+/* ============================================================================
+ * GRU (Gated Recurrent Unit)
+ *
+ *   z_t = sigmoid(W_z * [h_{t-1}, x_t] + b_z)   (update gate)
+ *   r_t = sigmoid(W_r * [h_{t-1}, x_t] + b_r)   (reset gate)
+ *   n_t = tanh(W_n * [r_t * h_{t-1}, x_t] + b_n) (candidate)
+ *   h_t = (1 - z_t) * n_t + z_t * h_{t-1}
+ * ============================================================================ */
+
+@module gru(input_size, hidden_size, seq_len)
+{
+    @initial
+    {
+        [gru_cell
+            input_size{input_size}
+            hidden_size{hidden_size}
+            seq_len{seq_len}
+            timestep{1}
+
+            for (gate in {z, r, n})
+            {
+                for (h = 1; h <= hidden_size; h++)
+                {
+                    for (j = 1; j <= input_size + hidden_size; j++)
+                    {
+                        W{gate, h, j, random(-100, 100)}
+                    }
+                    b{gate, h, 0}
+                }
+            }
+
+            for (h = 1; h <= hidden_size; h++)
+            {
+                hidden{0, h, 0}
+            }
+        ]'main
+    }
+
+    /* Build [h_{t-1}, x_t] for z/r gates */
+    @rules build_xh
+    {
+        [input{t, j, v}]'gru_cell ->
+            [xh{t, j, v}]'gru_cell
+        [hidden{t_prev, h, hv}, timestep{t}]'gru_cell ->
+            [xh{t, input_size + h, hv}]'gru_cell
+            where t_prev == t - 1
+    }
+
+    /* Gate pre-activations for z and r gates (use unmodified xh) */
+    @rules gate_pre_act_zr
+    {
+        [xh{t, j, v}, W{gate, h, j, w}]'gru_cell ->
+            [pre_gate{gate, t, h, v * w}]'gru_cell
+            where gate != n
+        [pre_gate{gate, t, h, s1}, pre_gate{gate, t, h, s2}]'gru_cell ->
+            [pre_gate{gate, t, h, s1 + s2}]'gru_cell
+            where gate != n
+        [pre_gate{gate, t, h, s}, b{gate, h, bv}]'gru_cell ->
+            [pre_gate_b{gate, t, h, s + bv}]'gru_cell
+            where gate != n
+    }
+
+    /* Update and reset gates: sigmoid */
+    @rules activate_zr
+    {
+        [pre_gate_b{z, t, h, z_pre}]'gru_cell ->
+            [gate_z{t, h, 100 / (1 + exp(-z_pre / 1000))}]'gru_cell
+        [pre_gate_b{r, t, h, r_pre}]'gru_cell ->
+            [gate_r{t, h, 100 / (1 + exp(-r_pre / 1000))}]'gru_cell
+    }
+
+    /* Build reset-gated [r_t * h_{t-1}, x_t] for candidate gate */
+    @rules build_xh_n
+    {
+        [input{t, j, v}]'gru_cell ->
+            [xh_n{t, j, v}]'gru_cell
+        [hidden{t_prev, h, hv}, gate_r{t, h, rv}, timestep{t}]'gru_cell ->
+            [xh_n{t, input_size + h, rv * hv / 100}]'gru_cell
+            where t_prev == t - 1
+    }
+
+    /* Candidate gate pre-activation using reset-gated hidden state */
+    @rules gate_pre_act_n
+    {
+        [xh_n{t, j, v}, W{n, h, j, w}]'gru_cell ->
+            [pre_gate_n{t, h, v * w}]'gru_cell
+        [pre_gate_n{t, h, s1}, pre_gate_n{t, h, s2}]'gru_cell ->
+            [pre_gate_n{t, h, s1 + s2}]'gru_cell
+        [pre_gate_n{t, h, s}, b{n, h, bv}]'gru_cell ->
+            [pre_gate_n_b{t, h, s + bv}]'gru_cell
+    }
+
+    /* Candidate: n_t = tanh(W_n * [r_t * h_{t-1}, x_t] + b_n) */
+    @rules activate_n
+    {
+        [pre_gate_n_b{t, h, z}]'gru_cell ->
+            [gate_n{t, h, (exp(z/1000) - exp(-z/1000)) * 1000 /
+                          (exp(z/1000) + exp(-z/1000))}]'gru_cell
+    }
+
+    /* h_t = (1 - z_t) * n_t + z_t * h_{t-1} */
+    @rules compute_hidden
+    {
+        [gate_z{t, h, zv}, gate_n{t, h, nv}, hidden{t_prev, h, hv}]'gru_cell ->
+            [hidden{t, h, (100 - zv) * nv / 100 + zv * hv / 100}]'gru_cell
+            where t_prev == t - 1
+    }
+
+    @rules emit_output
+    {
+        [hidden{t, h, hv}]'gru_cell ->
+            [output{t, h, hv}]'gru_cell
+    }
+
+    @rules advance_time
+    {
+        [timestep{t}]'gru_cell ->
+            [timestep{t + 1}]'gru_cell
+            where t < seq_len
+    }
+}
+
+/* ============================================================================
+ * BIDIRECTIONAL WRAPPER
+ * Runs a forward RNN and a backward RNN over the sequence,
+ * concatenates hidden states: h_bi = [h_fwd; h_bwd]
+ * ============================================================================ */
+
+@module bidirectional(rnn_module, input_size, hidden_size, seq_len)
+{
+    @initial
+    {
+        [bidir
+            [fwd rnn_module(input_size, hidden_size, seq_len)]'bidir
+            [bwd rnn_module(input_size, hidden_size, seq_len)]'bidir
+        ]'main
+    }
+
+    /* Feed sequence forward to fwd, reversed to bwd */
+    @rules feed_forward
+    {
+        [input{t, j, v}]'bidir ->
+            [input{t, j, v}]'fwd
+        [input{t, j, v}]'bidir ->
+            [input{seq_len - t + 1, j, v}]'bwd
+    }
+
+    /* Concatenate outputs: fwd channels 1..H, bwd channels H+1..2H */
+    @rules concat_outputs
+    {
+        [output{t, h, v}]'fwd ->
+            [output{t, h, v}]'bidir
+        [output{t, h, v}]'bwd ->
+            [output{seq_len - t + 1, hidden_size + h, v}]'bidir
+    }
+}
+
+/* ============================================================================
+ * STACKED (DEEP) RNN
+ * Chains L recurrent layers; each layer's output is the next layer's input.
+ * ============================================================================ */
+
+@module stacked_rnn(rnn_module, num_layers, input_size, hidden_size, seq_len)
+{
+    @initial
+    {
+        [stack
+            for (l = 1; l <= num_layers; l++)
+            {
+                [layer{l}
+                    rnn_module(l == 1 ? input_size : hidden_size,
+                               hidden_size, seq_len)
+                ]'stack
+            }
+        ]'main
+    }
+
+    /* Pass output of layer l as input to layer l+1 */
+    @rules forward_chain
+    {
+        [output{t, h, v}]'layer{l} ->
+            [input{t, h, v}]'layer{l + 1}
+            where l < num_layers
+    }
+
+    /* Final layer outputs to stack output */
+    @rules collect_output
+    {
+        [output{t, h, v}]'layer{num_layers} ->
+            [output{t, h, v}]'stack
+    }
+}
+
+/* ============================================================================
+ * SEQUENCE-TO-SEQUENCE ENCODER-DECODER
+ * Encoder: LSTM over input sequence → final hidden state
+ * Decoder: LSTM generates output sequence conditioned on encoder state
+ * ============================================================================ */
+
+@module seq2seq(input_size, hidden_size, output_size, src_len, tgt_len)
+{
+    @initial
+    {
+        [seq2seq
+            [encoder lstm(input_size, hidden_size, src_len)]'seq2seq
+            [decoder lstm(output_size, hidden_size, tgt_len)]'seq2seq
+            /* linear_layer is provided by @import "nn.pli" */
+            [output_proj linear_layer(hidden_size, output_size)]'seq2seq
+            [out_act softmax]'seq2seq
+        ]'main
+    }
+
+    /* Transfer encoder final state to decoder initial state */
+    @rules transfer_state
+    {
+        [hidden{src_len, h, hv}]'encoder ->
+            [hidden{0, h, hv}]'decoder
+        [cell{src_len, h, cv}]'encoder ->
+            [cell{0, h, cv}]'decoder
+    }
+
+    /* Project decoder output to vocabulary */
+    @rules project_output
+    {
+        [output{t, h, hv}]'decoder ->
+            [input{h, hv}]'output_proj
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Recurrent Networks in PLingua"
+    version: "1.0.0"
+    description: "RNN, LSTM, GRU, Bidirectional and Stacked RNNs using temporal P-Systems"
+    features: [
+        "Elman (Vanilla) RNN with BPTT",
+        "LSTM (Long Short-Term Memory)",
+        "GRU (Gated Recurrent Unit)",
+        "Bidirectional wrapper",
+        "Stacked (deep) RNN",
+        "Sequence-to-Sequence encoder-decoder",
+        "Temporal P-Systems with timestep objects"
+    ]
+}

@@ -1,0 +1,23 @@
+site_name: nn
+theme:
+  name: readthedocs
+repo_url: https://github.com/ReZorg/nn.nn
+use_directory_urls: false
+markdown_extensions: [extra]
+docs_dir: doc
+site_dir: site
+nav:
+- Home: index.md
+- Modules:
+  - Module Interface: module.md
+  - Containers: containers.md
+  - Transfer Functions: transfer.md
+  - Simple Layers: simple.md
+  - Table Layers: table.md
+  - Convolution Layers: convolution.md
+- Criterion:
+  - Criterions: criterion.md
+- Additional Documentation:
+  - Overview: overview.md
+  - Training: training.md
+  - Testing: testing.md

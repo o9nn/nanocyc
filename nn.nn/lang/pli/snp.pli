@@ -1,0 +1,266 @@
+/*
+ * Spiking Neural P Systems (SN P) in PLingua
+ * The canonical membrane-computing formalism for neural networks
+ * (Ionescu, Paun, Yokomori 2006). This module bridges the nn.nn PLingua
+ * library to true SN P semantics:
+ *
+ *   - Neurons are membranes containing spike objects 'a'
+ *   - Firing rules: E / a^c -> a; d  (regular expression E over spikes,
+ *     consume c spikes, emit one spike after delay d)
+ *   - Forgetting rules: a^s -> lambda (remove spikes without firing)
+ *   - Synapses route emitted spikes to connected neurons
+ *
+ * Spike counts are natural numbers (object multiplicities); no x100
+ * scaling is needed - this is exact membrane computing.
+ */
+
+@model<spiking_psystems>
+
+/* ============================================================================
+ * SN P NEURON
+ * A single spiking neuron with configurable firing threshold and delay.
+ * ============================================================================ */
+
+@module snp_neuron(threshold, delay)
+{
+    @initial
+    {
+        [neuron
+            spike_count{0}
+            refractory{0}    /* > 0 means neuron is closed (firing delay) */
+        ]'main
+    }
+
+    /* Receive spikes (only when neuron is open) */
+    @rules receive
+    {
+        (a, in) [spike_count{s}, refractory{0}]'neuron ->
+            [spike_count{s+1}, refractory{0}]'neuron
+    }
+
+    /* Firing rule: a^threshold / a^threshold -> a; delay
+     * When exactly enough spikes accumulate, consume them and
+     * schedule a spike emission after 'delay' steps */
+    @rules fire
+    {
+        [spike_count{s}, refractory{0}]'neuron ->
+            [spike_count{s - threshold}, refractory{delay},
+             pending_spike{}]'neuron where s >= threshold
+    }
+
+    /* Delay countdown: neuron is closed while refractory > 0 */
+    @rules countdown
+    {
+        [refractory{d}]'neuron ->
+            [refractory{d-1}]'neuron where d > 1
+    }
+
+    /* Emit the spike when the delay expires */
+    @rules emit
+    {
+        [pending_spike{}, refractory{1}]'neuron ->
+            [refractory{0}]'neuron (a, out)
+        [pending_spike{}, refractory{0}]'neuron ->
+            [refractory{0}]'neuron (a, out) where delay == 0
+    }
+
+    /* Forgetting rule: a^s -> lambda for sub-threshold leftovers */
+    @rules forget
+    {
+        [spike_count{s}, forget_signal{}]'neuron ->
+            [spike_count{0}]'neuron where s < threshold, s > 0
+    }
+}
+
+/* ============================================================================
+ * SYNAPSE ROUTING
+ * Directed spike channels between neurons with optional weights
+ * (weight w means each emitted spike delivers w spikes downstream).
+ * ============================================================================ */
+
+@module snp_synapses(num_neurons)
+{
+    @initial
+    {
+        [network
+            /* synapse{from, to, weight} objects declare the topology */
+        ]'main
+    }
+
+    @rules route
+    {
+        /* Deliver a spike from neuron f along all outgoing synapses */
+        [spike_from{f}, synapse{f, t, w}]'network ->
+            [synapse{f, t, w}]'network
+            {
+                /* Deliver w spikes to target neuron t */
+                for (k = 1; k <= w; k++)
+                {
+                    (a, in)'neuron{t}
+                }
+            }
+    }
+}
+
+/* ============================================================================
+ * COMPLETE SN P NETWORK
+ * A configurable network of spiking neurons with input/output neurons.
+ * The output neuron's spike train (spike intervals) encodes the result,
+ * following the standard SN P number-encoding convention.
+ * ============================================================================ */
+
+@model snp_network(num_neurons, num_inputs, num_outputs)
+{
+    @membrane_structure
+    {
+        [snp
+            /* Input neurons: 1 .. num_inputs */
+            for (i = 1; i <= num_inputs; i++)
+            {
+                [input_neuron{i} snp_neuron(1, 0)]'snp
+            }
+
+            /* Hidden neurons */
+            for (h = num_inputs+1; h <= num_neurons-num_outputs; h++)
+            {
+                [hidden_neuron{h} snp_neuron(2, 1)]'snp
+            }
+
+            /* Output neurons */
+            for (o = num_neurons-num_outputs+1; o <= num_neurons; o++)
+            {
+                [output_neuron{o} snp_neuron(2, 0)]'snp
+            }
+
+            /* Environment membrane collects output spike train */
+            [environment
+                step_counter{0}
+                first_spike_time{0}
+                second_spike_time{0}
+            ]'snp
+        ]
+    }
+
+    /* Output encoding: the number computed is the interval between the
+     * first two spikes emitted by an output neuron (standard SN P). */
+    @rules decode_output
+    {
+        [step_counter{s}]'environment ->
+            [step_counter{s+1}]'environment
+
+        (a, in) [first_spike_time{0}, step_counter{s}]'environment ->
+            [first_spike_time{s}, step_counter{s}]'environment
+
+        (a, in) [first_spike_time{f}, second_spike_time{0}, step_counter{s}]'environment ->
+            [first_spike_time{f}, second_spike_time{s}, step_counter{s}]'environment
+            where f > 0
+
+        [first_spike_time{f}, second_spike_time{g}]'environment ->
+            []'environment (result{g - f}, out) where g > 0
+    }
+}
+
+/* ============================================================================
+ * RATE-CODED BRIDGE
+ * Converts between the x100-scaled activations of nn.pli and spike
+ * counts, allowing SN P neurons to be embedded in gradient-trained
+ * networks (activation value 0..100 <-> spike count 0..100 per window).
+ * ============================================================================ */
+
+@module rate_coder(window)
+{
+    /* Encode: activation value v emits v spikes over the window */
+    @rules encode
+    {
+        [activation{i, v}, window_left{t}]'coder ->
+            [activation{i, v}, window_left{t-1}]'coder (a{i}, out)
+            where t > 0, v > 0, random(0, 100) < v
+
+        [activation{i, v}, window_left{0}]'coder ->
+            []'coder
+    }
+
+    /* Decode: count spikes over the window into an activation value */
+    @rules decode
+    {
+        (a{i}, in) [spike_tally{i, c}]'coder ->
+            [spike_tally{i, c+1}]'coder
+
+        [spike_tally{i, c}, window_done{}]'coder ->
+            []'coder (activation{i, round(100*c/window)}, out)
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE: SN P XOR
+ * Classic demonstration - XOR computed with spiking semantics.
+ * Input spike present = 1, absent = 0.
+ * ============================================================================ */
+
+@model snp_xor
+{
+    @membrane_structure
+    {
+        [xor
+            /* Two input neurons, threshold 1, no delay */
+            [in1 snp_neuron(1, 0)]'xor
+            [in2 snp_neuron(1, 0)]'xor
+
+            /* OR neuron: fires on 1 or more spikes */
+            [or_neuron snp_neuron(1, 0)]'xor
+
+            /* AND neuron: fires only on 2 spikes */
+            [and_neuron snp_neuron(2, 0)]'xor
+
+            /* Output: fires when OR fired but AND did not
+             * (AND spike inhibits via forgetting) */
+            [out_neuron snp_neuron(1, 0)]'xor
+        ]
+    }
+
+    @synapses
+    {
+        synapse{in1, or_neuron, 1}
+        synapse{in2, or_neuron, 1}
+        synapse{in1, and_neuron, 1}
+        synapse{in2, and_neuron, 1}
+        synapse{or_neuron, out_neuron, 1}
+        /* Inhibitory: AND firing triggers forgetting in output */
+        inhibitory_synapse{and_neuron, out_neuron}
+    }
+
+    @rules inhibit
+    {
+        [spike_from{and_neuron}, inhibitory_synapse{and_neuron, out_neuron}]'xor ->
+            [inhibitory_synapse{and_neuron, out_neuron},
+             forget_signal{}]'out_neuron
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Spiking Neural P Systems in PLingua"
+    version: "1.0.0"
+    description: "SN P neurons, synapses, spike-train encoding, rate-coded bridge"
+    depends: []
+
+    modules: [
+        "snp_neuron(threshold, delay)",
+        "snp_synapses(num_neurons)",
+        "rate_coder(window)"
+    ]
+
+    models: [
+        "snp_network(num_neurons, num_inputs, num_outputs)",
+        "snp_xor"
+    ]
+
+    references: [
+        "Ionescu, Paun, Yokomori (2006). Spiking Neural P Systems",
+        "Song et al. (2019). Spiking Neural P Systems: Applications and Modeling"
+    ]
+}

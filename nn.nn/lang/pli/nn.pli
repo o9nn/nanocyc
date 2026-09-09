@@ -1,0 +1,495 @@
+/*
+ * Neural Network Implementation in PLingua
+ * A P-Systems membrane computing implementation of feedforward neural networks
+ * with backpropagation training and modular architecture.
+ *
+ * This implementation uses membrane computing principles to model:
+ * - Neural network layers as nested membranes
+ * - Forward propagation as object evolution and communication
+ * - Neurons as computational membranes with weighted rules
+ * - Activation functions as transformation rules
+ * - Backpropagation as reverse communication between membranes
+ */
+
+@model<membrane_computing>
+
+/*
+ * NEURAL NETWORK MODULE
+ * Implements a feedforward neural network using P-Systems
+ */
+
+/* ============================================================================
+ * ACTIVATION FUNCTIONS
+ * Implemented as evolution rules within neuron membranes
+ * ============================================================================ */
+
+/* Sigmoid activation: transforms input signal x to 1/(1+exp(-x))
+ * Approximated using discrete steps in membrane computing
+ * Object 'x' represents input signal with multiplicity encoding value
+ */
+@module sigmoid_activation
+{
+    /* For positive signals: apply sigmoid approximation */
+    [x{n}]'i -> [sig{round(100/(1+exp(-n/100)))}]'i
+    
+    /* Derivative for backprop: sig(x) * (1 - sig(x)) */
+    [sig{n}, grad{m}]'i -> [grad_sig{round(n*(100-n)*m/10000)}]'i
+}
+
+/* Tanh activation: transforms input to (-1, 1) range
+ * tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
+ */
+@module tanh_activation
+{
+    /* Tanh approximation */
+    [x{n}]'i -> [tanh_out{round(100*(exp(n/100)-exp(-n/100))/(exp(n/100)+exp(-n/100)))}]'i
+    
+    /* Derivative: 1 - tanh^2(x) */
+    [tanh_out{n}, grad{m}]'i -> [grad_tanh{round((10000-n*n)*m/10000)}]'i
+}
+
+/* ReLU activation: max(0, x)
+ * Simple but effective for deep networks
+ */
+@module relu_activation
+{
+    /* ReLU: if x > 0 then x else 0 */
+    [x{n}]'i -> [relu{max(0,n)}]'i where n > 0
+    [x{n}]'i -> [relu{0}]'i where n <= 0
+    
+    /* Derivative: 1 if x > 0 else 0 */
+    [relu{n}, grad{m}]'i -> [grad_relu{m}]'i where n > 0
+    [relu{n}, grad{m}]'i -> [grad_relu{0}]'i where n <= 0
+}
+
+/* ============================================================================
+ * NEURON LAYER STRUCTURE
+ * Each layer is represented as a membrane with neurons as submembranes
+ * ============================================================================ */
+
+/* Linear/Dense layer: fully connected layer
+ * Each neuron computes weighted sum + bias
+ * Membrane structure: [layer [neuron_1 ... neuron_n]]
+ */
+@module linear_layer(input_size, output_size)
+{
+    /* Initialize weights and biases for each neuron */
+    @initial
+    {
+        /* Create output_size neurons */
+        for (i = 1; i <= output_size; i++)
+        {
+            [neuron{i}
+                /* Initialize random weights for each input */
+                for (j = 1; j <= input_size; j++)
+                {
+                    weight{j, random(-50, 50)}
+                }
+                bias{random(-10, 10)}
+            ]'layer
+        }
+    }
+    
+    /* Forward pass: compute weighted sum */
+    @rules forward
+    {
+        /* For each neuron, compute weighted sum of inputs */
+        [input{j, v}, weight{j, w}]'neuron{i} -> 
+            [sum{i, v*w}]'neuron{i}
+        
+        /* Add bias to sum */
+        [sum{i, s}, bias{b}]'neuron{i} -> 
+            [output{i, s+b}]'neuron{i}
+        
+        /* Send output to next layer */
+        [output{i, v}]'neuron{i} -> 
+            []'neuron{i} (output{i, v}, out)
+    }
+    
+    /* Backward pass: compute gradients */
+    @rules backward
+    {
+        /* Receive gradient from next layer */
+        (grad{i, g}, in) ->
+            [grad{i, g}]'neuron{i}
+        
+        /* Compute weight gradients */
+        [grad{i, g}, input{j, v}]'neuron{i} ->
+            [weight_grad{j, g*v}]'neuron{i}
+        
+        /* Update weights */
+        [weight{j, w}, weight_grad{j, g}, learning_rate{lr}]'neuron{i} ->
+            [weight{j, w - lr*g}]'neuron{i}
+        
+        /* Compute input gradient for previous layer */
+        [grad{i, g}, weight{j, w}]'neuron{i} ->
+            []'neuron{i} (grad{j, g*w}, out)
+    }
+}
+
+/* ============================================================================
+ * SEQUENTIAL CONTAINER
+ * Chains multiple layers/modules together
+ * ============================================================================ */
+
+@module sequential_network(layers)
+{
+    /* Initialize sequential structure with multiple layers */
+    @initial
+    {
+        [network
+            for (i = 1; i <= length(layers); i++)
+            {
+                [layer{i} layers[i]]'network
+            }
+        ]'main
+    }
+    
+    /* Forward propagation through sequential layers */
+    @rules forward_propagate
+    {
+        /* Pass output from layer i to layer i+1 */
+        [output{j, v}]'layer{i} ->
+            [input{j, v}]'layer{i+1} where i < length(layers)
+    }
+    
+    /* Final layer output */
+    @rules output_layer
+    {
+        [output{j, v}]'layer{length(layers)} ->
+            []'layer{length(layers)} (result{j, v}, out)
+    }
+}
+
+/* ============================================================================
+ * LOSS FUNCTIONS / CRITERIONS
+ * Compute loss and gradients for training
+ * ============================================================================ */
+
+/* Mean Squared Error: for regression tasks
+ * MSE = (1/n) * sum((predicted - target)^2)
+ */
+@module mse_criterion
+{
+    @rules compute_loss
+    {
+        /* Compute error */
+        [predicted{i, p}, target{i, t}]'loss ->
+            [error{i, p-t}]'loss
+        
+        /* Square the error */
+        [error{i, e}]'loss ->
+            [squared_error{i, e*e}]'loss
+        
+        /* Sum all squared errors */
+        [squared_error{i, se}]'loss ->
+            [total_loss{se}]'loss
+        
+        /* Compute gradient: 2*(predicted - target) */
+        [error{i, e}]'loss ->
+            []'loss (gradient{i, 2*e}, out)
+    }
+}
+
+/* Negative Log Likelihood: for classification
+ * NLL = -log(predicted_probability_of_true_class)
+ */
+@module nll_criterion
+{
+    @rules compute_loss
+    {
+        /* Compute negative log likelihood */
+        [predicted{class, p}, target{class}]'loss ->
+            [nll{-log(p)}]'loss
+        
+        /* Gradient: -1/predicted for true class, 0 for others */
+        [predicted{i, p}, target{class}]'loss ->
+            []'loss (gradient{i, -1/p}, out) where i == class
+        
+        [predicted{i, p}, target{class}]'loss ->
+            []'loss (gradient{i, 0}, out) where i != class
+    }
+}
+
+/* Binary Cross Entropy: for binary classification
+ * BCE = -(t*log(p) + (1-t)*log(1-p))
+ * Values scaled by 100: probabilities p and targets t in [0, 100]
+ */
+@module bce_criterion
+{
+    @rules compute_loss
+    {
+        /* Compute BCE loss per element (scaled by 100) */
+        [predicted{i, p}, target{i, t}]'loss ->
+            [bce{i, round(-(t*log(p/100) + (100-t)*log((100-p)/100))/100)}]'loss
+
+        /* Sum element losses into total loss */
+        [bce{i, l}]'loss ->
+            [total_loss{l}]'loss
+
+        /* Gradient: (p - t) / (p * (1 - p)), scaled by 100 */
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, round(10000*(p-t)/(p*(100-p)))}, out)
+    }
+}
+
+/* Absolute Error (L1): for robust regression
+ * AbsErr = |predicted - target|
+ */
+@module abs_criterion
+{
+    @rules compute_loss
+    {
+        /* Compute absolute error */
+        [predicted{i, p}, target{i, t}]'loss ->
+            [abs_error{i, abs(p-t)}]'loss
+
+        /* Sum all absolute errors */
+        [abs_error{i, e}]'loss ->
+            [total_loss{e}]'loss
+
+        /* Gradient: sign(predicted - target), scaled by 100 */
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, 100}, out) where p > t
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, -100}, out) where p < t
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, 0}, out) where p == t
+    }
+}
+
+/* ============================================================================
+ * TRAINING PROCEDURE
+ * Implements mini-batch gradient descent
+ * ============================================================================ */
+
+@module train_network(network, data, epochs, learning_rate)
+{
+    @initial
+    {
+        [training
+            network_module{network}
+            hyperparams{epochs, learning_rate}
+            dataset{data}
+        ]'main
+    }
+    
+    /* Training loop */
+    @rules training_loop
+    {
+        /* For each epoch */
+        for (epoch = 1; epoch <= epochs; epoch++)
+        {
+            /* For each sample in dataset */
+            [dataset{samples}, network_module{net}]'training ->
+            {
+                for (sample in samples)
+                {
+                    /* Forward pass */
+                    [input{sample.features}]'net
+                    
+                    /* Compute loss */
+                    [output{predicted}, target{sample.label}]'loss_fn
+                    
+                    /* Backward pass */
+                    [gradient{g}]'net
+                    
+                    /* Update weights */
+                    [weights{w}, gradient{g}, learning_rate{lr}]'net ->
+                        [weights{w - lr*g}]'net
+                }
+            }
+        }
+    }
+}
+
+/* ============================================================================
+ * SOFTMAX LAYER
+ * Converts logits to probability distribution
+ * ============================================================================ */
+
+@module softmax
+{
+    @rules normalize
+    {
+        /* Compute exp for numerical stability (subtract max first) */
+        [logit{i, x}, max_logit{m}]'softmax ->
+            [exp_value{i, exp(x-m)}]'softmax
+        
+        /* Sum all exp values */
+        [exp_value{i, e}]'softmax ->
+            [sum_exp{e}]'softmax
+        
+        /* Normalize: exp(x) / sum(exp) */
+        [exp_value{i, e}, sum_exp{s}]'softmax ->
+            [probability{i, e/s}]'softmax
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE NETWORK ARCHITECTURES
+ * Pre-defined networks for common tasks
+ * ============================================================================ */
+
+/* XOR Network: Classic neural network test
+ * Architecture: 2 -> 4 -> 1 with Tanh activations
+ */
+@model xor_network
+{
+    @membrane_structure
+    {
+        [main
+            [input_layer linear_layer(2, 4)]'main
+            [hidden_activation tanh_activation]'main
+            [output_layer linear_layer(4, 1)]'main
+            [output_activation sigmoid_activation]'main
+        ]
+    }
+    
+    @training_data
+    {
+        sample{[0, 0], [0]}
+        sample{[0, 1], [1]}
+        sample{[1, 0], [1]}
+        sample{[1, 1], [0]}
+    }
+}
+
+/* Binary Classification Network
+ * Architecture: n -> h -> 1 with flexible hidden size
+ */
+@model binary_classifier(input_size, hidden_size)
+{
+    @membrane_structure
+    {
+        [classifier
+            [layer1 linear_layer(input_size, hidden_size)]'classifier
+            [activation1 relu_activation]'classifier
+            [layer2 linear_layer(hidden_size, 1)]'classifier
+            [activation2 sigmoid_activation]'classifier
+        ]
+    }
+}
+
+/* Multi-class Classification Network
+ * Architecture: n -> h -> c with softmax output
+ */
+@model multiclass_classifier(input_size, hidden_size, num_classes)
+{
+    @membrane_structure
+    {
+        [classifier
+            [layer1 linear_layer(input_size, hidden_size)]'classifier
+            [activation1 relu_activation]'classifier
+            [layer2 linear_layer(hidden_size, num_classes)]'classifier
+            [output softmax]'classifier
+        ]
+    }
+}
+
+/* ============================================================================
+ * UTILITY FUNCTIONS
+ * Helper operations for neural network computations
+ * ============================================================================ */
+
+/* Vector dot product */
+@module dot_product
+{
+    @rules multiply
+    {
+        [vec1{i, a}, vec2{i, b}]'dot ->
+            [product{i, a*b}]'dot
+        
+        [product{i, p}]'dot ->
+            [sum{p}]'dot
+    }
+}
+
+/* Matrix-vector multiplication */
+@module matrix_multiply
+{
+    @rules multiply
+    {
+        [matrix{i, j, m}, vector{j, v}]'matmul ->
+            [product{i, j, m*v}]'matmul
+        
+        /* Sum along j dimension */
+        [product{i, j, p}]'matmul ->
+            [result{i, p}]'matmul
+    }
+}
+
+/* ============================================================================
+ * INFERENCE/PREDICTION
+ * Use trained network for predictions
+ * ============================================================================ */
+
+@module predict(network, input)
+{
+    @rules inference
+    {
+        /* Set network to evaluation mode (no gradient computation) */
+        [network{net}, mode{train}]'predict ->
+            [network{net}, mode{eval}]'predict
+        
+        /* Feed input through network */
+        [input{x}, network{net}]'predict ->
+        {
+            /* Forward pass only */
+            [input{x}]'net
+            
+            /* Collect output */
+            [output{y}]'net ->
+                []'net (prediction{y}, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION AND METADATA
+ * ============================================================================ */
+
+@info
+{
+    name: "Neural Network in PLingua"
+    version: "1.0.0"
+    description: "P-Systems implementation of feedforward neural networks"
+    author: "nn.nn project"
+    
+    features: [
+        "Feedforward neural networks",
+        "Multiple activation functions (Sigmoid, Tanh, ReLU)",
+        "Backpropagation training",
+        "Loss functions (MSE, NLL, BCE, Absolute Error)",
+        "Modular architecture",
+        "Sequential containers",
+        "Softmax for classification"
+    ]
+    
+    models: [
+        "XOR network",
+        "Binary classifier",
+        "Multi-class classifier"
+    ]
+}
+
+/*
+ * USAGE NOTES:
+ * 
+ * This PLingua implementation models neural networks using P-Systems:
+ * 
+ * 1. Neurons are represented as membranes with weights as objects
+ * 2. Forward propagation is implemented via evolution rules
+ * 3. Communication between layers uses membrane communication
+ * 4. Backpropagation flows gradients through membrane hierarchy
+ * 5. Training updates weights through rule application
+ * 
+ * Key concepts:
+ * - Membranes: Represent layers and neurons
+ * - Objects: Represent data (activations, weights, gradients)
+ * - Rules: Implement computations (forward, backward, updates)
+ * - Communication: Data flow between layers
+ * 
+ * This is a conceptual implementation showing how neural network
+ * operations can be expressed in membrane computing formalism.
+ */

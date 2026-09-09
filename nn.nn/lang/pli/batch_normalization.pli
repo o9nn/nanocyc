@@ -1,0 +1,358 @@
+/*
+ * Batch Normalization in PLingua
+ * P-Systems membrane computing implementation of Batch Normalization (BN).
+ *
+ * Reference: Ioffe & Szegedy (2015) "Batch Normalization: Accelerating Deep
+ *            Network Training by Reducing Internal Covariate Shift"
+ *
+ * For each mini-batch B = {x_1, ..., x_m}:
+ *   mu_B   = (1/m) * sum(x_i)                 (batch mean)
+ *   sigma2 = (1/m) * sum((x_i - mu_B)^2)      (batch variance)
+ *   x_hat  = (x - mu_B) / sqrt(sigma2 + eps)  (normalise)
+ *   y      = gamma * x_hat + beta              (scale and shift)
+ *
+ * Learnable parameters:  gamma (scale) and beta (shift) per feature.
+ * Running statistics:    running_mean, running_var updated with momentum.
+ *
+ * Two operation modes are supported:
+ *   train  -- use batch statistics, update running stats
+ *   eval   -- use stored running statistics
+ *
+ * PRECONDITION: Every batch sample must include feature index 1.  Feature 1 acts
+ * as a sentinel that triggers the batch-size counter (batch_size rule).  If any
+ * sample omits feature 1 the batch size will be under-counted, producing incorrect
+ * normalisation statistics.  Callers must guarantee this invariant or adapt the
+ * sentinel strategy to a feature index that is always present.
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * BATCH NORMALIZATION LAYER
+ * ============================================================================ */
+
+@module batch_norm(num_features, eps, momentum)
+{
+    /*
+     * Membrane objects (per feature index f):
+     *   gamma{f, v}          -- learnable scale  (initialised to 1)
+     *   beta{f, v}           -- learnable shift  (initialised to 0)
+     *   running_mean{f, v}   -- exponential moving average of mean
+     *   running_var{f, v}    -- exponential moving average of variance
+     *   input{f, i, v}       -- sample i of feature f in current batch
+     *   mode{train|eval}     -- operating mode
+     */
+
+    @initial
+    {
+        [bn
+            mode{train}
+            eps{eps}
+            momentum{momentum}
+            batch_size{0}
+            for (f = 1; f <= num_features; f++)
+            {
+                gamma{f, 100}           /* scale  = 1.0 (×100 fixed-point) */
+                beta{f, 0}              /* shift  = 0.0 */
+                running_mean{f, 0}
+                running_var{f, 100}     /* running var = 1.0 initially     */
+            }
+        ]'main
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* TRAINING MODE: compute batch statistics                                */
+    /* ---------------------------------------------------------------------- */
+
+    /* Step 1 – count batch size */
+    @rules count_batch
+    {
+        [input{f, i, v}]'bn ->
+            [counted{f, i, v}]'bn
+        [batch_size{n}]'bn -> [batch_size{n + 1}]'bn
+            where exists input{1}   /* fire once per sample; see module precondition */
+    }
+
+    /* Step 2 – compute batch mean per feature */
+    @rules compute_mean
+    {
+        [counted{f, i, v}, batch_mean{f, s}]'bn ->
+            [batch_mean{f, s + v}, counted{f, i, v}]'bn
+        [counted{f, i, v}]'bn ->
+            [batch_mean{f, v}, counted{f, i, v}]'bn
+            where not_exists batch_mean{f}
+    }
+
+    /* Step 3 – finalise mean (divide by batch size) */
+    @rules finalise_mean
+    {
+        [batch_mean{f, s}, batch_size{m}, mode{train}]'bn ->
+            [batch_mean_final{f, s / m}]'bn
+            where m > 0
+    }
+
+    /* Step 4 – compute variance */
+    @rules compute_variance
+    {
+        [counted{f, i, v}, batch_mean_final{f, mu}]'bn ->
+            [sq_dev{f, i, (v - mu) * (v - mu)}]'bn
+
+        [sq_dev{f, i, d}, batch_var{f, s}]'bn ->
+            [batch_var{f, s + d}]'bn
+        [sq_dev{f, i, d}]'bn ->
+            [batch_var{f, d}]'bn
+            where not_exists batch_var{f}
+    }
+
+    /* Step 5 – finalise variance */
+    @rules finalise_variance
+    {
+        [batch_var{f, s}, batch_size{m}]'bn ->
+            [batch_var_final{f, s / m}]'bn
+            where m > 0
+    }
+
+    /* Step 6 – normalise each input sample */
+    @rules normalise_train
+    {
+        [counted{f, i, v},
+         batch_mean_final{f, mu},
+         batch_var_final{f, var},
+         eps{e}, mode{train}]'bn ->
+            [x_hat{f, i, (v - mu) / sqrt(var + e)}]'bn
+    }
+
+    /* Step 7 – scale and shift */
+    @rules scale_shift_train
+    {
+        [x_hat{f, i, xh}, gamma{f, g}, beta{f, b}]'bn ->
+            [output{f, i, (g * xh) / 100 + b}]'bn
+    }
+
+    /* Step 8 – update running statistics */
+    @rules update_running_stats
+    {
+        [running_mean{f, rm}, batch_mean_final{f, bm}, momentum{alpha}]'bn ->
+            [running_mean{f, (100 - alpha) * rm / 100 + alpha * bm / 100}]'bn
+
+        [running_var{f, rv}, batch_var_final{f, bv}, momentum{alpha}]'bn ->
+            [running_var{f, (100 - alpha) * rv / 100 + alpha * bv / 100}]'bn
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* EVALUATION MODE: use running statistics                                */
+    /* ---------------------------------------------------------------------- */
+
+    @rules normalise_eval
+    {
+        [input{f, i, v},
+         running_mean{f, mu},
+         running_var{f, var},
+         eps{e}, mode{eval}]'bn ->
+            [x_hat_eval{f, i, (v - mu) / sqrt(var + e)}]'bn
+    }
+
+    @rules scale_shift_eval
+    {
+        [x_hat_eval{f, i, xh}, gamma{f, g}, beta{f, b}]'bn ->
+            [output{f, i, (g * xh) / 100 + b}]'bn
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* BACKWARD PASS (training only)                                          */
+    /* dL/dgamma = sum(dL/dy * x_hat)                                        */
+    /* dL/dbeta  = sum(dL/dy)                                                */
+    /* dL/dx = (1/m) * gamma / sqrt(var+eps)                                 */
+    /*           * (m*dL/dy_hat - sum(dL/dy_hat) - x_hat*sum(dL/dy_hat*x_h))*/
+    /* ---------------------------------------------------------------------- */
+
+    /* Receive upstream gradient dL/dy for each (feature, sample) */
+    @rules accum_gamma_grad
+    {
+        [grad_out{f, i, dly}, x_hat{f, i, xh}]'bn ->
+            [gamma_grad{f, dly * xh}]'bn
+        [gamma_grad{f, g1}, gamma_grad{f, g2}]'bn ->
+            [gamma_grad{f, g1 + g2}]'bn
+    }
+
+    @rules accum_beta_grad
+    {
+        [grad_out{f, i, dly}]'bn ->
+            [beta_grad{f, dly}]'bn
+        [beta_grad{f, g1}, beta_grad{f, g2}]'bn ->
+            [beta_grad{f, g1 + g2}]'bn
+    }
+
+    /* Update gamma and beta */
+    @rules update_gamma_beta
+    {
+        [gamma{f, g}, gamma_grad{f, dg}, lr{l}]'bn ->
+            [gamma{f, g - (l * dg) / 100}]'bn
+        [beta{f, b}, beta_grad{f, db}, lr{l}]'bn ->
+            [beta{f, b - (l * db) / 100}]'bn
+    }
+
+    /* Propagate input gradients */
+    @rules compute_input_grad
+    {
+        [grad_out{f, i, dly},
+         gamma{f, g},
+         batch_var_final{f, var},
+         eps{e},
+         batch_size{m}]'bn ->
+            [grad_in{f, i, (g * dly) / (100 * sqrt(var + e))}]'bn
+    }
+
+    /* Send gradients to previous layer */
+    @rules send_grad
+    {
+        [grad_in{f, i, g}]'bn ->
+            []'bn (grad{f, i, g}, out)
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* MODE SWITCHING                                                          */
+    /* ---------------------------------------------------------------------- */
+
+    @rules set_train_mode
+    {
+        [set_mode{train}]'bn -> [mode{train}]'bn
+    }
+
+    @rules set_eval_mode
+    {
+        [set_mode{eval}]'bn -> [mode{eval}]'bn
+    }
+
+    /* ---------------------------------------------------------------------- */
+    /* CLEANUP after each batch                                               */
+    /* ---------------------------------------------------------------------- */
+
+    @rules cleanup_batch
+    {
+        [batch_mean_final{f, mu}]'bn  -> []'bn
+        [batch_var_final{f, var}]'bn  -> []'bn
+        [x_hat{f, i, xh}]'bn         -> []'bn
+        [batch_mean{f, s}]'bn         -> []'bn
+        [batch_var{f, s}]'bn          -> []'bn
+        [sq_dev{f, i, d}]'bn          -> []'bn
+        [batch_size{n}]'bn            -> [batch_size{0}]'bn
+    }
+}
+
+/* ============================================================================
+ * LAYER NORMALIZATION  (normalize over features, not batch)
+ * Used in Transformers / RNNs.
+ * ============================================================================ */
+
+@module layer_norm(num_features, eps)
+{
+    @initial
+    {
+        [ln
+            eps{eps}
+            for (f = 1; f <= num_features; f++)
+            {
+                gamma{f, 100}
+                beta{f, 0}
+            }
+        ]'main
+    }
+
+    /* Compute mean over all features for a single sample i */
+    @rules compute_mean
+    {
+        [input{f, i, v}, feature_sum{i, s}]'ln ->
+            [feature_sum{i, s + v}, input{f, i, v}]'ln
+        [input{f, i, v}]'ln ->
+            [feature_sum{i, v}, input{f, i, v}]'ln
+            where not_exists feature_sum{i}
+    }
+
+    @rules finalise_mean
+    {
+        [feature_sum{i, s}]'ln ->
+            [layer_mean{i, s / num_features}]'ln
+    }
+
+    /* Compute variance over features */
+    @rules compute_var
+    {
+        [input{f, i, v}, layer_mean{i, mu}]'ln ->
+            [sq_dev{f, i, (v - mu) * (v - mu)}]'ln
+        [sq_dev{f, i, d}, layer_var{i, s}]'ln ->
+            [layer_var{i, s + d}]'ln
+        [sq_dev{f, i, d}]'ln ->
+            [layer_var{i, d}]'ln
+            where not_exists layer_var{i}
+    }
+
+    @rules finalise_var
+    {
+        [layer_var{i, s}]'ln ->
+            [layer_var_final{i, s / num_features}]'ln
+    }
+
+    /* Normalise + scale + shift */
+    @rules normalise
+    {
+        [input{f, i, v},
+         layer_mean{i, mu},
+         layer_var_final{i, var},
+         gamma{f, g},
+         beta{f, b},
+         eps{e}]'ln ->
+            [output{f, i, g * (v - mu) / sqrt(var + e) + b}]'ln
+    }
+
+    /* Cleanup */
+    @rules cleanup
+    {
+        [layer_mean{i, mu}]'ln      -> []'ln
+        [layer_var_final{i, v}]'ln  -> []'ln
+        [sq_dev{f, i, d}]'ln        -> []'ln
+        [feature_sum{i, s}]'ln      -> []'ln
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE: Network with Batch Normalization
+ * Architecture: Linear -> BN -> ReLU -> Linear -> BN -> ReLU -> Linear
+ * ============================================================================ */
+
+@model bn_network(input_size, hidden_size, output_size)
+{
+    @membrane_structure
+    {
+        [main
+            [layer1  linear_layer(input_size, hidden_size)]'main
+            [bn1     batch_norm(hidden_size, 1, 10)]'main
+            [act1    relu_activation]'main
+            [layer2  linear_layer(hidden_size, hidden_size)]'main
+            [bn2     batch_norm(hidden_size, 1, 10)]'main
+            [act2    relu_activation]'main
+            [layer3  linear_layer(hidden_size, output_size)]'main
+        ]
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Batch Normalization in PLingua"
+    version: "1.0.0"
+    description: "Batch Normalization and Layer Normalization as P-Systems"
+    features: [
+        "Batch Normalization (train + eval modes)",
+        "Layer Normalization",
+        "Learnable gamma/beta parameters",
+        "Running mean/variance tracking",
+        "Backward pass with gradient propagation",
+        "Mode switching (train/eval)"
+    ]
+}

@@ -1,0 +1,213 @@
+/*
+ * closures.pli - Closure Isomorphism across Frames + Ennead Frame Resolution
+ *
+ * A single operator -- CLOSURE -- instantiated in three frames, each of which
+ * is both a dialect of the membrane platform and a neural architecture:
+ *
+ *   { circle ~ cycle ~ closure }
+ *
+ *   STRUCTURAL closure  (spatial frame)   -> .mli morphological -> CNNs
+ *     A loop closed in space: the receptive field.  Convolution is the
+ *     structural closure of a local neighbourhood under weight-SHARING --
+ *     translation symmetry is the conserved quantity (Noether), so the same
+ *     kernel is applied at every spatial site.
+ *
+ *   PROCEDURAL closure  (temporal frame)  -> .gli generational  -> RNNs
+ *     A loop closed in time: the recurrence.  A cycle feeding its output back
+ *     as its next input is the procedural closure; task cycles nest within
+ *     product cycles, and periodicity makes the loop a time-loop (a closed
+ *     timelike curve of computation).
+ *
+ *   RELATIONAL closure  (causal frame)    -> .nli nomological   -> GNNs
+ *     A loop closed over relations: message passing.  A graph node aggregates
+ *     its neighbours until a fixed point -- the relational closure.  Conformal
+ *     mapping relates dimensionality to continuous symmetries; by Noether
+ *     each continuous symmetry yields a conserved current, and the symmetry
+ *     group is a Lie algebra -- so conservation laws become rewriting
+ *     invariants (nomological = "lawful").
+ *
+ * The ENNEAD (3x3) of relevance realization then solves the FRAME PROBLEM:
+ * the three poles (Agent / Arena / Relation) crossed with the three frames
+ * (spatial / temporal / causal) give 9 dimensions; a balanced ennead is one
+ * where all 9 contribute evenly, which is precisely the condition that no
+ * frame's boundaries have to be re-specified as the situation changes.
+ *
+ * Relevance is linked to RICCI FLOW: curvature (convex vs concave) drives
+ * Noether's conservation laws, and the LEVER that parameterizes curvature
+ * itself is the GAUGE FIELD -- the connection whose parallel transport of
+ * n-forms has holonomy equal to the curvature.  Gauge invariance is the
+ * conserved quantity.  (See the README "frames" section for the analogy map.)
+ *
+ * Numerical convention: integers scaled by 100 for continuous quantities;
+ * ennead dims, balances and curvature signs are exact integers.
+ */
+
+@model<membrane_computing>
+
+@import "topology.pli"     /* arity / matula / partition selection   */
+@import "integration.pli"  /* plingua_compat macros                  */
+
+/* ============================================================================
+ * CLOSURE ISOMORPHISM
+ * One closure operator, three frames.  close{F, X} asserts X is the closure
+ * of the frame-F structure.  The isomorphism is witnessed by a map that
+ * carries a closure in one frame to the corresponding closure in another.
+ * ============================================================================ */
+
+@module closure_isomorphism
+{
+    @rules close_frames
+    {
+        /* Spatial closure: a local neighbourhood closes to a receptive field. */
+        [spatial{nbhd}]'frame ->
+            [structural_closure{nbhd}]'frame
+
+        /* Temporal closure: a step feeding back closes to a recurrence. */
+        [temporal{step}]'frame ->
+            [procedural_closure{step}]'frame
+
+        /* Causal closure: a neighbourhood aggregation closes to a fixed point */
+        [causal{aggregate}]'frame ->
+            [relational_closure{aggregate}]'frame
+    }
+
+    /* The isomorphism: the three closures are inter-mappable. */
+    @rules isomorph
+    {
+        [structural_closure{X}, temporal_map{}]'frame ->
+            [procedural_closure{X}]'frame
+
+        [procedural_closure{X}, causal_map{}]'frame ->
+            [relational_closure{X}]'frame
+
+        [relational_closure{X}, spatial_map{}]'frame ->
+            [structural_closure{X}]'frame
+    }
+}
+
+/* ============================================================================
+ * SPATIAL -> CNN   (.mli morphological extension)
+ * Structural closure = receptive field; weight sharing = translation symmetry
+ * (Noether-conserved).  A conv kernel applied at every site is the spatial
+ * closure of the local operator.
+ * ============================================================================ */
+
+@module spatial_cnn(kernel_size)
+{
+    @rules convolve
+    {
+        /* Shared kernel applied at every site simultaneously (parallel). */
+        [site{i, v}, kernel{k, w}]'spatial ->
+            [site{i, v}, conv{i, round(v * w / 100)}]'spatial
+
+        /* The receptive field is the structural closure of the neighbourhood */
+        [conv{i, a}, conv{j, b}, adjacent{i, j}]'spatial ->
+            [field{i, a + b}]'spatial
+            where i < j
+    }
+}
+
+/* ============================================================================
+ * TEMPORAL -> RNN   (.gli generational extension)
+ * Procedural closure = recurrence.  The hidden state at time t feeds back as
+ * input at t+1; task cycles nest within product cycles; a periodic loop is a
+ * closed timelike curve of computation.
+ * ============================================================================ */
+
+@module temporal_rnn(period)
+{
+    @rules recur
+    {
+        /* Recurrence: h(t+1) closes the loop on h(t). */
+        [hidden{t, h}, period{p}]'temporal ->
+            [hidden{t + 1, h}, period{p}]'temporal
+
+        /* Periodicity: after p steps the loop closes (time loop). */
+        [hidden{t, h}, period{p}]'temporal ->
+            [cycle_closed{t}]'temporal
+            where (t mod p) = 0
+    }
+}
+
+/* ============================================================================
+ * CAUSAL -> GNN   (.nli nomological extension)
+ * Relational closure = message passing to a fixed point.  Conformal symmetry
+ * yields Noether conserved currents; the Lie algebra of the symmetry group
+ * makes conservation a rewriting invariant.
+ * ============================================================================ */
+
+@module causal_gnn
+{
+    @rules message_pass
+    {
+        /* Aggregate neighbour messages (relational closure step). */
+        [node{i, v}, edge{j, i}, node{j, w}]'causal ->
+            [node{i, v}, agg{i, v + w}]'causal
+            where i <> j
+
+        /* Noether: a continuous symmetry leaves a conserved current. */
+        [symmetry{S}, current{J, q}]'causal ->
+            [conserved{J, q}]'causal
+    }
+}
+
+/* ============================================================================
+ * ENNEAD FRAME  (the frame-problem solver)
+ * 3 poles (agent, arena, relation) x 3 frames (spatial, temporal, causal) =
+ * 9 dimensions.  ennead{pole, frame, v} holds each dimension's contribution
+ * (x100).  A BALANCED ennead (all contribute evenly) is the condition for
+ * frame-problem resolution: no frame boundary needs re-specifying on change.
+ * ============================================================================ */
+
+@module ennead_frame
+{
+    @rules balance
+    {
+        /* Balance: the spread between max and min dimension is small. */
+        [ennead{p1, f1, v}, ennead{p2, f2, u}]'ennead ->
+            [spread{abs(v - u)}]'ennead
+            where (p1 <> p2) or (f1 <> f2)
+
+        /* A low spread means the frame problem is resolved (stable grip). */
+        [spread{s}]'ennead ->
+            [frame_resolved{1}]'ennead
+            where s < 20
+    }
+}
+
+/* ============================================================================
+ * RICCI-FLOW RELEVANCE  (the curvature lever = the gauge field)
+ * Relevance flows like Ricci flow: regions of high relevance-curvature
+ * concentrate (convex) and low ones spread (concave).  Curvature drives
+ * Noether's conserved currents (its sign = convex vs concave).  The LEVER
+ * that parameterizes curvature is the gauge field (connection); parallel
+ * transport of an n-form around a loop has holonomy = the curvature.
+ * ============================================================================ */
+
+@module ricci_relevance
+{
+    @rules flow
+    {
+        /* Ricci flow: relevance metric evolves by -2 * Ricci curvature.
+         * g' = g - 2*Ric*g  (x100 ints; Ric signed: convex +, concave -). */
+        [metric{g}, ricci{ric}]'gauge ->
+            [metric{g - round(2 * ric * g / 100)}]'gauge
+
+        /* The gauge field parameterizes curvature: holonomy of parallel
+         * transport around a loop IS the curvature. */
+        [connection{A}, loop{L}]'gauge ->
+            [holonomy{L}, curvature{L}]'gauge
+
+        /* Curvature sign selects the conserved current (Noether). */
+        [curvature{L}, positive{L}]'gauge ->
+            [conserved_current{L, contract}]'gauge
+
+        [curvature{L}, negative{L}]'gauge ->
+            [conserved_current{L, expand}]'gauge
+
+        /* Gauge invariance: the conserved quantity is unchanged by a gauge
+         * transformation (parallel transport) of the connection. */
+        [connection{A}, gauge_transform{U}]'gauge ->
+            [connection{A}, gauge_invariant{1}]'gauge
+    }
+}

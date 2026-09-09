@@ -1,0 +1,277 @@
+/*
+ * Extended Layer Modules in PLingua
+ * Additional trainable layers beyond linear_layer in nn.pli:
+ *   - LookupTable (embedding layer)
+ *   - Bilinear layer
+ *   - Sparse linear layer
+ *   - Weight initialization schemes (Xavier/Glorot, He/Kaiming)
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * WEIGHT INITIALIZATION SCHEMES
+ * Parameterizable initializers replacing hard-coded random(-50, 50).
+ * Bound values are scaled by 100 (e.g. limit 0.5 -> 50).
+ * ============================================================================ */
+
+/* Xavier/Glorot uniform: U(-sqrt(6/(fan_in+fan_out)), +sqrt(6/(fan_in+fan_out)))
+ * Suitable for tanh/sigmoid activations. */
+@module xavier_init(fan_in, fan_out)
+{
+    @macro init_weight(j)
+    {
+        weight{j, random(-round(100*sqrt(6/(fan_in+fan_out))),
+                          round(100*sqrt(6/(fan_in+fan_out))))}
+    }
+}
+
+/* He/Kaiming uniform: U(-sqrt(6/fan_in), +sqrt(6/fan_in))
+ * Suitable for ReLU-family activations. */
+@module he_init(fan_in)
+{
+    @macro init_weight(j)
+    {
+        weight{j, random(-round(100*sqrt(6/fan_in)),
+                          round(100*sqrt(6/fan_in)))}
+    }
+}
+
+/* Linear layer variant with a pluggable initializer.
+ * init_scheme: xavier | he | uniform */
+@module linear_layer_init(input_size, output_size, init_scheme)
+{
+    @initial
+    {
+        for (i = 1; i <= output_size; i++)
+        {
+            [neuron{i}
+                for (j = 1; j <= input_size; j++)
+                {
+                    /* Xavier bound */
+                    weight{j, random(-round(100*sqrt(6/(input_size+output_size))),
+                                      round(100*sqrt(6/(input_size+output_size))))}
+                        where init_scheme == xavier
+
+                    /* He bound */
+                    weight{j, random(-round(100*sqrt(6/input_size)),
+                                      round(100*sqrt(6/input_size)))}
+                        where init_scheme == he
+
+                    /* Legacy uniform */
+                    weight{j, random(-50, 50)}
+                        where init_scheme == uniform
+                }
+                bias{0}
+            ]'layer
+        }
+    }
+
+    /* Forward and backward rules identical to linear_layer in nn.pli */
+    @rules forward
+    {
+        [input{j, v}, weight{j, w}]'neuron{i} ->
+            [sum{i, round(v*w/100)}, weight{j, w}]'neuron{i}
+
+        [sum{i, s}, bias{b}]'neuron{i} ->
+            [output{i, s+b}, bias{b}]'neuron{i}
+
+        [output{i, v}]'neuron{i} ->
+            []'neuron{i} (output{i, v}, out)
+    }
+
+    @rules backward
+    {
+        (grad{i, g}, in) ->
+            [grad{i, g}]'neuron{i}
+
+        [grad{i, g}, input{j, v}]'neuron{i} ->
+            [weight_grad{j, round(g*v/100)}]'neuron{i}
+
+        [weight{j, w}, weight_grad{j, g}, learning_rate{lr}]'neuron{i} ->
+            [weight{j, w - round(lr*g/100)}, learning_rate{lr}]'neuron{i}
+
+        [grad{i, g}, weight{j, w}]'neuron{i} ->
+            []'neuron{i} (grad{j, round(g*w/100)}, out)
+    }
+}
+
+/* ============================================================================
+ * LOOKUP TABLE (embedding layer)
+ * Maps discrete indices to learned dense vectors.
+ * Weight rows stored as embedding{row, dim, value} objects; an integer
+ * input token{position, row} selects row objects to emit as output.
+ * ============================================================================ */
+
+@module lookup_table(num_embeddings, embedding_dim)
+{
+    @initial
+    {
+        [embed
+            for (r = 1; r <= num_embeddings; r++)
+            {
+                for (d = 1; d <= embedding_dim; d++)
+                {
+                    embedding{r, d, random(-50, 50)}
+                }
+            }
+        ]'main
+    }
+
+    @rules forward
+    {
+        /* Index lookup: token at position p selecting row r
+         * copies the row's embedding values to the output */
+        [token{p, r}, embedding{r, d, v}]'embed ->
+            [token{p, r}, embedding{r, d, v}, output{p, d, v}]'embed
+
+        [output{p, d, v}]'embed ->
+            []'embed (output{p, d, v}, out)
+    }
+
+    @rules backward
+    {
+        /* Gradient only flows to rows that were looked up */
+        (grad{p, d, g}, in) ->
+            [grad{p, d, g}]'embed
+
+        [grad{p, d, g}, token{p, r}, embedding{r, d, v}, learning_rate{lr}]'embed ->
+            [token{p, r},
+             embedding{r, d, v - round(lr*g/100)},
+             learning_rate{lr}]'embed
+    }
+}
+
+/* ============================================================================
+ * BILINEAR LAYER
+ * output_k = x1^T * W_k * x2 + b_k for each output unit k.
+ * Weights stored as bilinear_weight{k, i, j, w} objects.
+ * ============================================================================ */
+
+@module bilinear(input1_size, input2_size, output_size)
+{
+    @initial
+    {
+        [bilin
+            for (k = 1; k <= output_size; k++)
+            {
+                for (i = 1; i <= input1_size; i++)
+                {
+                    for (j = 1; j <= input2_size; j++)
+                    {
+                        bilinear_weight{k, i, j, random(-50, 50)}
+                    }
+                }
+                bilinear_bias{k, 0}
+            }
+        ]'main
+    }
+
+    @rules forward
+    {
+        /* Triple product terms: x1_i * W_kij * x2_j (double rescale) */
+        [input1{i, v1}, input2{j, v2}, bilinear_weight{k, i, j, w}]'bilin ->
+            [input1{i, v1}, input2{j, v2}, bilinear_weight{k, i, j, w},
+             term{k, round(v1*w*v2/10000)}]'bilin
+
+        /* Sum terms per output unit */
+        [term{k, t1}, term{k, t2}]'bilin ->
+            [term{k, t1+t2}]'bilin
+
+        /* Add bias and emit */
+        [term{k, s}, bilinear_bias{k, b}]'bilin ->
+            [bilinear_bias{k, b}]'bilin (output{k, s+b}, out)
+    }
+
+    @rules backward
+    {
+        (grad{k, g}, in) ->
+            [grad{k, g}]'bilin
+
+        /* Weight gradient: g * x1_i * x2_j */
+        [grad{k, g}, input1{i, v1}, input2{j, v2},
+         bilinear_weight{k, i, j, w}, learning_rate{lr}]'bilin ->
+            [grad{k, g}, input1{i, v1}, input2{j, v2},
+             bilinear_weight{k, i, j, w - round(lr*g*v1*v2/1000000)},
+             learning_rate{lr}]'bilin
+
+        /* Input gradients */
+        [grad{k, g}, bilinear_weight{k, i, j, w}, input2{j, v2}]'bilin ->
+            []'bilin (grad_input1{i, round(g*w*v2/10000)}, out)
+
+        [grad{k, g}, bilinear_weight{k, i, j, w}, input1{i, v1}]'bilin ->
+            []'bilin (grad_input2{j, round(g*w*v1/10000)}, out)
+    }
+}
+
+/* ============================================================================
+ * SPARSE LINEAR LAYER
+ * Linear layer accepting sparse inputs: only nonzero entries are supplied
+ * as sparse_input{j, v} objects, so only touched weights participate.
+ * ============================================================================ */
+
+@module sparse_linear(input_size, output_size)
+{
+    @initial
+    {
+        for (i = 1; i <= output_size; i++)
+        {
+            [neuron{i}
+                for (j = 1; j <= input_size; j++)
+                {
+                    weight{j, random(-50, 50)}
+                }
+                bias{0}
+            ]'slayer
+        }
+    }
+
+    @rules forward
+    {
+        /* Only rules for present (nonzero) inputs fire - the P-Systems
+         * semantics gives sparse computation for free */
+        [sparse_input{j, v}, weight{j, w}]'neuron{i} ->
+            [sum{i, round(v*w/100)}, weight{j, w}]'neuron{i}
+
+        [sum{i, s1}, sum{i, s2}]'neuron{i} ->
+            [sum{i, s1+s2}]'neuron{i}
+
+        [sum{i, s}, bias{b}]'neuron{i} ->
+            [bias{b}]'neuron{i} (output{i, s+b}, out)
+    }
+
+    @rules backward
+    {
+        (grad{i, g}, in) ->
+            [grad{i, g}]'neuron{i}
+
+        /* Only weights of nonzero inputs receive gradient updates */
+        [grad{i, g}, sparse_input{j, v}, weight{j, w}, learning_rate{lr}]'neuron{i} ->
+            [grad{i, g}, sparse_input{j, v},
+             weight{j, w - round(lr*g*v/10000)},
+             learning_rate{lr}]'neuron{i}
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Extended Layer Modules in PLingua"
+    version: "1.0.0"
+    description: "Embedding, bilinear, sparse layers and initializers"
+    depends: ["nn.pli"]
+
+    modules: [
+        "xavier_init(fan_in, fan_out)",
+        "he_init(fan_in)",
+        "linear_layer_init(input_size, output_size, init_scheme)",
+        "lookup_table(num_embeddings, embedding_dim)",
+        "bilinear(input1_size, input2_size, output_size)",
+        "sparse_linear(input_size, output_size)"
+    ]
+}

@@ -1,0 +1,1371 @@
+/*
+ * Demonstration Programs for Neural Network in PLingua
+ * Interactive examples showing various neural network capabilities,
+ * including the v2.2 extensions: graph neural networks,
+ * neuroevolution via membrane division, Bayesian layers with
+ * Monte-Carlo uncertainty, and transformer greedy decoding.
+ */
+
+@model<demonstration>
+
+/* Include the main neural network module */
+@import "nn.pli"
+@import "momentum_adam_rmsprop.pli"
+@import "convolutional.pli"
+@import "recurrent.pli"
+@import "attention.pli"
+@import "snp.pli"
+@import "gnn.pli"
+@import "neuroevolution.pli"
+@import "bayesian.pli"
+@import "transformer_decoder.pli"
+
+/* ============================================================================
+ * DEMO 1: Basic Neural Network Creation and Prediction
+ * ============================================================================ */
+
+@demo basic_network
+{
+    @description "Create a simple network and make predictions"
+    
+    @membrane_structure
+    {
+        [main
+            [network
+                [layer1 linear_layer(2, 3)]'network
+                [activation1 sigmoid_activation]'network
+                [layer2 linear_layer(3, 1)]'network
+                [activation2 sigmoid_activation]'network
+            ]'main
+        ]
+    }
+    
+    @execution
+    {
+        /* Initialize network with random weights */
+        create_network([2, 3, 1])
+        
+        /* Make a prediction */
+        [input{1, 50}, input{2, 80}]'main ->  /* Input: [0.5, 0.8] scaled */
+            [input{1, 50}, input{2, 80}]'layer1
+        
+        /* Forward propagate through all layers */
+        [output{j, v}]'layer1 -> [x{v}]'activation1
+        [sig{s}]'activation1 -> [input{j, s}]'layer2
+        [output{j, v}]'layer2 -> [x{v}]'activation2
+        [sig{s}]'activation2 -> []'activation2 (prediction{s}, out)
+        
+        /* Display result */
+        []'main (display{
+            "Basic Network Demo",
+            "Input": [0.5, 0.8],
+            "Output": prediction / 100.0,
+            "Network": "2 -> 3 -> 1 with Sigmoid"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 2: XOR Problem
+ * Classic test of neural network learning capability
+ * ============================================================================ */
+
+@demo xor_problem
+{
+    @description "Train a network to learn XOR function"
+    
+    @membrane_structure
+    {
+        [main
+            /* XOR cannot be learned by linear model, needs hidden layer */
+            xor_network
+            
+            [training_data
+                sample{1, [0, 0], 0}
+                sample{2, [0, 1], 1}
+                sample{3, [1, 0], 1}
+                sample{4, [1, 1], 0}
+            ]'main
+        ]
+    }
+    
+    @execution
+    {
+        /* Display XOR truth table */
+        []'main (display{
+            "XOR Problem Demo",
+            "Truth Table:",
+            "0 XOR 0 = 0",
+            "0 XOR 1 = 1",
+            "1 XOR 0 = 1",
+            "1 XOR 1 = 0",
+            "Network: 2 -> 4 -> 1 (Tanh + Sigmoid)"
+        }, out)
+        
+        /* Train network */
+        train_network(xor_network, training_data, 1000, 50)
+        
+        /* Test all cases */
+        for (sample in training_data)
+        {
+            [input{1, sample.x1}, input{2, sample.x2}]'xor_network
+            [output{o}]'xor_network ->
+                []'xor_network (result{sample.x1, sample.x2, o, sample.y}, out)
+            
+            []'main (display{
+                input: [sample.x1, sample.x2],
+                predicted: o / 100.0,
+                expected: sample.y,
+                error: abs(o/100.0 - sample.y)
+            }, out)
+        }
+        
+        /* Summary */
+        []'main (display{
+            "XOR network successfully trained!",
+            "The network learned the non-linear XOR function"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 3: Activation Functions Comparison
+ * ============================================================================ */
+
+@demo activation_functions
+{
+    @description "Compare different activation functions"
+    
+    @membrane_structure
+    {
+        [main
+            [sigmoid sigmoid_activation]'main
+            [tanh tanh_activation]'main
+            [relu relu_activation]'main
+        ]
+    }
+    
+    @execution
+    {
+        []'main (display{
+            "Activation Functions Demo",
+            "Comparing: Sigmoid, Tanh, ReLU"
+        }, out)
+        
+        /* Test with various inputs */
+        for (x in [-200, -100, -50, 0, 50, 100, 200])
+        {
+            /* Sigmoid */
+            [x{x}]'sigmoid
+            [sig{s}]'sigmoid -> []'sigmoid (sigmoid_out{x, s}, out)
+            
+            /* Tanh */
+            [x{x}]'tanh
+            [tanh_out{t}]'tanh -> []'tanh (tanh_result{x, t}, out)
+            
+            /* ReLU */
+            [x{x}]'relu
+            [relu{r}]'relu -> []'relu (relu_result{x, r}, out)
+            
+            /* Display comparison */
+            []'main (display{
+                input: x / 100.0,
+                sigmoid: s / 100.0,
+                tanh: t / 100.0,
+                relu: r / 100.0
+            }, out)
+        }
+        
+        /* Characteristics summary */
+        []'main (display{
+            "Sigmoid": "Range (0, 1), smooth, suffers from vanishing gradients",
+            "Tanh": "Range (-1, 1), zero-centered, better than sigmoid",
+            "ReLU": "Range [0, ∞), fast, sparse activation, popular for deep networks"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 4: Loss Functions
+ * ============================================================================ */
+
+@demo loss_functions
+{
+    @description "Demonstrate different loss functions"
+    
+    @membrane_structure
+    {
+        [main
+            [mse mse_criterion]'main
+            [nll nll_criterion]'main
+        ]
+    }
+    
+    @execution
+    {
+        []'main (display{
+            "Loss Functions Demo",
+            "MSE: Mean Squared Error (Regression)",
+            "NLL: Negative Log Likelihood (Classification)"
+        }, out)
+        
+        /* Demo MSE for regression */
+        []'main (display{
+            "MSE Example: Predicting house prices"
+        }, out)
+        
+        [predicted{1, 2500}, target{1, 2700}]'mse  /* $250k vs $270k */
+        [predicted{2, 3200}, target{2, 3000}]'mse  /* $320k vs $300k */
+        
+        [error{1, e1}]'mse -> [squared_error{1, e1*e1}]'mse
+        [error{2, e2}]'mse -> [squared_error{2, e2*e2}]'mse
+        [squared_error{1, se1}, squared_error{2, se2}]'mse ->
+            [total_loss{(se1 + se2) / 2}]'mse
+        
+        []'main (display{
+            "Predicted": [250, 320],
+            "Actual": [270, 300],
+            "MSE Loss": total_loss / 10000.0
+        }, out)
+        
+        /* Demo NLL for classification */
+        []'main (display{
+            "NLL Example: Image classification"
+        }, out)
+        
+        [predicted{0, 10}, predicted{1, 70}, predicted{2, 20}]'nll
+        [target{1}]'nll  /* True class is 1 (probabilities: 0.1, 0.7, 0.2) */
+        
+        [predicted{1, 70}, target{1}]'nll ->
+            [nll{-log(0.70)}]'nll
+        
+        []'main (display{
+            "Probabilities": [0.1, 0.7, 0.2],
+            "True Class": 1,
+            "NLL Loss": -log(0.70)
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 5: Multi-Layer Network
+ * ============================================================================ */
+
+@demo multilayer_network
+{
+    @description "Build and use a deep neural network"
+    
+    @membrane_structure
+    {
+        [main
+            sequential_network([
+                linear_layer(4, 8),
+                relu_activation,
+                linear_layer(8, 8),
+                relu_activation,
+                linear_layer(8, 3),
+                softmax
+            ])
+        ]
+    }
+    
+    @execution
+    {
+        []'main (display{
+            "Multi-Layer Network Demo",
+            "Architecture: 4 -> 8 -> 8 -> 3",
+            "Activations: ReLU -> ReLU -> Softmax",
+            "Use case: Multi-class classification (3 classes)"
+        }, out)
+        
+        /* Test with sample input */
+        [input{1, 50}, input{2, 30}, input{3, 70}, input{4, 20}]'main ->
+            [input{1, 50}, input{2, 30}, input{3, 70}, input{4, 20}]'layer{1}
+        
+        /* Forward through network */
+        /* ... layers propagate ... */
+        
+        /* Get output probabilities */
+        [probability{1, p1}, probability{2, p2}, probability{3, p3}]'softmax ->
+        {
+            []'main (display{
+                "Input": [0.5, 0.3, 0.7, 0.2],
+                "Class Probabilities": [p1, p2, p3],
+                "Predicted Class": argmax([p1, p2, p3]),
+                "Sum": p1 + p2 + p3  /* Should be 1.0 */
+            }, out)
+        }
+    }
+}
+
+/* ============================================================================
+ * DEMO 6: Training Visualization
+ * ============================================================================ */
+
+@demo training_visualization
+{
+    @description "Visualize training progress over epochs"
+    
+    @membrane_structure
+    {
+        [main
+            [network linear_layer(2, 1)]'main
+            [criterion mse_criterion]'main
+            
+            [training_data
+                sample{1, [10, 20], 30}   /* y = x1 + x2 */
+                sample{2, [50, 30], 80}
+                sample{3, [25, 25], 50}
+                sample{4, [70, 10], 80}
+            ]'main
+        ]
+    }
+    
+    @execution
+    {
+        []'main (display{
+            "Training Visualization Demo",
+            "Learning function: y = x1 + x2",
+            "Network: Linear(2, 1) - no hidden layer needed"
+        }, out)
+        
+        /* Train for several epochs and track loss */
+        for (epoch in [1..10])
+        {
+            epoch_loss{0}
+            
+            for (sample in training_data)
+            {
+                /* Forward pass */
+                [input{1, sample.x1}, input{2, sample.x2}]'network
+                [output{1, pred}]'network
+                
+                /* Compute loss */
+                [predicted{1, pred}, target{1, sample.y}]'criterion
+                [total_loss{loss}]'criterion
+                [epoch_loss{el}]'main -> [epoch_loss{el + loss}]'main
+                
+                /* Backward pass */
+                [gradient{g}]'criterion -> [grad{g}]'network
+                
+                /* Update weights */
+                [weight{j, w}, weight_grad{j, g}, learning_rate{50}]'network ->
+                    [weight{j, w - 50*g}]'network
+            }
+            
+            /* Report epoch progress */
+            [epoch_loss{el}]'main ->
+                []'main (display{
+                    epoch: epoch,
+                    avg_loss: el / 4.0
+                }, out)
+        }
+        
+        []'main (display{
+            "Training complete!",
+            "Loss should decrease over epochs"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 7: Binary Classification
+ * ============================================================================ */
+
+@demo binary_classification
+{
+    @description "Train a binary classifier"
+    
+    @membrane_structure
+    {
+        [main
+            binary_classifier(2, 4)
+            
+            [training_data
+                /* Class 0: bottom-left region */
+                sample{1, [10, 10], 0}
+                sample{2, [20, 15], 0}
+                sample{3, [15, 20], 0}
+                
+                /* Class 1: top-right region */
+                sample{4, [80, 80], 1}
+                sample{5, [85, 75], 1}
+                sample{6, [90, 85], 1}
+            ]'main
+        ]
+    }
+    
+    @execution
+    {
+        []'main (display{
+            "Binary Classification Demo",
+            "Task: Classify points as bottom-left (0) or top-right (1)",
+            "Network: 2 -> 4 -> 1 with ReLU and Sigmoid"
+        }, out)
+        
+        /* Train network */
+        train_network(binary_classifier, training_data, 500, 30)
+        
+        /* Test predictions */
+        test_points{
+            [10, 10],  /* Should be 0 */
+            [90, 90],  /* Should be 1 */
+            [50, 50],  /* Boundary case */
+            [25, 25],  /* Should be 0 */
+            [75, 75]   /* Should be 1 */
+        }
+        
+        for (point in test_points)
+        {
+            [input{1, point[0]}, input{2, point[1]}]'classifier
+            [output{o}]'classifier ->
+            {
+                []'main (display{
+                    point: point,
+                    probability: o / 100.0,
+                    predicted_class: if o > 50 then 1 else 0
+                }, out)
+            }
+        }
+        
+        []'main (display{
+            "Classification complete!",
+            "Network learned to separate the two classes"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 8: Optimizer Comparison (Adam vs SGD)
+ * ============================================================================ */
+
+@demo optimizer_comparison
+{
+    @description "Compare SGD and Adam convergence on the same task"
+
+    @membrane_structure
+    {
+        [main
+            [sgd_net
+                [layer linear_layer(2, 1)]'sgd_net
+                [opt sgd_momentum(10, 90)]'sgd_net
+            ]'main
+            [adam_net
+                [layer linear_layer(2, 1)]'adam_net
+                [opt adam(10, 90, 99, 1)]'adam_net
+            ]'main
+        ]
+    }
+
+    @execution
+    {
+        /* Both networks train on y = x1 + x2 for 50 epochs */
+        for (epoch = 1; epoch <= 50; epoch++)
+        {
+            [input{1, 30}, input{2, 40}, target{70}]'sgd_net
+            [input{1, 30}, input{2, 40}, target{70}]'adam_net
+        }
+
+        /* Compare final losses - Adam typically converges faster */
+        [loss{l}]'sgd_net  -> []'sgd_net  (display{"SGD loss:", l}, out)
+        [loss{l}]'adam_net -> []'adam_net (display{"Adam loss:", l}, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 9: LeNet-5 Convolutional Network
+ * ============================================================================ */
+
+@demo lenet5_demo
+{
+    @description "Run the LeNet-5 architecture on a synthetic 28x28 image"
+
+    @membrane_structure
+    {
+        [main
+            lenet5
+        ]'main
+    }
+
+    @execution
+    {
+        /* Feed a synthetic image: bright square on dark background */
+        for (r = 10; r <= 18; r++)
+        {
+            for (c = 10; c <= 18; c++)
+            {
+                [input{1, r, c, 90}]'lenet5
+            }
+        }
+
+        /* Forward through conv/pool/linear stages */
+        forward(lenet5)
+
+        /* Show classification probabilities */
+        [probability{class, p}]'lenet5 ->
+            []'lenet5 (display{"class", class, "prob", p}, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 10: LSTM Sequence Prediction
+ * ============================================================================ */
+
+@demo lstm_sequence_demo
+{
+    @description "Predict the next value of a repeating sequence with an LSTM"
+
+    @membrane_structure
+    {
+        [main
+            [model lstm(1, 8, 4)]'main
+        ]'main
+    }
+
+    @execution
+    {
+        /* Sequence: 10, 20, 30, 40 -> predict 50 */
+        [x{1, 1, 10}]'model
+        [x{2, 1, 20}]'model
+        [x{3, 1, 30}]'model
+        [x{4, 1, 40}]'model
+
+        /* Gates evolve through time-indexed membranes */
+        forward(model)
+
+        [hidden{4, h, v}]'model ->
+            []'model (display{"final hidden state", h, v}, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 11: Attention Weights
+ * ============================================================================ */
+
+@demo attention_demo
+{
+    @description "Visualize scaled dot-product attention weights"
+
+    @membrane_structure
+    {
+        [main
+            [attn scaled_dot_product_attention(3, 2)]'main
+        ]'main
+    }
+
+    @execution
+    {
+        /* Three positions; position 1 should attend mostly to itself */
+        [q{1, 1, 100}, q{1, 2, 0}]'attn
+        [k{1, 1, 100}, k{1, 2, 0}]'attn
+        [k{2, 1, 0},   k{2, 2, 100}]'attn
+        [k{3, 1, 50},  k{3, 2, 50}]'attn
+        [v_val{1, 1, 10}, v_val{2, 1, 20}, v_val{3, 1, 30}]'attn
+
+        forward(attn)
+
+        [attn_weight{1, j, w}]'attn ->
+            []'attn (display{"attention 1 ->", j, "weight", w}, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 12: Spiking Neural P System XOR
+ * ============================================================================ */
+
+@demo snp_xor_demo
+{
+    @description "Compute XOR with true spiking neural P system semantics"
+
+    @membrane_structure
+    {
+        [main
+            snp_xor
+        ]'main
+    }
+
+    @execution
+    {
+        /* Case (1, 0): spike into in1 only -> output should spike */
+        (a, in)'in1
+        step(3)
+        [spike_emitted{}]'out_neuron ->
+            []'out_neuron (display{"XOR(1,0) = 1"}, out)
+
+        /* Case (1, 1): spikes into both -> AND inhibits output */
+        (a, in)'in1
+        (a, in)'in2
+        step(3)
+        []'main (display{"XOR(1,1) = 0 (inhibited)"}, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 13: GNN Node Classification on a Toy Graph
+ * A 3-node triangle (with self-loops): each node holds a one-dimensional
+ * feature (100/200/300 = 1.0/2.0/3.0). Message passing delivers every
+ * neighbor's features to node 1, which degree-normalizes (deg = 3) and
+ * applies a projection weight of 100 (1.0), so node 1's new feature is
+ * (100 + 200 + 300)/3 * 1.0 = 200 -> class 1 (feature >= 100).
+ * ============================================================================ */
+
+@demo gnn_node_classification
+{
+    @description "Classify nodes of a toy triangle graph with a GCN layer"
+
+    @membrane_structure
+    {
+        [main
+            [gcn
+                [node{1} feat{1, 100} deg{3}]'gcn
+                [node{2} feat{1, 200} deg{3}]'gcn
+                [node{3} feat{1, 300} deg{3}]'gcn
+                edge{1, 1, 100} edge{2, 1, 100} edge{3, 1, 100}
+                edge{1, 2, 100} edge{2, 2, 100} edge{3, 2, 100}
+                edge{1, 3, 100} edge{2, 3, 100} edge{3, 3, 100}
+                weight{1, 1, 100}   /* projection 1.0 (fixed for the demo) */
+            ]'main
+        ]
+    }
+
+    @execution
+    {
+        /* Message passing: node 1 receives 100 + 200 + 300 = 600,
+         * degree-normalized aggregate = 600/3 = 200 */
+        gcn_layer(3, 1, 1)
+
+        /* Projected feature 200 >= 100 -> node 1 is class 1 */
+        [output{1, 1, v}]'gcn ->
+            []'gcn (display{
+                "GNN Node Classification (triangle graph)",
+                "Node 1 aggregate (deg-normalized)": 200,
+                "Node 1 projected feature": v,
+                "Node 1 predicted class": (v >= 100 ? 1 : 0)
+            }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 14: Evolving XOR Weights via Membrane Division
+ * Two-gene genomes encode the weights of a tiny XOR model; fitness is
+ * -loss. genome{1} (fitness 80) clears the threshold 50 and divides:
+ * [genome{1}] -> [genome{2}] (elite copy) [genome{3}] (mutable
+ * offspring, +8 perturbation). genome{4} (fitness 20) is dissolved.
+ * ============================================================================ */
+
+@demo neuroevolution_xor
+{
+    @description "Evolve XOR weights: fit genomes divide, unfit dissolve"
+
+    @membrane_structure
+    {
+        [main
+            [population
+                generation{1}
+                phase{evaluate}
+                [genome{1}
+                    gene{1, 42} gene{2, -17}
+                    fitness{80}    /* above threshold 50 */
+                ]'population
+                [genome{4}
+                    gene{1, 5} gene{2, 5}
+                    fitness{20}    /* below threshold 50: dissolves */
+                ]'population
+            ]'main
+        ]
+    }
+
+    @execution
+    {
+        divide_and_mutate(50)
+        mutate(50, 8)
+        neuroevolution_loop(4, 5, 50)
+
+        []'main (display{
+            "Neuroevolution of XOR weights",
+            "Elite daughter genome{2} genes": [42, -17],
+            "Mutated offspring genome{3} genes": [50, -17],
+            "Dissolved (unfit) genome": 4,
+            "Division = reproduction, dissolution = selection"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 15: Bayesian Uncertainty on a Noisy Regression Point
+ * A 1->1 Bayesian linear layer with mu = 50 (0.5) and std = 20 (0.2)
+ * evaluates the noisy input x = 100 (1.0) twice via the
+ * reparameterization trick: eps = 1.0 gives w = 70 -> y = 70 and
+ * eps = -0.5 gives w = 40 -> y = 40. Monte-Carlo reduction yields
+ * pred_mean = 55 (0.55) and pred_var = 225 (0.0225).
+ * ============================================================================ */
+
+@demo bayesian_uncertainty
+{
+    @description "Monte-Carlo predictive mean/variance for a noisy input"
+
+    @membrane_structure
+    {
+        [main
+            [mc
+                [neuron{1}
+                    w_mu{1, 50}     /* posterior mean 0.5  */
+                    w_std{1, 20}    /* softplus(rho) = 0.2 */
+                    input{1, 100}   /* noisy regression point x = 1.0 */
+                    bias{0}
+                ]'mc
+                num_samples{2}
+            ]'main
+        ]
+    }
+
+    @execution
+    {
+        /* Two reparameterized forward passes (fixed eps for the demo):
+         * w = mu + std*eps = 50 + 20*100/100 = 70 and 50 - 20*50/100 = 40 */
+        bayes_linear_layer(1, 1)
+        mc_predict(2)
+
+        []'main (display{
+            "Bayesian Uncertainty (noisy regression point)",
+            "Sample 1 (eps = 1.0):  w = 70, y = 70",
+            "Sample 2 (eps = -0.5): w = 40, y = 40",
+            "Predictive mean": 55,
+            "Predictive variance": 225
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 16: Greedy Decoding of a 4-Token Sequence
+ * The decoder runs autoregressively from the BOS token: at each step the
+ * argmax over the last position's vocabulary logits (ids 1..5) is
+ * appended as the next token. Argmax picks 2, then 5, then 3, then 4 =
+ * EOS, so generation halts and emits the 4-token sequence [1, 2, 5, 3]
+ * (BOS plus three generated tokens).
+ * ============================================================================ */
+
+@demo greedy_decoding
+{
+    @description "Autoregressive greedy decoding of a 4-token sequence"
+
+    @membrane_structure
+    {
+        [main
+            [gen
+                step{1}
+                tgt_token{1, 1}    /* position 1 holds the BOS token */
+                vocab_size{5}
+                eos_token{4}
+            ]'main
+        ]
+    }
+
+    @execution
+    {
+        /* Step 1 logits (last position 1): argmax over ids 1..5 is 2 */
+        [step{1}]'gen -> [logit{1, 1, 10}, logit{1, 2, 90},
+                          logit{1, 3, 40}, logit{1, 4, 20},
+                          logit{1, 5, 60}, step{1}]'gen
+
+        greedy_decode(5, 4, 4)
+
+        []'main (display{
+            "Greedy Decoding (max_len = 4)",
+            "Step 1 argmax": 2, "Step 2 argmax": 5,
+            "Step 3 argmax": 3, "Step 4 argmax": 4,
+            "Generated sequence": [1, 2, 5, 3],
+            "Token 4 is EOS: generation halted"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 17: AtomSpace Knowledge Graph + ECAN Attention
+ * ============================================================================ */
+
+@demo atomspace_ecan_demo
+{
+    @description "Build a small hypergraph and spread attention with ECAN"
+
+    @membrane_structure
+    {
+        [atomspace
+            focus_threshold{50}
+            spread_wage{10}
+
+            /* Nodes: cat, animal, mammal */
+            [atom{1} atype{concept} aname{cat}    tv{90,90} av{100,0}]'atomspace
+            [atom{2} atype{concept} aname{animal} tv{95,95} av{0,0} ]'atomspace
+            [atom{3} atype{concept} aname{mammal} tv{85,85} av{0,0} ]'atomspace
+
+            /* Link: cat -inherits-> animal, animal -inherits-> mammal */
+            [link{10} atype{inheritance} tv{100,100}
+                link_member{10, 1} link_member{10, 2}]'atomspace
+            [link{11} atype{inheritance} tv{100,100}
+                link_member{11, 2} link_member{11, 3}]'atomspace
+        ]'main
+    }
+
+    @execution
+    {
+        /* "cat" is in focus (sti=100) and pays a wage of 10, which flows
+         * through InheritanceLink 10 to "animal"; in the next step "animal"
+         * pays forward to "mammal". STI is conserved throughout. */
+        ecan_spread(10)
+        attentional_focus(50)
+
+        []'main (display{
+            "AtomSpace: ECAN Attention Spreading",
+            "Initial focus": ["cat (sti=100)"],
+            "After step 1": "animal collects 10 (cat 90)",
+            "After step 2": "mammal collects 10 (animal pays forward)",
+            "Total STI conserved": 100,
+            "Inference": "cat -> animal -> mammal (attention = activation)"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 18: Hebbian Learning in the AtomSpace
+ * ============================================================================ */
+
+@demo atomspace_hebbian_demo
+{
+    @description "Co-focused atoms wire together into a Hebbian link"
+
+    @membrane_structure
+    {
+        [atomspace
+            focus_threshold{50}
+            [atom{1} atype{concept} aname{fire}  av{80,0}]'atomspace
+            [atom{2} atype{concept} aname{smoke} av{70,0}]'atomspace
+        ]'main
+    }
+
+    @execution
+    {
+        /* Both "fire" and "smoke" exceed the focus threshold, so both emit
+         * a Hebbian pulse in the same maximally-parallel step; the pair of
+         * pulses triggers creation of a symmetric HebbianLink. */
+        hebbian_learning(50)
+
+        []'main (display{
+            "AtomSpace: Hebbian Learning",
+            "Co-focused atoms": ["fire", "smoke"],
+            "Rule": "atoms that fire together wire together",
+            "Result": "HebbianLink{fire, smoke} tv{50, 100}",
+            "Note": "repeated co-activation strengthens the link (+1/step)"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 19: a9nn NNECCO Cognitive Agent - one EchoBeats cycle
+ * ============================================================================ */
+
+@demo a9nn_nnecco_demo
+{
+    @description "Run one 12-beat EchoBeats cognitive cycle of the NNECCO agent"
+
+    @membrane_structure
+    {
+        [agent
+            /* Hardware registers */
+            reg{r0, 0} reg{r1, 0} reg{r2, 0} reg{r3, 0} reg{r4, 0}
+            pc{1}
+            sta{0}
+            cycle{0}
+            layer{1}              /* start REACTIVE */
+
+            /* Subsystems */
+            echo_reservoir(64, 847, 90, 70)
+            emotion_unit
+            consciousness(1)
+            episodic_memory(1000)
+            llama_pool(4, 8080)   /* 4 parallel LLaMA instances */
+            planner(8)
+            atomspace_system(50, 10)
+
+            /* One perception to drive the cycle */
+            raw_input{explain_gradient_descent}
+            novelty{150}
+            reward{80}
+        ]'main
+    }
+
+    @execution
+    {
+        echobeats_driver
+
+        []'main (display{
+            "a9nn NNECCO Agent - EchoBeats Cycle",
+            "Reservoir": "847 neurons, spectral=0.90, leak=0.70",
+            "Consciousness": "L1 REACTIVE (rises if loss high)",
+            "LLaMA pool": "4 instances on ports 8080-8083",
+            "Beat trace": [
+                "1 PERCEIVE  -> R0 <- raw input",
+                "2 FILTER    -> attenuate sub-threshold features",
+                "3 RESONATE  -> reservoir tick (leaky tanh)",
+                "4 ENCODE    -> R2 <- compressed context",
+                "5 RECALL    -> top-priority episodes",
+                "6 REASON    -> least-loaded LLaMA instance (stub)",
+                "7 EMOTE     -> curiosity/joy/surprise update",
+                "8 PLAN      -> argmax action from modulated Q",
+                "9 LEARN     -> store transition, emit loss",
+                "10 REFLECT  -> adjust consciousness layer",
+                "11 EXPRESS  -> package output text",
+                "12 INTEGRATE-> EpisodeNode -> AtomSpace, PC->1"
+            ],
+            "Result": "cycle=1, output + episode logged, PC reset to 1"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 20: PLN Inference Chain
+ * ============================================================================ */
+
+@demo pln_inference_demo
+{
+    @description "Deduce 'Socrates is mortal' style chain over the AtomSpace"
+
+    @membrane_structure
+    {
+        [pln
+            cycle{0}
+            pln_cfg{3}
+            imp{cat, animal, 90, 80}
+            imp{animal, mortal, 80, 60}
+            tv{90, 100}               /* "cat" holds at 0.90 */
+        ]'main
+    }
+
+    @execution
+    {
+        pln_forward_chain(3)
+
+        []'main (display{
+            "PLN Forward Chaining",
+            "Premises": ["cat->animal (0.90)", "animal->mortal (0.80)", "cat (0.90)"],
+            "Deduction": "cat->mortal  s=0.72 c=0.54",
+            "Modus ponens": "mortal  s=0.72 (from cat & cat->animal)",
+            "Note": "all applicable rules fire in ONE parallel step"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 21: OpenPsi Motivational Cycle
+ * ============================================================================ */
+
+@demo openpsi_cycle_demo
+{
+    @description "Exploration demand drives curiosity and action in the agent"
+
+    @membrane_structure
+    {
+        [agent
+            psi_pc{1}
+            [psi
+                demand{1, 20, 5, 70}
+                demand{2, 50, 2, 90}
+                demand{3, 58, 8, 60}   /* exploration near threshold */
+                demand{4, 30, 4, 65}
+                mod{activation, 60}
+            ]'agent
+            emo{1, 40}
+            emo{2, 0}
+        ]'main
+    }
+
+    @execution
+    {
+        openpsi_system
+
+        []'main (display{
+            "OpenPsi Motivational Cycle",
+            "Demands": "exploration 0.58 -> 0.66 (>= 0.60 => URGENT)",
+            "Goal": "explore_goal activated (relief 0.75)",
+            "Action": "explore selected (max relief)",
+            "Emotion bridge": "urgent exploration -> curiosity 0.40 -> 0.43",
+            "Loop": "reward on explore lowers tension; cycle repeats"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 22: Parallel Supply-Chain Ledger (1000 entities, synchronous steps)
+ * ============================================================================ */
+
+@demo parallel_ledger_demo
+{
+    @description "Chart of accounts for a supply chain: all entities settle in
+     * a constant number of maximally-parallel membrane steps, independent of
+     * entity count."
+
+    @membrane_structure
+    {
+        /* Each entity is a membrane holding account{acct, balance} objects.
+         * A double-entry transfer moves value between two entities' matching
+         * accounts.  Because evolution rules are maximally parallel, EVERY
+         * entity's ledger updates in the same step. */
+        [ledger
+            for (e = 1; e <= 1000; e++)
+            {
+                [entity{e}
+                    account{cash, 10000}
+                    account{receivable, 2500}
+                    account{payable, 1800}
+                    account{inventory, 5000}
+                ]'ledger
+            }
+            /* Pending inter-entity transfers: transfer{from, to, acct, amt} */
+            transfer{1, 2, cash, 500}
+            transfer{2, 3, cash, 300}
+            transfer{7, 42, inventory, 1200}
+        ]'main
+    }
+
+    @execution
+    {
+        /* Double-entry rule: debit source, credit destination -- applied to
+         * ALL transfers simultaneously in one maximally-parallel step. */
+        [transfer{F, T, acct, amt},
+         account{acct, bf}]'entity{F}
+        [account{acct, bt}]'entity{T} ->
+            [account{acct, bf - amt}]'entity{F}
+            [account{acct, bt + amt}]'entity{T}
+
+        []'main (display{
+            "Parallel Supply-Chain Ledger",
+            "Entities": 1000,
+            "Accounts/entity": 4,
+            "Key property": "settlement is O(1) membrane steps, NOT O(n)",
+            "Step 1": "all pending transfers settle simultaneously",
+            "Invariants": "double-entry conservation holds by construction",
+            "Why": "maximal parallelism = every entity's rules fire together"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 23: Unified Cognitive Cycle
+ * ============================================================================ */
+
+@demo unified_cycle_demo
+{
+    @description "One full cycle where the agent reasons (PLN), wants (OpenPsi)
+     * and remembers (AtomSpace) through the EchoBeats spine"
+
+    @membrane_structure
+    {
+        [agent
+            pc{1}
+            cycle{0}
+            layer{1}
+            raw_input{cat_is_an_animal}
+            reward{70}
+            [psi
+                demand{3, 58, 8, 60}
+                mod{activation, 70}
+            ]'agent
+            emo{1, 40}
+            emo{2, 0}
+            [atomspace
+                [atom{1} atype{concept} aname{cat} in_focus{} ]'atomspace
+            ]'agent
+            imp{cat, animal, 90, 80}
+            imp{animal, mortal, 80, 60}
+        ]'main
+    }
+
+    @execution
+    {
+        uni_recall(50)
+        uni_reason
+        uni_emote
+        uni_learn
+        uni_integrate
+
+        []'main (display{
+            "Unified Cognitive Cycle",
+            "RECALL": "focus surfaces 'cat' as premise",
+            "REASON": "PLN deduces cat->mortal (s=0.72)",
+            "EMOTE": "urgent exploration raises curiosity (motivation felt)",
+            "LEARN": "reward 0.70 -> loss 0.30; conclusions revise AtomSpace TVs",
+            "INTEGRATE": "thought persisted as learned implication atom",
+            "Result": "an agent that reasons, wants and remembers"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 24: Mixed-Radix Parallel Operations (membrane arity topologies)
+ * ============================================================================ */
+
+@demo mixed_radix_demo
+{
+    @description "Binary, ternary, quaternionic and quinternary bases execute
+     * their ops in the SAME maximally-parallel step"
+
+    @membrane_structure
+    {
+        [topology
+            binary_basis(4)        /* [2]^4  = 16 lanes   */
+            ternary_basis(3)       /* [3]^3  = 27 lanes   */
+            quaternionic_basis(2)  /* [2|2]^2 = 16 states */
+            quinternary_basis(2)   /* [5]^2  = 25 lanes   */
+
+            /* A membrane tree to be Matula-indexed */
+            leaf{a}
+            parent{root, a}
+            prime{1, 2}
+
+            /* Candidate topologies for partition selection */
+            fit{t1, 40}
+            fit{t2, 85}
+            fit{t3, 60}
+        ]'main
+    }
+
+    @execution
+    {
+        matula_index
+        partition_selection
+
+        []'main (display{
+            "Mixed-Radix Membrane Parallelism",
+            "[2]^4 binary": "16 lanes, one step",
+            "[3]^3 ternary": "27 lanes, one step",
+            "[2|2]^2 quaternionic": "16 orthogonal states, one step",
+            "[5]^2 quinternary": "25 lanes, one step",
+            "Matula index": "root over a leaf -> p_1 = 2 (canonical shape id)",
+            "Partition selection": "fittest topology t2 (0.85) selected as root",
+            "Insight": "membrane shape = arity of a categorical logic;"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 25: P-Systems <-> B-Series Bridge
+ * ============================================================================ */
+
+@demo bseries_bridge_demo
+{
+    @description "Plant rooted trees in membrane nests and run P-System
+     * evolution and B-series gradient descent in the same parallel step"
+
+    @membrane_structure
+    {
+        [bridge
+            /* A chain tree (order 2) planted in its nest via Matula no. */
+            tree{chain}
+            matula{chain, 2}       /* p_1 = 2: one node over a leaf */
+            order{chain, 2}
+            density{chain, 2}
+            symmetry{chain, 1}
+
+            /* A parameter to update by the B-series-weighted gradient */
+            weight{1, 1000}
+            grad{1, 200}
+            lr{50}                 /* 0.50 */
+
+            /* Candidate topologies for orbifold root selection */
+            fit{chain, 60}
+            fit{bush, 85}
+        ]'main
+    }
+
+    @execution
+    {
+        tree_nest_bridge
+        elementary_weights
+        bseries_gradient_step(50)
+        rk_order_conditions
+        orbifold_quotient
+
+        []'main (display{
+            "P-Systems <-> B-Series Bridge",
+            "Shared topology": "chain tree planted in nest 2 (Matula p_1)",
+            "Elementary weight": "chain: order=2, density=2, b=1/2",
+            "Gradient as flow": "w <- w - lr*grad/(s*g) = 10 - 0.5*2/2",
+            "Order condition": "sum b(t) = 1  (exact rational)",
+            "Orbifold": "isomorphic trees canonify to minimal Matula",
+            "Unification": "membrane evolution IS the integrator stage;",
+            "": "adaptation (gradient) and niche construction (evolution) share one law"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * DEMO 26: Closure Isomorphism & the Frame Problem
+ * ============================================================================ */
+
+@demo closure_frame_demo
+{
+    @description "{circle~cycle~closure}: one closure in spatial/temporal/causal
+     * frames -> .mli CNN, .gli RNN, .nli GNN; ennead solves the frame problem;
+     * the gauge field is the curvature lever (Ricci-flow relevance)"
+
+    @membrane_structure
+    {
+        [frames
+            spatial{nbhd}          /* -> structural closure (CNN)   */
+            temporal{step}         /* -> procedural closure (RNN)   */
+            causal{aggregate}      /* -> relational closure (GNN)   */
+        ]'main
+
+        [ennead
+            ennead{agent, spatial, 50}
+            ennead{arena, temporal, 52}
+            ennead{relation, causal, 51}
+        ]'main
+
+        [gauge
+            metric{100}
+            ricci{25}              /* convex curvature */
+            connection{A}
+            loop{L}
+        ]'main
+    }
+
+    @execution
+    {
+        closure_isomorphism
+        ennead_frame
+        ricci_relevance
+
+        []'main (display{
+            "Closure Isomorphism: {circle ~ cycle ~ closure}",
+            "Spatial  (.mli)": "structural closure = receptive field -> CNN",
+            "Temporal (.gli)": "procedural closure = recurrence -> RNN",
+            "Causal   (.nli)": "relational closure = message passing -> GNN",
+            "Ennead 3x3": "poles x frames; low spread => frame problem solved",
+            "Curvature lever": "the gauge field (connection); holonomy = curvature",
+            "Ricci flow": "g' = g - 2*Ric*g ; sign drives Noether currents"
+        }, out)
+    }
+}
+
+/* ============================================================================
+ * MAIN DEMO RUNNER
+ * ============================================================================ */
+
+@main
+{
+    @description "Run all demonstrations"
+    
+    []'main (display{
+        "========================================",
+        "Neural Network in PLingua - Demo Suite",
+        "========================================",
+        "",
+        "This demo showcases the P-Systems implementation",
+        "of neural networks using membrane computing.",
+        ""
+    }, out)
+    
+    /* Menu */
+    []'main (display{
+        "Available Demos:",
+        "1. Basic Network Creation",
+        "2. XOR Problem (Classic Test)",
+        "3. Activation Functions Comparison",
+        "4. Loss Functions",
+        "5. Multi-Layer Network",
+        "6. Training Visualization",
+        "7. Binary Classification",
+        "8. Optimizer Comparison (SGD vs Adam)",
+        "9. LeNet-5 Convolutional Network",
+        "10. LSTM Sequence Prediction",
+        "11. Attention Weights",
+        "12. Spiking Neural P System XOR",
+        "13. GNN Node Classification (Toy Graph)",
+        "14. Evolving XOR Weights (Neuroevolution)",
+        "15. Bayesian Uncertainty (Noisy Regression)",
+        "16. Greedy Decoding (4-Token Sequence)",
+        "17. AtomSpace ECAN Attention Spreading",
+        "18. AtomSpace Hebbian Learning",
+        "19. a9nn NNECCO Cognitive Agent (EchoBeats)",
+        "20. PLN Inference Chain",
+        "21. OpenPsi Motivational Cycle",
+        "22. Parallel Supply-Chain Ledger (1000 entities)",
+        "23. Unified Cognitive Cycle (reason + want + remember)",
+        "24. Mixed-Radix Parallel Ops (membrane arity topologies)",
+        "25. P-Systems <-> B-Series Bridge (evolution = gradient flow)",
+        "26. Closure Isomorphism & the Frame Problem (.mli/.gli/.nli)",
+        "",
+        "Running all demos..."
+    }, out)
+
+    /* Run all demos */
+    basic_network
+    xor_problem
+    activation_functions
+    loss_functions
+    multilayer_network
+    training_visualization
+    binary_classification
+    optimizer_comparison
+    lenet5_demo
+    lstm_sequence_demo
+    attention_demo
+    snp_xor_demo
+    gnn_node_classification
+    neuroevolution_xor
+    bayesian_uncertainty
+    greedy_decoding
+    atomspace_ecan_demo
+    atomspace_hebbian_demo
+    a9nn_nnecco_demo
+    pln_inference_demo
+    openpsi_cycle_demo
+    parallel_ledger_demo
+    unified_cycle_demo
+    mixed_radix_demo
+    bseries_bridge_demo
+    closure_frame_demo
+    
+    /* Conclusion */
+    []'main (display{
+        "",
+        "========================================",
+        "All Demos Complete!",
+        "========================================",
+        "",
+        "Key Concepts Demonstrated:",
+        "- P-Systems model neural computations",
+        "- Membranes represent layers/neurons (and graph nodes!)",
+        "- Rules implement forward/backward passes",
+        "- Communication flows data between layers",
+        "- Training updates weights via rules",
+        "- Membrane division evolves network populations",
+        "- Probabilistic rules quantify uncertainty",
+        "",
+        "This shows how membrane computing can",
+        "express neural network algorithms!"
+    }, out)
+}
+
+/*
+ * USAGE:
+ * Run with PLingua simulator:
+ * 
+ * $ plingua demo.pli
+ * 
+ * Each demo will execute and display results showing:
+ * - Network creation and structure
+ * - Forward propagation
+ * - Training progress
+ * - Prediction results
+ * - Loss computation
+ * - Graph message passing and node classification
+ * - Membrane-division neuroevolution
+ * - Bayesian Monte-Carlo uncertainty estimates
+ * - Autoregressive greedy decoding
+ *
+ * These demos illustrate how P-Systems can model
+ * neural network computations through membrane
+ * computing principles.
+ */

@@ -1,0 +1,585 @@
+/*
+ * Full Transformer Decoder with Causal Masking in PLingua
+ * Masked self-attention, encoder-decoder cross-attention, decoder
+ * blocks/stacks, sinusoidal positional encodings, a complete
+ * encoder-decoder transformer, and greedy autoregressive decoding.
+ *
+ * Builds on scaled_dot_product_attention / multi_head_attention /
+ * transformer_encoder_block from attention.pli, layer_norm from
+ * batch_normalization.pli, linear_layer / relu_activation from nn.pli,
+ * lookup_table from layers.pli and log_softmax from activations.pli.
+ *
+ * Causal masking: an attention score s_{i,j} between query position i
+ * and key position j is only legal when j <= i. Under P-Systems maximal
+ * parallelism this is expressed as a `where j <= i` guard, so the
+ * illegal upper-triangular score objects are simply never created.
+ * An explicit sentinel variant (score = NEG_INF = -10000) is also
+ * provided for simulators that require a full score matrix.
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * CAUSAL MASK
+ * Standalone mask generator: emits mask{i, j, 1} for legal (j <= i)
+ * pairs and mask{i, j, 0} for illegal (future) pairs. The explicit
+ * apply_sentinel rules push masked scores to NEG_INF (-10000) so the
+ * standard row-softmax drives their attention weights to ~0.
+ * ============================================================================ */
+
+@module causal_mask(seq_len)
+{
+    @initial
+    {
+        [mask_gen
+            neg_inf{-10000}
+            for (i = 1; i <= seq_len; i++)
+            {
+                for (j = 1; j <= seq_len; j++)
+                {
+                    mask{i, j, (j <= i ? 1 : 0)}
+                }
+            }
+        ]'main
+    }
+
+    /* Explicit sentinel variant: overwrite masked scores with NEG_INF */
+    @rules apply_sentinel
+    {
+        [score{i, j, s}, mask{i, j, 0}, neg_inf{n}]'mask_gen ->
+            [score{i, j, n}, mask{i, j, 0}, neg_inf{n}]'mask_gen
+
+        [score{i, j, s}, mask{i, j, 1}]'mask_gen ->
+            [score{i, j, s}, mask{i, j, 1}]'mask_gen
+    }
+}
+
+/* ============================================================================
+ * MASKED (CAUSAL) SELF-ATTENTION
+ * Identical to scaled_dot_product_attention except every score rule
+ * carries a `where j <= i` causal guard: under maximal parallelism
+ * only the lower-triangular score set is ever created, so position i
+ * can never attend to future positions j > i.
+ * ============================================================================ */
+
+@module masked_self_attention(seq_len, d_k)
+{
+    @rules masked_scores
+    {
+        /* Score s_{i,j} = sum_d q_{i,d} * k_{j,d} / sqrt(d_k),
+         * only for legal (causal) positions j <= i */
+        [q{i, d, qv}, k{j, d, kv}]'attn ->
+            [q{i, d, qv}, k{j, d, kv},
+             score_term{i, j, round(qv*kv/100)}]'attn where j <= i
+
+        /* Sum terms over the d dimension */
+        [score_term{i, j, t1}, score_term{i, j, t2}]'attn ->
+            [score_term{i, j, t1+t2}]'attn
+
+        /* Scale by 1/sqrt(d_k) */
+        [score_term{i, j, s}, score_done{i, j}]'attn ->
+            [score{i, j, round(s/sqrt(d_k))}]'attn where j <= i
+    }
+
+    @rules softmax_rows
+    {
+        /* Row-wise max for numerical stability (row i has i entries) */
+        [score{i, j, s}, row_max{i, m}]'attn ->
+            [score{i, j, s}, row_max{i, max(s, m)}]'attn
+
+        /* Shifted exponentials */
+        [score{i, j, s}, row_max_final{i, m}]'attn ->
+            [exp_score{i, j, exp((s-m)/100)}, row_max_final{i, m}]'attn
+
+        /* Row sums */
+        [exp_score{i, j, e}, row_sum{i, r}]'attn ->
+            [exp_score{i, j, e}, row_sum{i, r+e}]'attn
+
+        /* Attention weights (probabilities scaled by 100); masked
+         * positions have no exp_score object, so their weight is 0 */
+        [exp_score{i, j, e}, row_sum_final{i, r}]'attn ->
+            [attn_weight{i, j, round(100*e/r)}, row_sum_final{i, r}]'attn
+    }
+
+    @rules weighted_values
+    {
+        /* Output o_{i,d} = sum_{j<=i} attn_weight_{i,j} * v_{j,d} */
+        [attn_weight{i, j, w}, v_val{j, d, vv}]'attn ->
+            [attn_weight{i, j, w}, v_val{j, d, vv},
+             out_term{i, d, round(w*vv/100)}]'attn
+
+        [out_term{i, d, t1}, out_term{i, d, t2}]'attn ->
+            [out_term{i, d, t1+t2}]'attn
+
+        [out_term{i, d, o}, output_ready{i, d}]'attn ->
+            []'attn (attn_output{i, d, o}, out)
+    }
+}
+
+/* ============================================================================
+ * CROSS-ATTENTION (ENCODER-DECODER ATTENTION)
+ * Queries come from decoder positions (1..tgt_len), keys and values
+ * come from the encoder memory enc_out{p, d, v} (1..src_len). No
+ * causal mask: the decoder may attend to every source position.
+ * ============================================================================ */
+
+@module cross_attention(tgt_len, src_len, d_k)
+{
+    @rules ingest_memory
+    {
+        /* Encoder outputs injected from the parent become K and V */
+        (enc_out{p, d, v}, in) ->
+            [k{p, d, v}, v_val{p, d, v}]'xattn where p <= src_len
+    }
+
+    @rules scores
+    {
+        /* Score s_{i,j} = sum_d q_{i,d} * k_{j,d} / sqrt(d_k)
+         * i ranges over decoder positions, j over source positions */
+        [q{i, d, qv}, k{j, d, kv}]'xattn ->
+            [q{i, d, qv}, k{j, d, kv},
+             score_term{i, j, round(qv*kv/100)}]'xattn
+            where i <= tgt_len
+
+        [score_term{i, j, t1}, score_term{i, j, t2}]'xattn ->
+            [score_term{i, j, t1+t2}]'xattn
+
+        [score_term{i, j, s}, score_done{i, j}]'xattn ->
+            [score{i, j, round(s/sqrt(d_k))}]'xattn
+    }
+
+    @rules softmax_rows
+    {
+        [score{i, j, s}, row_max{i, m}]'xattn ->
+            [score{i, j, s}, row_max{i, max(s, m)}]'xattn
+
+        [score{i, j, s}, row_max_final{i, m}]'xattn ->
+            [exp_score{i, j, exp((s-m)/100)}, row_max_final{i, m}]'xattn
+
+        [exp_score{i, j, e}, row_sum{i, r}]'xattn ->
+            [exp_score{i, j, e}, row_sum{i, r+e}]'xattn
+
+        [exp_score{i, j, e}, row_sum_final{i, r}]'xattn ->
+            [attn_weight{i, j, round(100*e/r)}, row_sum_final{i, r}]'xattn
+    }
+
+    @rules weighted_values
+    {
+        [attn_weight{i, j, w}, v_val{j, d, vv}]'xattn ->
+            [attn_weight{i, j, w}, v_val{j, d, vv},
+             out_term{i, d, round(w*vv/100)}]'xattn
+
+        [out_term{i, d, t1}, out_term{i, d, t2}]'xattn ->
+            [out_term{i, d, t1+t2}]'xattn
+
+        [out_term{i, d, o}, output_ready{i, d}]'xattn ->
+            []'xattn (xattn_output{i, d, o}, out)
+    }
+}
+
+/* ============================================================================
+ * MASKED MULTI-HEAD ATTENTION
+ * Multi-head wrapper around masked_self_attention: same head split,
+ * projections and concatenation as multi_head_attention in
+ * attention.pli, but each head membrane runs the causal variant.
+ * ============================================================================ */
+
+@module masked_multi_head_attention(seq_len, d_model, num_heads)
+{
+    @initial
+    {
+        [mmha
+            head_dim{d_model / num_heads}
+
+            for (h = 1; h <= num_heads; h++)
+            {
+                [head{h}
+                    masked_self_attention(seq_len, d_model / num_heads)
+
+                    for (d1 = 1; d1 <= d_model; d1++)
+                    {
+                        for (d2 = 1; d2 <= d_model / num_heads; d2++)
+                        {
+                            wq{d1, d2, random(-50, 50)}
+                            wk{d1, d2, random(-50, 50)}
+                            wv{d1, d2, random(-50, 50)}
+                        }
+                    }
+                ]'mmha
+            }
+
+            for (d1 = 1; d1 <= d_model; d1++)
+            {
+                for (d2 = 1; d2 <= d_model; d2++)
+                {
+                    wo{d1, d2, random(-50, 50)}
+                }
+            }
+        ]'main
+    }
+
+    @rules project_inputs
+    {
+        [x{p, d1, xv}, wq{d1, d2, w}]'head{h} ->
+            [x{p, d1, xv}, wq{d1, d2, w},
+             q_term{p, d2, round(xv*w/100)}]'head{h}
+
+        [q_term{p, d2, t1}, q_term{p, d2, t2}]'head{h} ->
+            [q_term{p, d2, t1+t2}]'head{h}
+
+        [q_term{p, d2, s}, q_done{p, d2}]'head{h} ->
+            [q{p, d2, s}]'head{h}
+
+        [x{p, d1, xv}, wk{d1, d2, w}]'head{h} ->
+            [x{p, d1, xv}, wk{d1, d2, w},
+             k_term{p, d2, round(xv*w/100)}]'head{h}
+
+        [k_term{p, d2, t1}, k_term{p, d2, t2}]'head{h} ->
+            [k_term{p, d2, t1+t2}]'head{h}
+
+        [k_term{p, d2, s}, k_done{p, d2}]'head{h} ->
+            [k{p, d2, s}]'head{h}
+
+        [x{p, d1, xv}, wv{d1, d2, w}]'head{h} ->
+            [x{p, d1, xv}, wv{d1, d2, w},
+             v_term{p, d2, round(xv*w/100)}]'head{h}
+
+        [v_term{p, d2, t1}, v_term{p, d2, t2}]'head{h} ->
+            [v_term{p, d2, t1+t2}]'head{h}
+
+        [v_term{p, d2, s}, v_done{p, d2}]'head{h} ->
+            [v_val{p, d2, s}]'head{h}
+    }
+
+    @rules concat_heads
+    {
+        [attn_output{p, d, o}]'head{h} ->
+            []'head{h} (head_out{p, (h-1)*(d_model/num_heads) + d, o}, out)
+    }
+
+    @rules output_projection
+    {
+        [head_out{p, d1, o}, wo{d1, d2, w}]'mmha ->
+            [head_out{p, d1, o}, wo{d1, d2, w},
+             y_term{p, d2, round(o*w/100)}]'mmha
+
+        [y_term{p, d2, t1}, y_term{p, d2, t2}]'mmha ->
+            [y_term{p, d2, t1+t2}]'mmha
+
+        [y_term{p, d2, s}, y_done{p, d2}]'mmha ->
+            []'mmha (output{p, d2, s}, out)
+    }
+}
+
+/* ============================================================================
+ * TRANSFORMER DECODER BLOCK
+ * Three sublayers with residual connections and layer norm:
+ *   x -> LayerNorm(x + MaskedSelfAttention(x))
+ *     -> LayerNorm( . + CrossAttention( . , encoder_memory))
+ *     -> LayerNorm( . + FeedForward( . ))
+ * ============================================================================ */
+
+@module transformer_decoder_block(tgt_len, src_len, d_model, num_heads, d_ff)
+{
+    @initial
+    {
+        [decoder_block
+            [self_attn  masked_multi_head_attention(tgt_len, d_model, num_heads)]'decoder_block
+            [norm1      layer_norm(d_model, 1)]'decoder_block
+            [cross_attn cross_attention(tgt_len, src_len, d_model / num_heads)]'decoder_block
+            [norm2      layer_norm(d_model, 1)]'decoder_block
+            [ff1        linear_layer(d_model, d_ff)]'decoder_block
+            [ff_act     relu_activation]'decoder_block
+            [ff2        linear_layer(d_ff, d_model)]'decoder_block
+            [norm3      layer_norm(d_model, 1)]'decoder_block
+        ]'main
+    }
+
+    @rules residual_1
+    {
+        /* Masked self-attention output + original input, per position */
+        [output{p, d, a}]'self_attn ->
+            []'self_attn (self_out{p, d, a}, out)
+
+        [self_out{p, d, a}, x_saved{p, d, xv}]'decoder_block ->
+            [input{p, d, a + xv}]'norm1
+    }
+
+    @rules cross_attention_stage
+    {
+        /* Norm1 output becomes queries for encoder-decoder attention;
+         * encoder memory enc_out{p, d, v} is forwarded into cross_attn */
+        [output{p, d, n}]'norm1 ->
+            [q{p, d, n}]'cross_attn
+
+        [enc_out{p, d, v}]'decoder_block ->
+            [k{p, d, v}, v_val{p, d, v}]'cross_attn
+    }
+
+    @rules residual_2
+    {
+        /* Cross-attention output + norm1 output */
+        [xattn_output{p, d, c}]'cross_attn ->
+            []'cross_attn (cross_out{p, d, c}, out)
+
+        [cross_out{p, d, c}, norm1_saved{p, d, n}]'decoder_block ->
+            [input{p, d, c + n}]'norm2
+    }
+
+    @rules feed_forward
+    {
+        /* Norm2 output feeds the position-wise feed-forward network */
+        [output{p, d, n}]'norm2 ->
+            [input{d, n}, position{p}]'ff1
+
+        [output{j, v}]'ff1 -> [x{v}, position{p}]'ff_act
+        [relu{v}]'ff_act   -> [input{j, v}, position{p}]'ff2
+    }
+
+    @rules residual_3
+    {
+        /* Third residual: ff output + norm2 output */
+        [output{d, f}, position{p}]'ff2 ->
+            []'ff2 (ff_out{p, d, f}, out)
+
+        [ff_out{p, d, f}, norm2_saved{p, d, n}]'decoder_block ->
+            [input{p, d, f + n}]'norm3
+
+        /* Final block output */
+        [output{p, d, y}]'norm3 ->
+            []'norm3 (output{p, d, y}, out)
+    }
+}
+
+/* ============================================================================
+ * TRANSFORMER DECODER STACK
+ * num_layers decoder blocks chained output -> input; every block
+ * receives the same encoder memory (broadcast).
+ * ============================================================================ */
+
+@module transformer_decoder(num_layers, tgt_len, src_len, d_model, num_heads, d_ff)
+{
+    @initial
+    {
+        [decoder
+            for (l = 1; l <= num_layers; l++)
+            {
+                [block{l} transformer_decoder_block(tgt_len, src_len,
+                                                    d_model, num_heads, d_ff)]'decoder
+            }
+        ]'main
+    }
+
+    @rules broadcast_memory
+    {
+        /* Encoder memory is copied into every decoder block */
+        [enc_out{p, d, v}]'decoder ->
+            [enc_out{p, d, v}]'block{l} where l <= num_layers
+    }
+
+    @rules chain_blocks
+    {
+        /* Decoder input enters block 1 */
+        [x{p, d, v}]'decoder ->
+            [x_saved{p, d, v}, x{p, d, v}]'block{1}
+
+        /* Block l output becomes block l+1 input */
+        [output{p, d, v}]'block{l} ->
+            [x_saved{p, d, v}, x{p, d, v}]'block{l+1}
+            where l < num_layers
+
+        /* Last block output leaves the stack */
+        [output{p, d, v}]'block{l} ->
+            []'block{l} (dec_out{p, d, v}, out)
+            where l == num_layers
+    }
+}
+
+/* ============================================================================
+ * SINUSOIDAL POSITIONAL ENCODING
+ * pos_enc{p, d, v} objects precomputed in @initial:
+ *   PE(p, 2k)   = sin(p / 10000^(2k/d_model))
+ *   PE(p, 2k+1) = cos(p / 10000^(2k/d_model))
+ * Added to token embeddings before the first encoder/decoder block.
+ * ============================================================================ */
+
+@module positional_encoding(seq_len, d_model)
+{
+    @initial
+    {
+        [pos_enc_layer
+            for (p = 1; p <= seq_len; p++)
+            {
+                for (d = 1; d <= d_model; d++)
+                {
+                    pos_enc{p, d,
+                        (d % 2 == 0
+                            ? round(100 * cos(p / pow(10000, d / d_model)))
+                            : round(100 * sin(p / pow(10000, (d-1) / d_model))))}
+                }
+            }
+        ]'main
+    }
+
+    @rules add_encoding
+    {
+        /* Embedding + positional encoding, per position and dimension */
+        [input{p, d, v}, pos_enc{p, d, e}]'pos_enc_layer ->
+            [pos_enc{p, d, e}]'pos_enc_layer (output{p, d, v + e}, out)
+    }
+}
+
+/* ============================================================================
+ * FULL ENCODER-DECODER TRANSFORMER
+ * Token embeddings + positional encodings -> encoder stack ->
+ * decoder stack (with causal masking) -> linear vocab projection ->
+ * log-softmax logits.
+ * ============================================================================ */
+
+@module full_transformer(vocab_size, src_len, tgt_len, d_model,
+                         num_heads, d_ff, num_layers)
+{
+    @initial
+    {
+        [transformer
+            [src_embed   lookup_table(vocab_size, d_model)]'transformer
+            [src_pos     positional_encoding(src_len, d_model)]'transformer
+            for (l = 1; l <= num_layers; l++)
+            {
+                [enc_block{l} transformer_encoder_block(src_len, d_model,
+                                                        num_heads, d_ff)]'transformer
+            }
+            [tgt_embed   lookup_table(vocab_size, d_model)]'transformer
+            [tgt_pos     positional_encoding(tgt_len, d_model)]'transformer
+            [decoder     transformer_decoder(num_layers, tgt_len, src_len,
+                                             d_model, num_heads, d_ff)]'transformer
+            [vocab_proj  linear_layer(d_model, vocab_size)]'transformer
+            [log_sm      log_softmax]'transformer
+        ]'main
+    }
+
+    @rules encode
+    {
+        /* Source tokens -> embeddings -> positional encoding -> encoder */
+        [src_token{p, id}]'transformer ->
+            [token{p, id}]'src_embed
+
+        [output{p, d, v}]'src_embed ->
+            [input{p, d, v}]'src_pos
+
+        [output{p, d, v}]'src_pos ->
+            [x_saved{p, d, v}, x{p, d, v}]'enc_block{1}
+
+        [output{p, d, v}]'enc_block{l} ->
+            [x_saved{p, d, v}, x{p, d, v}]'enc_block{l+1}
+            where l < num_layers
+
+        /* Final encoder output becomes the decoder memory */
+        [output{p, d, v}]'enc_block{l} ->
+            [enc_out{p, d, v}]'decoder
+            where l == num_layers
+    }
+
+    @rules decode
+    {
+        /* Target tokens -> embeddings -> positional encoding -> decoder */
+        [tgt_token{p, id}]'transformer ->
+            [token{p, id}]'tgt_embed
+
+        [output{p, d, v}]'tgt_embed ->
+            [input{p, d, v}]'tgt_pos
+
+        [output{p, d, v}]'tgt_pos ->
+            [x{p, d, v}]'decoder
+    }
+
+    @rules project_vocab
+    {
+        /* Decoder output -> vocabulary logits -> log-probabilities */
+        [dec_out{p, d, v}]'decoder ->
+            [input{d, v}, position{p}]'vocab_proj
+
+        [output{j, v}]'vocab_proj ->
+            [input{j, v}, position{p}]'log_sm
+
+        [output{j, v}, position{p}]'log_sm ->
+            []'log_sm (logit{p, j, v}, out)
+    }
+}
+
+/* ============================================================================
+ * GREEDY AUTOREGRESSIVE DECODING
+ * Generation loop driven by a step token: run the decoder on the
+ * tokens generated so far, take the argmax over the last position's
+ * logits (pairwise-max reduction), append the winner as the next
+ * token, and repeat until an end-of-sequence token or max_len.
+ * Causal masking makes each incremental step consistent with a full
+ * re-run: earlier positions never see the newly appended token.
+ * ============================================================================ */
+
+@module greedy_decode(vocab_size, max_len, eos_token)
+{
+    @initial
+    {
+        [gen
+            step{1}
+            tgt_token{1, 1}     /* position 1 holds the BOS token (id 1) */
+        ]'main
+    }
+
+    @rules run_step
+    {
+        /* Kick off a decoder pass over tokens 1..t */
+        [step{t}]'gen ->
+            [step{t}, run_decoder{t}]'gen where t <= max_len
+    }
+
+    @rules argmax_last_position
+    {
+        /* Pairwise max over vocabulary logits at the last position t */
+        [logit{t, j1, v1}, logit{t, j2, v2}, step{t}]'gen ->
+            [logit{t, j1, v1}, step{t}]'gen where v1 >= v2
+
+        /* Single survivor is the argmax: append it as token t+1 */
+        [logit{t, j, v}, step{t}, argmax_done{t}]'gen ->
+            [tgt_token{t+1, j}, step{t+1}]'gen where j != eos_token
+
+        /* Stop on end-of-sequence */
+        [logit{t, j, v}, step{t}, argmax_done{t}]'gen ->
+            []'gen (generated_eos{t}, out) where j == eos_token
+    }
+
+    @rules emit_sequence
+    {
+        /* When decoding halts, emit the generated token sequence */
+        [tgt_token{p, id}, step{t}]'gen ->
+            [step{t}]'gen (generated{p, id}, out) where t > max_len
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Transformer Decoder with Causal Masking in PLingua"
+    version: "1.0.0"
+    description: "Masked self-attention, cross-attention, decoder blocks, full transformer, greedy decoding"
+    depends: ["nn.pli", "attention.pli", "batch_normalization.pli",
+              "layers.pli", "activations.pli"]
+
+    modules: [
+        "causal_mask(seq_len)",
+        "masked_self_attention(seq_len, d_k)",
+        "cross_attention(tgt_len, src_len, d_k)",
+        "masked_multi_head_attention(seq_len, d_model, num_heads)",
+        "transformer_decoder_block(tgt_len, src_len, d_model, num_heads, d_ff)",
+        "transformer_decoder(num_layers, tgt_len, src_len, d_model, num_heads, d_ff)",
+        "positional_encoding(seq_len, d_model)",
+        "full_transformer(vocab_size, src_len, tgt_len, d_model, num_heads, d_ff, num_layers)",
+        "greedy_decode(vocab_size, max_len, eos_token)"
+    ]
+}

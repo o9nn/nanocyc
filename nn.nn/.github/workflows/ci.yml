@@ -1,0 +1,523 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+  # Nightly run so the best-effort legacy Torch7 full-suite job stays warm.
+  schedule:
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+
+# Use pipefail so a failing test command piped through `tee` (for log capture)
+# still fails the step.
+defaults:
+  run:
+    shell: bash -e -o pipefail {0}
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Detect which language subtrees changed so PR builds only run what matters.
+  # On push / manual dispatch every job runs.
+  # ──────────────────────────────────────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      lua: ${{ steps.filter.outputs.lua }}
+      a9nn: ${{ steps.filter.outputs.a9nn }}
+      pl: ${{ steps.filter.outputs.pl }}
+      pli: ${{ steps.filter.outputs.pli }}
+      raku: ${{ steps.filter.outputs.raku }}
+      rkt: ${{ steps.filter.outputs.rkt }}
+      scm: ${{ steps.filter.outputs.scm }}
+      isa: ${{ steps.filter.outputs.isa }}
+      thnn: ${{ steps.filter.outputs.thnn }}
+      docs: ${{ steps.filter.outputs.docs }}
+      run_all: ${{ steps.mode.outputs.run_all }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: mode
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run_all=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_all=false" >> "$GITHUB_OUTPUT"
+          fi
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            ci: &ci
+              - '.github/workflows/**'
+            lua:
+              - *ci
+              - 'lang/lua/**'
+              - 'test/**'
+              - '.luacheckrc'
+            a9nn:
+              - *ci
+              - 'lang/a9nn/**'
+              - '.luacheckrc'
+            pl:
+              - *ci
+              - 'lang/pl/**'
+            pli:
+              - *ci
+              - 'lang/pli/**'
+            raku:
+              - *ci
+              - 'lang/raku/**'
+            rkt:
+              - *ci
+              - 'lang/rkt/**'
+            scm:
+              - *ci
+              - 'lang/scm/**'
+            isa:
+              - *ci
+              - 'lang/isa/**'
+            thnn:
+              - *ci
+              - 'lang/c/**'
+            docs:
+              - *ci
+              - 'doc/**'
+              - 'mkdocs.yml'
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Repo-wide fast checks: Luacheck lint over the Lua trees (always runs).
+  # Warnings are reported but only hard errors (exit >= 2) fail the job.
+  # ──────────────────────────────────────────────────────────────────────────
+  lint-lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install luacheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lua-check
+      - name: Luacheck lang/lua and lang/a9nn
+        run: |
+          set +e
+          luacheck lang/lua lang/a9nn --codes -q
+          rc=$?
+          set -e
+          if [ "$rc" -ge 2 ]; then
+            echo "Luacheck reported syntax/IO errors (exit $rc)"
+            exit "$rc"
+          fi
+          echo "Luacheck completed (exit $rc; warnings are non-fatal)"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # a9nn — pure-Lua NN + cognitive agent framework. Unit tests + e2e examples.
+  # ──────────────────────────────────────────────────────────────────────────
+  a9nn:
+    needs: changes
+    if: needs.changes.outputs.a9nn == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lua: [lua5.1, lua5.3, lua5.4, luajit]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ${{ matrix.lua }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ${{ matrix.lua }}
+      - name: Unit tests
+        working-directory: lang/a9nn
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          ${{ matrix.lua }} run_tests.lua 2>&1 | tee "$RUNNER_TEMP/logs/a9nn-unit-${{ matrix.lua }}.log"
+      - name: E2E examples
+        working-directory: lang/a9nn
+        run: |
+          for example in examples/*.lua; do
+            echo "── Running $example ──"
+            timeout 300 ${{ matrix.lua }} "$example"
+          done 2>&1 | tee "$RUNNER_TEMP/logs/a9nn-e2e-${{ matrix.lua }}.log"
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### a9nn (${{ matrix.lua }})"
+            echo ''
+            echo '```'
+            grep -hE 'Results:|All suites' "$RUNNER_TEMP/logs/"a9nn-*-${{ matrix.lua }}.log || echo 'no summary captured'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a9nn-logs-${{ matrix.lua }}
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Prolog (SWI-Prolog) — unit tests + demo e2e runs.
+  # swipl -g exits nonzero when the goal fails or raises.
+  # ──────────────────────────────────────────────────────────────────────────
+  prolog:
+    needs: changes
+    if: needs.changes.outputs.pl == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SWI-Prolog
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq swi-prolog-nox
+      - name: Unit tests (core)
+        working-directory: lang/pl
+        run: swipl -q -l test_nn.pl -g run_tests -t halt
+      - name: Unit tests (modules)
+        working-directory: lang/pl
+        run: swipl -q -l test_modules.pl -g run_module_tests -t halt
+      - name: Unit tests (nD / fractal)
+        working-directory: lang/pl
+        run: swipl -q -l test_nd.pl -g run_nd_tests -t halt
+      - name: Cross-implementation consistency
+        working-directory: lang/pl
+        run: swipl -q -l test_consistency.pl -g run_consistency_tests -t halt
+      - name: E2E demos
+        working-directory: lang/pl
+        run: |
+          timeout 300 swipl -q -l demo.pl -g run_all_demos -t halt
+          timeout 300 swipl -q -l demo_modules.pl -g run_all_demos -t halt
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Prolog"
+            echo ''
+            echo "- unit tests: core, modules, nD/fractal"
+            echo "- cross-implementation consistency (xor_fixture)"
+            echo "- e2e demos: demo.pl, demo_modules.pl"
+            echo ''
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # P-Lingua — structural validation of every .pli source.
+  # ──────────────────────────────────────────────────────────────────────────
+  plingua:
+    needs: changes
+    if: needs.changes.outputs.pli == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Structural validation
+        run: bash lang/pli/validate.sh
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Raku (Rakudo) — TAP unit tests + demo/example e2e runs.
+  # The Test module exits nonzero on failure or plan mismatch.
+  # ──────────────────────────────────────────────────────────────────────────
+  raku:
+    needs: changes
+    if: needs.changes.outputs.raku == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Raku/setup-raku@v1
+        with:
+          raku-version: latest
+      - name: Unit tests
+        working-directory: lang/raku
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          raku test-nn.raku 2>&1 | tee "$RUNNER_TEMP/logs/raku-unit.log"
+      - name: E2E demo and example
+        working-directory: lang/raku
+        run: |
+          timeout 300 raku demo.raku
+          timeout 300 raku example.raku
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Raku"
+            echo ''
+            echo '```'
+            grep -E '^(ok|not ok|# Subtest)' "$RUNNER_TEMP/logs/raku-unit.log" | tail -5 || echo 'no TAP tail'
+            echo '```'
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raku-logs
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Racket — unit tests + demo/example e2e runs.
+  # ──────────────────────────────────────────────────────────────────────────
+  racket:
+    needs: changes
+    if: needs.changes.outputs.rkt == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Bogdanp/setup-racket@v1.14
+        with:
+          architecture: x64
+          distribution: minimal
+          variant: CS
+          version: stable
+      - name: Unit tests
+        working-directory: lang/rkt
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          racket test-nn.rkt 2>&1 | tee "$RUNNER_TEMP/logs/racket-unit.log"
+      - name: E2E demo and example
+        working-directory: lang/rkt
+        run: |
+          timeout 300 racket demo.rkt
+          timeout 300 racket example.rkt
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Racket"
+            echo ''
+            echo '```'
+            grep -E 'Test Results:|SUCCESS|FAILED' "$RUNNER_TEMP/logs/racket-unit.log" || echo 'no summary captured'
+            echo '```'
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: racket-logs
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Scheme (Guile) — unit tests + demo/example e2e runs.
+  # test-summary calls (exit 1) when any assertion failed.
+  # ──────────────────────────────────────────────────────────────────────────
+  scheme:
+    needs: changes
+    if: needs.changes.outputs.scm == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Guile
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq guile-3.0
+      - name: Unit tests
+        working-directory: lang/scm
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          guile --no-auto-compile -l nn.scm -l test-nn.scm -c '(run-all-tests)' \
+            2>&1 | tee "$RUNNER_TEMP/logs/scheme-unit.log"
+      - name: E2E demo and example
+        working-directory: lang/scm
+        run: |
+          timeout 300 guile --no-auto-compile -l nn.scm -l demo.scm -c '(run-all-demos)'
+          timeout 300 guile --no-auto-compile -s example.scm
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Scheme (Guile)"
+            echo ''
+            echo '```'
+            grep -E 'Total:|Passed:|Failed:' "$RUNNER_TEMP/logs/scheme-unit.log" || echo 'no summary captured'
+            echo '```'
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheme-logs
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Isabelle/HOL — build the NN session. The build type-checks the library,
+  # re-runs every proof, discharges the eval-based regression tests and
+  # executes the demos, so a failure of any of those fails the job.
+  # ──────────────────────────────────────────────────────────────────────────
+  isabelle:
+    needs: changes
+    if: needs.changes.outputs.isa == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ISABELLE_VERSION: Isabelle2025-2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Isabelle distribution and heaps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/isabelle-dist
+            ~/.isabelle
+          key: ${{ runner.os }}-${{ env.ISABELLE_VERSION }}-hol-library
+      - name: Install Isabelle
+        run: bash lang/isa/install-isabelle.sh
+      - name: Build session NN (proofs, tests, demos)
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          isabelle build -d lang/isa -v -o document=false NN \
+            2>&1 | tee "$RUNNER_TEMP/logs/isabelle-build.log"
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### Isabelle/HOL"
+            echo ''
+            echo 'Session `NN` build (proofs + eval tests + demos + consistency).'
+            echo ''
+            echo '```'
+            grep -E 'Timing|Finished|Building|NN_' "$RUNNER_TEMP/logs/isabelle-build.log" | tail -12 || echo 'no log tail'
+            echo '```'
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isabelle-build-log
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Torch/nn Lua sources — syntax check every module without a full Torch
+  # build (the complete nn.test() suite needs a legacy Torch7 distro).
+  # ──────────────────────────────────────────────────────────────────────────
+  lua-syntax:
+    needs: changes
+    if: needs.changes.outputs.lua == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq luajit
+      - name: Syntax-check all Torch/nn Lua modules
+        run: |
+          fail=0
+          for f in lang/lua/*.lua test/*.lua test/benchmarks/*.lua; do
+            if ! luajit -e "assert(loadfile('$f'))" 2>/tmp/err.log; then
+              echo "SYNTAX ERROR in $f"
+              cat /tmp/err.log
+              fail=1
+            fi
+          done
+          exit $fail
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # THNN C backend — dependency-free structural smoke check of every source
+  # file.  A full compile needs the Torch7 TH headers/build system, which is
+  # too fragile for per-PR CI; the opt-in nightly torch-legacy job below
+  # attempts the real build.
+  # ──────────────────────────────────────────────────────────────────────────
+  thnn:
+    needs: changes
+    if: needs.changes.outputs.thnn == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Structural smoke check
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          bash lang/c/THNN/check.sh 2>&1 | tee "$RUNNER_TEMP/logs/thnn-check.log"
+      - name: Step summary
+        if: always()
+        run: |
+          {
+            echo "### THNN (C backend)"
+            echo ''
+            echo '```'
+            cat "$RUNNER_TEMP/logs/thnn-check.log" || echo 'no log captured'
+            echo '```'
+            echo "Result: **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Legacy Torch/nn full suite (best-effort).  Torch7 is long unmaintained and
+  # hard to build, so this runs only on the nightly schedule and on manual
+  # dispatch, and is allowed to fail without blocking the pipeline.
+  # ──────────────────────────────────────────────────────────────────────────
+  torch-legacy:
+    # Only run on schedule / manual dispatch — never on PRs or pushes.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Torch7 distro
+        uses: actions/cache@v4
+        with:
+          path: ~/torch
+          key: ${{ runner.os }}-torch7-distro
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential cmake git curl \
+            libreadline-dev libopenblas-dev
+      - name: Build Torch7 distro (best-effort)
+        run: |
+          if [ ! -x "$HOME/torch/install/bin/luarocks" ]; then
+            git clone --depth 1 https://github.com/torch/distro.git ~/torch
+            (cd ~/torch && bash install-deps || true)
+            (cd ~/torch && ./install.sh -b || true)
+          fi
+      - name: Build nn and run test suite (best-effort)
+        run: |
+          . ~/torch/install/bin/torch-activate
+          luarocks make rocks/nn-scm-1.rockspec
+          luajit -lnn -e "nn.test()"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Docs — strict MkDocs build of the doc/ tree.
+  # ──────────────────────────────────────────────────────────────────────────
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install MkDocs
+        run: pip install mkdocs
+      - name: Build docs (strict)
+        run: mkdocs build --strict
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Fan-in gate: single required status check for branch protection.
+  # Succeeds when no needed job failed or was cancelled (skipped is OK).
+  # ──────────────────────────────────────────────────────────────────────────
+  ci-success:
+    if: always()
+    needs:
+      - lint-lua
+      - a9nn
+      - prolog
+      - plingua
+      - raku
+      - racket
+      - scheme
+      - isabelle
+      - lua-syntax
+      - thnn
+      - docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          results='${{ join(needs.*.result, ' ') }}'
+          echo "Job results: $results"
+          for r in $results; do
+            if [ "$r" = "failure" ] || [ "$r" = "cancelled" ]; then
+              echo "One or more required jobs failed."
+              exit 1
+            fi
+          done
+          echo "All required jobs succeeded or were skipped."

@@ -1,0 +1,488 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Z++ Formal Specification: System State                                     │
+│                                                                             │
+│ This specification formalizes the complete system state of the neural      │
+│ network library, including network topology, training state, and global    │
+│ invariants that must hold across all operations.                           │
+│                                                                             │
+│ Depends on: data_model.zpp                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 1: MODULE REGISTRY
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ModuleRegistry ────────────────────────────────────────────────────────────┐
+│ modules : ModuleIdentifier ⇸ Module                                         │
+│ nextModuleId : ModuleIdentifier                                             │
+│                                                                             │
+│ dom modules = {0 .. nextModuleId - 1}                                       │
+│ ∀ mid ∈ dom modules • modules(mid).moduleId = mid                          │
+│ nextModuleId = #modules                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+  The ModuleRegistry maintains all module instances in the system.
+  Invariants ensure:
+  - Module IDs are contiguous starting from 0
+  - Each module's stored ID matches its registry key
+  - nextModuleId equals the total count of modules
+
+┌─ RegisterModule ────────────────────────────────────────────────────────────┐
+│ ΔModuleRegistry                                                             │
+│ m? : Module                                                                 │
+│ mid! : ModuleIdentifier                                                     │
+│                                                                             │
+│ mid! = nextModuleId                                                         │
+│ m?.moduleId = mid!                                                          │
+│ modules' = modules ∪ {mid! ↦ m?}                                           │
+│ nextModuleId' = nextModuleId + 1                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Registers a new module in the registry, assigning it a unique ID.
+
+┌─ UnregisterModule ──────────────────────────────────────────────────────────┐
+│ ΔModuleRegistry                                                             │
+│ mid? : ModuleIdentifier                                                     │
+│                                                                             │
+│ mid? ∈ dom modules                                                          │
+│ modules' = {mid?} ⩤ modules                                                 │
+│ nextModuleId' = nextModuleId                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Removes a module from the registry. Note: This may break contiguity
+  invariant and should be used carefully, typically only during cleanup.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 2: NETWORK TOPOLOGY STATE
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ NetworkTopology ───────────────────────────────────────────────────────────┐
+│ rootModule : ModuleIdentifier                                               │
+│ registry : ModuleRegistry                                                   │
+│ parentChild : ModuleIdentifier ↔ ModuleIdentifier                           │
+│ depth : ModuleIdentifier → ℕ                                                │
+│                                                                             │
+│ rootModule ∈ dom registry.modules                                           │
+│ depth(rootModule) = 0                                                       │
+│ dom parentChild ⊆ dom registry.modules                                      │
+│ ran parentChild ⊆ dom registry.modules                                      │
+│ ∀ p, c : ModuleIdentifier • (p, c) ∈ parentChild ⇒                         │
+│     registry.modules(p).moduleType = Container ∧                            │
+│     depth(c) = depth(p) + 1                                                 │
+│ ∀ m : dom depth • m ∈ dom registry.modules                                 │
+│ -- Acyclicity: no module is ancestor of itself                             │
+│ ∀ m : dom registry.modules • (m, m) ∉ parentChild⁺                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  NetworkTopology represents the hierarchical structure of the network:
+  - rootModule: Top-level module (typically Sequential or custom network)
+  - registry: All modules in the system
+  - parentChild: Parent-child relationships (only containers have children)
+  - depth: Distance from root (for traversal order)
+  
+  Invariants ensure:
+  - Root module exists in registry at depth 0
+  - Only Container modules can be parents
+  - Child depth is parent depth + 1
+  - No cycles in the module hierarchy (DAG structure)
+
+┌─ GetSubModules ─────────────────────────────────────────────────────────────┐
+│ ΞNetworkTopology                                                            │
+│ parent? : ModuleIdentifier                                                  │
+│ children! : seq ModuleIdentifier                                            │
+│                                                                             │
+│ parent? ∈ dom registry.modules                                              │
+│ registry.modules(parent?).moduleType = Container                            │
+│ ran children! = parentChild⟨{parent?}⟩                                      │
+│ ∀ i, j : dom children! • i < j ⇒ depth(children!(i)) ≤ depth(children!(j)) │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Retrieves all direct children of a container module, ordered by depth.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 3: TRAINING STATE
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ LearningRate ──────────────────────────────────────────────────────────────┐
+│ LearningRate == {r : ℝ | r > 0}                                             │
+│                                                                             │
+│ Learning rates must be positive real numbers                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Momentum ──────────────────────────────────────────────────────────────────┐
+│ Momentum == {m : ℝ | 0 ≤ m < 1}                                            │
+│                                                                             │
+│ Momentum coefficient in range [0, 1)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ OptimizerType ─────────────────────────────────────────────────────────────┐
+│ OptimizerType ::= SGD | Adam | RMSprop | Adagrad                            │
+│                                                                             │
+│ Types of optimization algorithms supported                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ OptimizerState ────────────────────────────────────────────────────────────┐
+│ optimizerType : OptimizerType                                               │
+│ learningRate : LearningRate                                                 │
+│ momentum : Momentum                                                         │
+│ velocities : ParameterName ⇸ Tensor                                         │
+│ iterations : ℕ                                                              │
+│                                                                             │
+│ iterations ≥ 0                                                              │
+│ -- Velocities exist for all parameters when momentum > 0                   │
+│ momentum > 0 ⇒ dom velocities ≠ ∅                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+  OptimizerState tracks the state of the optimization algorithm:
+  - optimizerType: which algorithm is being used
+  - learningRate: step size for parameter updates
+  - momentum: momentum coefficient for SGD variants
+  - velocities: accumulated velocity for momentum-based methods
+  - iterations: number of optimization steps performed
+
+┌─ DatasetIndex ──────────────────────────────────────────────────────────────┐
+│ DatasetIndex == ℕ                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TrainingSample ────────────────────────────────────────────────────────────┐
+│ input : Tensor                                                              │
+│ target : Tensor                                                             │
+│ sampleIndex : DatasetIndex                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+  A single training example with input features and target labels.
+
+┌─ Dataset ───────────────────────────────────────────────────────────────────┐
+│ samples : seq TrainingSample                                                │
+│ size : ℕ                                                                    │
+│                                                                             │
+│ size = #samples                                                             │
+│ size > 0                                                                    │
+│ ∀ i : dom samples • samples(i).sampleIndex = i - 1                         │
+│ -- All samples have consistent input shapes                                │
+│ ∀ i, j : dom samples • samples(i).input.shape = samples(j).input.shape     │
+│ -- All samples have consistent target shapes                               │
+│ ∀ i, j : dom samples • samples(i).target.shape = samples(j).target.shape   │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Dataset is a collection of training samples with consistency constraints:
+  - Non-empty
+  - Sample indices are sequential
+  - All inputs have the same shape
+  - All targets have the same shape
+
+┌─ BatchSize ─────────────────────────────────────────────────────────────────┐
+│ BatchSize == {n : ℕ | n > 0}                                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Epoch ─────────────────────────────────────────────────────────────────────┐
+│ Epoch == ℕ                                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TrainingState ─────────────────────────────────────────────────────────────┐
+│ dataset : Dataset                                                           │
+│ batchSize : BatchSize                                                       │
+│ currentEpoch : Epoch                                                        │
+│ maxEpochs : Epoch                                                           │
+│ currentBatch : ℕ                                                            │
+│ totalBatches : ℕ                                                            │
+│ optimizer : OptimizerState                                                  │
+│ trainingLosses : seq ℝ                                                      │
+│ validationLosses : seq ℝ                                                    │
+│                                                                             │
+│ currentEpoch ≤ maxEpochs                                                    │
+│ maxEpochs > 0                                                               │
+│ batchSize ≤ dataset.size                                                    │
+│ totalBatches = ⌈dataset.size / batchSize⌉                                  │
+│ currentBatch < totalBatches                                                 │
+│ #trainingLosses = currentEpoch × totalBatches + currentBatch                │
+│ #validationLosses ≤ currentEpoch                                            │
+│ ∀ loss : ran trainingLosses • loss ≥ 0                                     │
+│ ∀ loss : ran validationLosses • loss ≥ 0                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+  TrainingState captures the complete state of a training session:
+  - Dataset and batching configuration
+  - Current position in training (epoch, batch)
+  - Optimizer state
+  - Loss history for monitoring
+  
+  Invariants ensure:
+  - Current epoch doesn't exceed maximum
+  - Batch size is reasonable relative to dataset
+  - Current batch index is valid
+  - Loss history length matches training progress
+  - All losses are non-negative
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 4: COMPUTATION STATE
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ForwardCache ──────────────────────────────────────────────────────────────┐
+│ moduleOutputs : ModuleIdentifier ⇸ Tensor                                   │
+│ moduleInputs : ModuleIdentifier ⇸ Tensor                                    │
+│ activations : ModuleIdentifier ⇸ Tensor                                     │
+│                                                                             │
+│ dom moduleOutputs = dom moduleInputs                                         │
+│ dom activations ⊆ dom moduleOutputs                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  ForwardCache stores intermediate results from forward propagation:
+  - moduleOutputs: output of each module
+  - moduleInputs: input to each module (needed for backward pass)
+  - activations: pre-activation values for certain modules
+  
+  These are needed for gradient computation during backpropagation.
+
+┌─ BackwardCache ─────────────────────────────────────────────────────────────┐
+│ moduleGradInputs : ModuleIdentifier ⇸ Tensor                                │
+│ moduleGradOutputs : ModuleIdentifier ⇸ Tensor                               │
+│ parameterGradients : (ModuleIdentifier × ParameterName) ⇸ Tensor            │
+│                                                                             │
+│ dom moduleGradInputs = dom moduleGradOutputs                                 │
+│ ∀ (mid, pname) : dom parameterGradients •                                   │
+│     mid ∈ dom moduleGradInputs                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+  BackwardCache stores gradients computed during backpropagation:
+  - moduleGradInputs: gradient with respect to module input
+  - moduleGradOutputs: gradient with respect to module output
+  - parameterGradients: gradients for all module parameters
+
+┌─ ComputationState ──────────────────────────────────────────────────────────┐
+│ forwardCache : ForwardCache                                                 │
+│ backwardCache : BackwardCache                                               │
+│ lastInput : Tensor                                                          │
+│ lastOutput : Tensor                                                         │
+│ lastLoss : ℝ                                                                │
+│ gradientValid : 𝔹                                                           │
+│                                                                             │
+│ lastLoss ≥ 0                                                                │
+│ gradientValid ⇒ dom backwardCache.moduleGradInputs ≠ ∅                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+  ComputationState tracks the current state of forward and backward passes:
+  - Forward and backward caches for intermediate values
+  - Last input/output/loss for reference
+  - Flag indicating whether gradients are valid (backward has been called)
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 5: COMPLETE SYSTEM STATE
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ SystemState ───────────────────────────────────────────────────────────────┐
+│ topology : NetworkTopology                                                  │
+│ training : TrainingState                                                    │
+│ computation : ComputationState                                              │
+│ mode : TrainingMode                                                         │
+│                                                                             │
+│ -- All modules in topology must be in consistent mode                      │
+│ ∀ mid ∈ dom topology.registry.modules •                                     │
+│     topology.registry.modules(mid).mode = mode                               │
+│                                                                             │
+│ -- Root module output shape matches expected from training data            │
+│ computation.lastOutput.shape = training.dataset.samples(1).target.shape     │
+│                                                                             │
+│ -- If in training mode, gradients must be valid after backward pass        │
+│ mode = Training ∧ computation.gradientValid ⇒                               │
+│     ∀ mid ∈ dom topology.registry.modules •                                 │
+│         mid ∈ dom computation.backwardCache.moduleGradInputs                │
+│                                                                             │
+│ -- Forward cache is consistent with topology                               │
+│ dom computation.forwardCache.moduleOutputs ⊆                                │
+│     dom topology.registry.modules                                            │
+│                                                                             │
+│ -- Backward cache is consistent with topology                              │
+│ dom computation.backwardCache.moduleGradInputs ⊆                            │
+│     dom topology.registry.modules                                            │
+│                                                                             │
+│ -- All parameterized modules have gradients in training mode              │
+│ mode = Training ∧ computation.gradientValid ⇒                               │
+│     ∀ mid ∈ dom topology.registry.modules •                                 │
+│         let m == topology.registry.modules(mid) in                          │
+│         dom m.parameters ≠ ∅ ⇒                                              │
+│             ∀ pname ∈ dom m.parameters •                                     │
+│                 (mid, pname) ∈ dom computation.backwardCache.parameterGradients │
+└─────────────────────────────────────────────────────────────────────────────┘
+  SystemState encapsulates the complete state of the neural network system:
+  
+  1. **Network Structure** (topology): The module hierarchy and relationships
+  2. **Training Progress** (training): Dataset, epochs, batches, optimizer
+  3. **Computation Cache** (computation): Forward/backward intermediate values
+  4. **Execution Mode** (mode): Training vs Evaluation
+  
+  Global invariants ensure:
+  - All modules operate in consistent mode
+  - Output shape matches expected target shape
+  - In training mode with valid gradients, all modules have computed gradients
+  - Caches are consistent with the topology
+  - All parameters of all modules have gradients when needed
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 6: SYSTEM INITIALIZATION
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ InitSystemState ───────────────────────────────────────────────────────────┐
+│ SystemState'                                                                │
+│ rootModule? : Module                                                        │
+│ trainingData? : Dataset                                                     │
+│ batchSize? : BatchSize                                                      │
+│ maxEpochs? : Epoch                                                          │
+│ learningRate? : LearningRate                                                │
+│                                                                             │
+│ -- Initialize empty registry and register root module                      │
+│ topology'.registry.modules = {0 ↦ rootModule?}                             │
+│ topology'.registry.nextModuleId = 1                                         │
+│ topology'.rootModule = 0                                                    │
+│ rootModule?.moduleId = 0                                                    │
+│                                                                             │
+│ -- Initialize topology with just root                                      │
+│ topology'.parentChild = ∅                                                   │
+│ topology'.depth = {0 ↦ 0}                                                  │
+│                                                                             │
+│ -- Initialize training state                                               │
+│ training'.dataset = trainingData?                                           │
+│ training'.batchSize = batchSize?                                            │
+│ training'.currentEpoch = 0                                                  │
+│ training'.maxEpochs = maxEpochs?                                            │
+│ training'.currentBatch = 0                                                  │
+│ training'.totalBatches = ⌈trainingData?.size / batchSize?⌉                 │
+│ training'.optimizer.optimizerType = SGD                                     │
+│ training'.optimizer.learningRate = learningRate?                            │
+│ training'.optimizer.momentum = 0                                            │
+│ training'.optimizer.velocities = ∅                                          │
+│ training'.optimizer.iterations = 0                                          │
+│ training'.trainingLosses = ⟨⟩                                               │
+│ training'.validationLosses = ⟨⟩                                             │
+│                                                                             │
+│ -- Initialize computation state                                            │
+│ computation'.forwardCache.moduleOutputs = ∅                                 │
+│ computation'.forwardCache.moduleInputs = ∅                                  │
+│ computation'.forwardCache.activations = ∅                                   │
+│ computation'.backwardCache.moduleGradInputs = ∅                             │
+│ computation'.backwardCache.moduleGradOutputs = ∅                            │
+│ computation'.backwardCache.parameterGradients = ∅                           │
+│ computation'.lastLoss = 0                                                   │
+│ computation'.gradientValid = false                                          │
+│                                                                             │
+│ -- Start in training mode                                                  │
+│ mode' = Training                                                            │
+│ rootModule?.mode = Training                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+  InitSystemState creates a new system state with:
+  - A root module (typically Sequential or custom network)
+  - Training configuration (dataset, batch size, epochs)
+  - Initial optimizer state (SGD with specified learning rate)
+  - Empty computation caches
+  - Training mode active
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 7: MODE TRANSITIONS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ SetTrainingMode ───────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│                                                                             │
+│ mode' = Training                                                            │
+│ ∀ mid ∈ dom topology.registry.modules •                                     │
+│     topology'.registry.modules(mid).mode = Training                         │
+│ topology'.registry = topology.registry                                      │
+│ topology'.rootModule = topology.rootModule                                  │
+│ topology'.parentChild = topology.parentChild                                │
+│ topology'.depth = topology.depth                                            │
+│ training' = training                                                        │
+│ computation' = computation                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Sets all modules to training mode. In training mode:
+  - Dropout is active
+  - Batch normalization updates running statistics
+  - Gradients are computed
+
+┌─ SetEvaluationMode ─────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                                │
+│                                                                             │
+│ mode' = Evaluation                                                          │
+│ ∀ mid ∈ dom topology.registry.modules •                                     │
+│     topology'.registry.modules(mid).mode = Evaluation                       │
+│ topology'.registry = topology.registry                                      │
+│ topology'.rootModule = topology.rootModule                                  │
+│ topology'.parentChild = topology.parentChild                                │
+│ topology'.depth = topology.depth                                            │
+│ training' = training                                                        │
+│ computation' = computation                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Sets all modules to evaluation mode. In evaluation mode:
+  - Dropout is inactive (pass-through)
+  - Batch normalization uses running statistics
+  - Gradients are not computed (optimization)
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 8: SYSTEM STATE QUERIES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ GetAllParameters ──────────────────────────────────────────────────────────┐
+│ ΞSystemState                                                                │
+│ params! : seq Parameter                                                     │
+│                                                                             │
+│ params! = [p : Parameter |                                                  │
+│            ∃ mid : dom topology.registry.modules,                           │
+│              pname : dom topology.registry.modules(mid).parameters •        │
+│              p = topology.registry.modules(mid).parameters(pname)]          │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Retrieves all parameters from all modules in the network.
+
+┌─ GetTotalParameterCount ────────────────────────────────────────────────────┐
+│ ΞSystemState                                                                │
+│ count! : ℕ                                                                  │
+│                                                                             │
+│ count! = Σ [mid : dom topology.registry.modules |                          │
+│              Σ [p : ran topology.registry.modules(mid).parameters |         │
+│                  ∏(p.value.shape)]]                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Computes total number of learnable parameters across all modules.
+
+┌─ GetTrainingProgress ───────────────────────────────────────────────────────┐
+│ ΞSystemState                                                                │
+│ progress! : ℝ                                                               │
+│                                                                             │
+│ progress! = (training.currentEpoch × training.totalBatches +                │
+│              training.currentBatch) /                                       │
+│             (training.maxEpochs × training.totalBatches)                    │
+│ 0 ≤ progress! ≤ 1                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Computes training progress as a fraction in [0, 1].
+
+┌─ IsTrainingComplete ────────────────────────────────────────────────────────┐
+│ ΞSystemState                                                                │
+│ complete! : 𝔹                                                               │
+│                                                                             │
+│ complete! ⇔ (training.currentEpoch = training.maxEpochs ∧                  │
+│              training.currentBatch = training.totalBatches - 1)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Checks if training has completed all epochs.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 9: SYSTEM STATE SUMMARY
+══════════════════════════════════════════════════════════════════════════════
+
+This specification defines the complete system state of the neural network
+library, including:
+
+1. **Module Registry**: Central repository of all module instances with unique
+   identifiers and registration/unregistration operations.
+
+2. **Network Topology**: Hierarchical structure of modules with parent-child
+   relationships, ensuring DAG structure and proper depth tracking.
+
+3. **Training State**: Complete training configuration and progress tracking,
+   including dataset, batching, epochs, optimizer state, and loss history.
+
+4. **Computation State**: Caches for forward and backward propagation,
+   storing intermediate values needed for gradient computation.
+
+5. **System State**: Top-level state combining all components with global
+   invariants ensuring consistency across:
+   - Module modes (Training/Evaluation)
+   - Shape compatibility
+   - Gradient completeness
+   - Cache consistency
+
+6. **State Initialization**: Operation to create a new system state with
+   proper initial conditions.
+
+7. **Mode Transitions**: Operations to switch between training and evaluation
+   modes, affecting all modules uniformly.
+
+8. **State Queries**: Read-only operations to inspect system state without
+   modification.
+
+The global invariants in SystemState ensure that the entire system remains
+in a consistent, valid state across all operations defined in operations.zpp.

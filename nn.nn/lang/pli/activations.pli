@@ -1,0 +1,302 @@
+/*
+ * Extended Activation Functions in PLingua
+ * Complements the core activations (sigmoid, tanh, relu) in nn.pli with
+ * the full set of transfer functions found in the Lua/Torch nn reference.
+ *
+ * Each activation is a reusable @module with:
+ *   - Forward rules: transform input object x{n} into activation output
+ *   - Derivative rules: combine stored activation with incoming grad{m}
+ *
+ * Numerical convention: values scaled by 100 (0.5 -> 50), consistent with
+ * nn.pli. Products of two scaled values are divided by 100 to renormalize.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * LEAKY RELU
+ * f(x) = x if x > 0 else slope*x   (slope scaled by 100, e.g. 1 = 0.01)
+ * ============================================================================ */
+
+@module leaky_relu(slope)
+{
+    @rules forward
+    {
+        [x{n}]'i -> [lrelu{n}]'i where n > 0
+        [x{n}]'i -> [lrelu{round(slope*n/100)}]'i where n <= 0
+    }
+
+    @rules backward
+    {
+        /* Derivative: 1 if x > 0 else slope */
+        [lrelu{n}, grad{m}]'i -> [grad_lrelu{m}]'i where n > 0
+        [lrelu{n}, grad{m}]'i -> [grad_lrelu{round(slope*m/100)}]'i where n <= 0
+    }
+}
+
+/* ============================================================================
+ * PARAMETRIC RELU (PReLU)
+ * Like LeakyReLU but the slope is a learnable object per channel.
+ * ============================================================================ */
+
+@module prelu(num_channels)
+{
+    @initial
+    {
+        /* One learnable slope object per channel, initialized to 0.25 (25) */
+        for (c = 1; c <= num_channels; c++)
+        {
+            slope{c, 25}
+        }
+    }
+
+    @rules forward
+    {
+        [x{c, n}]'i -> [prelu_out{c, n}]'i where n > 0
+        [x{c, n}, slope{c, a}]'i ->
+            [prelu_out{c, round(a*n/100)}, slope{c, a}]'i where n <= 0
+    }
+
+    @rules backward
+    {
+        /* Input gradient */
+        [prelu_out{c, n}, grad{c, m}]'i -> [grad_prelu{c, m}]'i where n > 0
+        [prelu_out{c, n}, slope{c, a}, grad{c, m}]'i ->
+            [grad_prelu{c, round(a*m/100)}, slope{c, a}]'i where n <= 0
+
+        /* Slope gradient: accumulate x*grad for negative inputs */
+        [x_saved{c, n}, grad{c, m}, slope{c, a}]'i ->
+            [slope_grad{c, round(n*m/100)}, slope{c, a}]'i where n <= 0
+
+        /* Slope update with learning rate */
+        [slope{c, a}, slope_grad{c, g}, learning_rate{lr}]'i ->
+            [slope{c, a - round(lr*g/100)}, learning_rate{lr}]'i
+    }
+}
+
+/* ============================================================================
+ * ELU (Exponential Linear Unit)
+ * f(x) = x if x > 0 else alpha*(exp(x) - 1)
+ * ============================================================================ */
+
+@module elu(alpha)
+{
+    @rules forward
+    {
+        [x{n}]'i -> [elu_out{n}]'i where n > 0
+        [x{n}]'i -> [elu_out{round(alpha*(exp(n/100)-1))}]'i where n <= 0
+    }
+
+    @rules backward
+    {
+        /* Derivative: 1 if x > 0 else f(x) + alpha */
+        [elu_out{n}, grad{m}]'i -> [grad_elu{m}]'i where n > 0
+        [elu_out{n}, grad{m}]'i ->
+            [grad_elu{round((n+alpha)*m/100)}]'i where n <= 0
+    }
+}
+
+/* ============================================================================
+ * SELU (Scaled ELU) - self-normalizing networks
+ * f(x) = lambda * (x if x > 0 else alpha*(exp(x)-1))
+ * Constants (scaled by 10000 for precision): lambda = 10507, alpha = 16733
+ * ============================================================================ */
+
+@module selu
+{
+    @rules forward
+    {
+        [x{n}]'i -> [selu_out{round(10507*n/10000)}]'i where n > 0
+        [x{n}]'i ->
+            [selu_out{round(10507*16733*(exp(n/100)-1)/1000000)}]'i where n <= 0
+    }
+
+    @rules backward
+    {
+        [selu_out{n}, grad{m}]'i ->
+            [grad_selu{round(10507*m/10000)}]'i where n > 0
+        [selu_out{n}, grad{m}]'i ->
+            [grad_selu{round((n + round(10507*16733/1000000))*m/100)}]'i where n <= 0
+    }
+}
+
+/* ============================================================================
+ * GELU (Gaussian Error Linear Unit)
+ * f(x) ~= 0.5*x*(1 + tanh(sqrt(2/pi)*(x + 0.044715*x^3)))
+ * Uses x10000 fixed-point for the inner polynomial for better precision.
+ * ============================================================================ */
+
+@module gelu
+{
+    @rules forward
+    {
+        /* Compute inner term: sqrt(2/pi) ~ 0.7979 -> 7979 (x10000) */
+        [x{n}]'i ->
+            [gelu_inner{n, round(7979*(n + round(447*n*n*n/100000000))/10000)}]'i
+
+        /* Apply tanh and scale: 0.5*x*(1 + tanh(inner)) */
+        [gelu_inner{n, t}]'i ->
+            [gelu_out{round(n*(100 + round(100*(exp(t/100)-exp(-t/100))/(exp(t/100)+exp(-t/100))))/200)}]'i
+    }
+
+    @rules backward
+    {
+        /* Approximate derivative using sigmoid-based form:
+         * f'(x) ~= sig(1.702*x) + 1.702*x*sig(1.702*x)*(1-sig(1.702*x)) */
+        [x_saved{n}, grad{m}]'i ->
+            [gelu_sig{n, round(100/(1+exp(-1702*n/100000))), m}]'i
+
+        [gelu_sig{n, s, m}]'i ->
+            [grad_gelu{round((s + round(1702*n*s*(100-s)/1000000))*m/100)}]'i
+    }
+}
+
+/* ============================================================================
+ * SOFTPLUS
+ * f(x) = log(1 + exp(x)); smooth approximation of ReLU
+ * ============================================================================ */
+
+@module softplus
+{
+    @rules forward
+    {
+        [x{n}]'i -> [softplus_out{round(100*log(1+exp(n/100)))}]'i
+    }
+
+    @rules backward
+    {
+        /* Derivative is sigmoid(x) */
+        [x_saved{n}, grad{m}]'i ->
+            [grad_softplus{round(m*100/(100*(1+exp(-n/100))))}]'i
+    }
+}
+
+/* ============================================================================
+ * HARD TANH
+ * f(x) = -1 if x < -1, x if -1 <= x <= 1, 1 if x > 1
+ * ============================================================================ */
+
+@module hard_tanh(min_val, max_val)
+{
+    @rules forward
+    {
+        [x{n}]'i -> [htanh{min_val}]'i where n < min_val
+        [x{n}]'i -> [htanh{n}]'i where n >= min_val, n <= max_val
+        [x{n}]'i -> [htanh{max_val}]'i where n > max_val
+    }
+
+    @rules backward
+    {
+        /* Derivative: 1 inside range, 0 outside */
+        [htanh{n}, grad{m}]'i ->
+            [grad_htanh{m}]'i where n > min_val, n < max_val
+        [htanh{n}, grad{m}]'i ->
+            [grad_htanh{0}]'i where n <= min_val
+        [htanh{n}, grad{m}]'i ->
+            [grad_htanh{0}]'i where n >= max_val
+    }
+}
+
+/* ============================================================================
+ * HARD SIGMOID
+ * f(x) = max(0, min(1, 0.2*x + 0.5)); piecewise-linear sigmoid
+ * ============================================================================ */
+
+@module hard_sigmoid
+{
+    @rules forward
+    {
+        [x{n}]'i -> [hsig{0}]'i where n < -250
+        [x{n}]'i -> [hsig{round(n/5 + 50)}]'i where n >= -250, n <= 250
+        [x{n}]'i -> [hsig{100}]'i where n > 250
+    }
+
+    @rules backward
+    {
+        /* Derivative: 0.2 inside range, 0 outside */
+        [hsig{n}, grad{m}]'i ->
+            [grad_hsig{round(m/5)}]'i where n > 0, n < 100
+        [hsig{n}, grad{m}]'i -> [grad_hsig{0}]'i where n <= 0
+        [hsig{n}, grad{m}]'i -> [grad_hsig{0}]'i where n >= 100
+    }
+}
+
+/* ============================================================================
+ * LOG SIGMOID
+ * f(x) = log(1 / (1 + exp(-x))) = -softplus(-x)
+ * ============================================================================ */
+
+@module log_sigmoid
+{
+    @rules forward
+    {
+        [x{n}]'i -> [logsig{round(-100*log(1+exp(-n/100)))}]'i
+    }
+
+    @rules backward
+    {
+        /* Derivative: 1 - sigmoid(x) = sigmoid(-x) */
+        [x_saved{n}, grad{m}]'i ->
+            [grad_logsig{round(m*100/(100*(1+exp(n/100))))}]'i
+    }
+}
+
+/* ============================================================================
+ * LOG SOFTMAX
+ * f(x_i) = x_i - max(x) - log(sum(exp(x_j - max(x))))
+ * Numerically stable variant used with NLL for classification.
+ * ============================================================================ */
+
+@module log_softmax
+{
+    @rules normalize
+    {
+        /* Find max logit for numerical stability */
+        [logit{i, x}, running_max{m}]'lsm ->
+            [logit{i, x}, running_max{max(x, m)}]'lsm
+
+        /* Compute shifted exponentials */
+        [logit{i, x}, max_logit{m}]'lsm ->
+            [logit{i, x}, exp_value{i, exp((x-m)/100)}]'lsm
+
+        /* Sum all exponentials */
+        [exp_value{i, e}]'lsm ->
+            [sum_exp{e}]'lsm
+
+        /* Compute log-softmax output */
+        [logit{i, x}, max_logit{m}, sum_exp{s}]'lsm ->
+            [log_prob{i, x - m - round(100*log(s))}]'lsm
+    }
+
+    @rules backward
+    {
+        /* Gradient: grad_i - exp(log_prob_i) * sum(grad) */
+        [log_prob{i, lp}, grad{i, g}, grad_sum{gs}]'lsm ->
+            [grad_lsm{i, g - round(exp(lp/100)*gs)}]'lsm
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Extended Activation Functions in PLingua"
+    version: "1.0.0"
+    description: "Additional transfer functions for the P-Systems NN library"
+    depends: ["nn.pli"]
+
+    modules: [
+        "leaky_relu(slope)",
+        "prelu(num_channels)",
+        "elu(alpha)",
+        "selu",
+        "gelu",
+        "softplus",
+        "hard_tanh(min_val, max_val)",
+        "hard_sigmoid",
+        "log_sigmoid",
+        "log_softmax"
+    ]
+}

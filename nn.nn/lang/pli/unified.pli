@@ -1,0 +1,199 @@
+/*
+ * unified.pli - Unified NNECCO Cognitive Cycle in P-Systems
+ *
+ * Integrates the four cognitive layers built in v2.3/v2.4 into ONE coherent
+ * agent loop -- the P-Systems counterpart of ReZorg/plingua's
+ * examples/opencog/opencog_unified_agi.pli, in nn.nn's @module/@rules dialect.
+ *
+ * The a9nn EchoBeats loop provides the 12-beat spine; this module overrides
+ * specific beats so the agent REASONS with PLN, WANTS with OpenPsi, and
+ * REMEMBERS with the AtomSpace:
+ *
+ *   PERCEIVE   1   raw input -> R0                       (a9nn)
+ *   FILTER     2   attenuate sub-threshold features      (a9nn)
+ *   RESONATE   3   reservoir tick                        (a9nn)
+ *   ENCODE     4   reservoir state -> R2 context         (a9nn)
+ *   RECALL     5   AtomSpace similarity + ECAN focus     (atomspace)
+ *   REASON     6   PLN forward chain over recalled atoms (pln)  <-- was LLaMA
+ *   EMOTE      7   OpenPsi modulators drive emotion      (openpsi) <-- was heuristic
+ *   PLAN       8   argmax action, gated by Psi selection threshold
+ *   LEARN      9   PLN revision merges inferred atoms; RL loss emitted
+ *   REFLECT   10   consciousness layer adjusts (loss-driven)   (a9nn)
+ *   EXPRESS   11   package PLN conclusion or action      (a9nn)
+ *   INTEGRATE 12   EpisodeNode + inferred atoms -> AtomSpace   (atomspace)
+ *
+ * The unification principle: each subsystem stays in its own membrane, but
+ * the PC register phase-locks them, and objects flow across membrane
+ * boundaries via communication rules.  Motivation (Psi) supplies the reward
+ * signal that learning (LEARN) and emotion (EMOTE) consume; inference (PLN)
+ * supplies the conclusions that expression (EXPRESS) emits.
+ *
+ * All continuous values are integers scaled by 100.
+ */
+
+@model<membrane_computing>
+
+@import "a9nn.pli"        /* EchoBeats spine, reservoir, memory, registers */
+@import "atomspace.pli"   /* hypergraph KB, ECAN                            */
+@import "pln.pli"         /* inference                                      */
+@import "openpsi.pli"     /* motivation                                     */
+@import "integration.pli"
+
+/* ============================================================================
+ * RECALL <- AtomSpace  (beat 5)
+ * Retrieve relevant prior knowledge: run ECAN spreading so the attentional
+ * focus surfaces the most relevant atoms, then harvest them into the working
+ * context for REASON to use as premises.
+ * ============================================================================ */
+
+@module uni_recall(focus_threshold)
+{
+    @rules recall
+    {
+        /* Spread attention one step, then collect the focus as premises. */
+        [pc{5}]'agent [in_focus{}]'atom{I} ->
+            [pc{5}]'agent (premise{I}, out)
+
+        /* Mark that recall produced premises for the reasoner. */
+        [pc{5}]'agent -> [pc{5}, recalled{}]'agent
+    }
+}
+
+/* ============================================================================
+ * REASON <- PLN  (beat 6)
+ * Forward-chain over the recalled premises.  The set of conclusions forms the
+ * agent's "thought" for this cycle; the highest-confidence conclusion is the
+ * candidate output.  (This replaces the stub LLaMA echo with genuine
+ * inference; a real LLaMA instance can still be consulted for free text.)
+ * ============================================================================ */
+
+@module uni_reason
+{
+    @rules reason
+    {
+        /* Deduction step over recalled implications (see pln.pli). */
+        [pc{6}, imp{A, B, sAB, cAB}, imp{B, C, sBC, cBC}]'agent ->
+            [pc{6}, imp{A, B, sAB, cAB}, imp{B, C, sBC, cBC},
+             conclusion{A, C, round(sAB*sBC/100),
+                        round(min(cAB, cBC)*90/100)}]'agent
+            where A <> C
+
+        /* Select the highest-confidence conclusion as the thought. */
+        [pc{6}, conclusion{A, C, s, c}]'agent ->
+            [pc{6}, thought{A, C, s, c}]'agent
+            where forall_max conclusion{A, C, c}
+    }
+}
+
+/* ============================================================================
+ * EMOTE <- OpenPsi  (beat 7)
+ * The Psi modulators (activation, resolution, ...) and current demand
+ * tensions drive the a9nn emotion channels.  This replaces the fixed
+ * heuristic update with motivation-grounded affect.
+ * ============================================================================ */
+
+@module uni_emote
+{
+    @rules emote
+    {
+        /* Urgent exploration demand -> curiosity (channel 1). */
+        [pc{7}, urgent{3}, mod{activation, a}, emo{1, c}]'agent ->
+            [pc{7}, urgent{3}, mod{activation, a},
+             emo{1, min(100, c + a/20)}]'agent
+
+        /* Satisfied demand (reward delivered) -> joy (channel 2). */
+        [pc{7}, action_done{g, d}, reward{r}, emo{2, j}]'agent ->
+            [pc{7}, reward{r}, emo{2, min(100, j + r/10)}]'agent
+
+        /* Demand overload (many urgent) -> fear (channel 4). */
+        [pc{7}, urgent{d1}, urgent{d2}, emo{4, f}]'agent ->
+            [pc{7}, urgent{d1}, urgent{d2}, emo{4, min(100, f + 15)}]'agent
+            where d1 < d2
+    }
+}
+
+/* ============================================================================
+ * LEARN <- PLN revision + RL  (beat 9)
+ * Inferred conclusions that already exist in the AtomSpace are merged by
+ * truth-value revision (knowledge consolidates); the cycle's reward becomes
+ * the RL loss signal.
+ * ============================================================================ */
+
+@module uni_learn
+{
+    @rules learn
+    {
+        /* A conclusion matching an existing implication revises its TV. */
+        [pc{9}, conclusion{A, C, s2, c2}]'agent
+        [imp{A, C, s1, c1}]'link{L} ->
+            [pc{9}, conclusion{A, C, s2, c2}]'agent
+            [imp{A, C, round((s1*c1 + s2*c2)/(c1+c2)),
+                 round((c1+c2)*100/(c1+c2+100))}]'link{L}
+            where (c1 + c2) > 0
+
+        /* Reward -> loss (loss = 100 - reward, floored at 0). */
+        [pc{9}, reward{r}]'agent ->
+            [pc{10}, loss{max(0, 100 - r)}]'agent
+    }
+}
+
+/* ============================================================================
+ * INTEGRATE -> AtomSpace  (beat 12)
+ * Persist the cycle: write the EpisodeNode plus any inferred conclusion as a
+ * real implication atom in the AtomSpace, so future RECALL beats can use it.
+ * ============================================================================ */
+
+@module uni_integrate
+{
+    @rules integrate
+    {
+        /* Persist the thought as an implication atom (learned knowledge). */
+        [pc{12}, thought{A, C, s, c}]'agent ->
+            [pc{12}, thought{A, C, s, c}]'agent
+            [learned atype{impl} imp{A, C, s, c} tv{s, c}]'atomspace
+
+        /* Log the episode and reset the program counter. */
+        [pc{12}, cycle{n}, loss{lo}]'agent ->
+            [pc{1}, cycle{n + 1}]'agent
+            (episode_node{n + 1, max(0, 100 - lo)}, out)
+    }
+}
+
+/* ============================================================================
+ * UNIFIED AGENT (composite model)
+ * Assembles the a9nn spine with the four cognitive overlays into a single
+ * membrane system.
+ * ============================================================================ */
+
+@model unified_agent(state_size, action_size, reservoir_n,
+                     num_llama, base_port, consciousness0)
+{
+    @model<membrane_computing>
+
+    [agent
+        /* Hardware registers + program counter (a9nn) */
+        reg{r0, 0} reg{r1, 0} reg{r2, 0} reg{r3, 0} reg{r4, 0}
+        pc{1}
+        sta{0}
+        cycle{0}
+        layer{consciousness0}
+
+        /* a9nn spine */
+        echo_reservoir(state_size, reservoir_n, 90, 70)
+        consciousness(consciousness0)
+        episodic_memory(1000)
+        planner(action_size)
+
+        /* Cognitive overlays (this module) */
+        uni_recall(50)
+        uni_reason
+        uni_emote
+        uni_learn
+        uni_integrate
+
+        /* Shared subsystems */
+        psi_demands
+        psi_modulators
+        atomspace_system(50, 10)
+    ]'main
+}

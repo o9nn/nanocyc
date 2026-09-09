@@ -1,0 +1,284 @@
+/*
+ * AtomSpace in PLingua: an OpenCog-style hypergraph knowledge base
+ * expressed in native membrane computing.
+ *
+ * This is the P-Systems counterpart of lang/a9nn/AtomSpace.lua. The core
+ * observation is that an AtomSpace is *already* a membrane system:
+ *
+ *   - Atoms (Nodes and Links) are membranes. A Link membrane CONTAINS the
+ *     membranes of its outgoing set, so hypergraph nesting is literal.
+ *   - Each atom carries a TruthValue  tv{s, c}   (strength s, count c)
+ *     and an AttentionValue  av{sti, lti}        (short/long-term importance).
+ *   - Attention spreading (ECAN) IS multiset rewriting: STI is a conserved
+ *     "currency" and diffusion rules are antiport exchanges in which a
+ *     source atom pays a wage and its link-neighbours collect income.
+ *   - The attentional focus is simply the set of atom membranes whose
+ *     STI exceeds a threshold -- a membrane-query, not a data structure.
+ *
+ * Because P-System evolution rules are maximally parallel and
+ * non-deterministic, attention diffusion across the whole hypergraph in one
+ * step is a single maximally-parallel transition, not a loop. This is the
+ * capability the imperative ports cannot reproduce: ECAN becomes O(1)
+ * membrane transitions instead of O(|atoms|) iteration.
+ *
+ * Numerical convention (consistent with nn.pli / gnn.pli):
+ *   all values are integers scaled by 100. strength s, confidence c,
+ *   sti, lti, wages and the focus threshold are all x100 quantities.
+ *
+ * Truth-value revision (merging two observations of the same atom) uses the
+ * standard count-based confidence c = n/(n+k) with k=1, matching
+ * TruthValue:confidence() in a9nn/AtomSpace.lua.
+ */
+
+@model<membrane_computing>
+
+@import "integration.pli"   /* plingua_compat macros: antiport, prob_rule */
+
+/* ============================================================================
+ * ATOM NODE
+ * A typed, named leaf atom, e.g. ConceptNode "cat".
+ * Membrane label carries a unique id; type/name live as objects so rules
+ * can match on them.  tv{s,c}, av{sti,lti}; incoming{L} tracks link ids.
+ * ============================================================================ */
+
+@module atom_node(id, type, name, s0, c0, sti0, lti0)
+{
+    @initial
+    {
+        [atom{id}
+            is_node{}
+            atype{type}
+            aname{name}
+            tv{s0, c0}
+            av{sti0, lti0}
+        ]'atomspace
+    }
+
+    /* Duplicate add of the same (type,name) node -> revise the truth value
+     * instead of creating a second atom.  revision_rule below does the
+     * merge; this rule only flags the duplicate. */
+    @rules flag_duplicate
+    {
+        [dup_node{type, name, s2, c2}]'atom{id} ->
+            [revise_tv{s2, c2}]'atom{id}
+    }
+}
+
+/* ============================================================================
+ * ATOM LINK
+ * A typed link whose outgoing set is a list of atom ids, e.g.
+ * InheritanceLink cat animal.  The link membrane physically contains the
+ * endpoint atom membranes (hypergraph nesting is structural), and each
+ * endpoint records this link's id in its incoming set.
+ * ============================================================================ */
+
+@module atom_link(id, type)
+{
+    @initial
+    {
+        [link{id}
+            is_link{}
+            atype{type}
+            tv{100, 100}
+            av{0, 0}
+        ]'atomspace
+    }
+
+    /* Register this link in the incoming set of an endpoint atom. */
+    @rules register_incoming
+    {
+        [link_of{L}]'atom{X} ->
+            [link_of{L}, incoming{L}]'atom{X}
+    }
+
+    /* Duplicate add of the same (type,outgoing) link -> revise TV. */
+    @rules flag_duplicate
+    {
+        [dup_link{type, s2, c2}]'link{id} ->
+            [revise_tv{s2, c2}]'link{id}
+    }
+}
+
+/* ============================================================================
+ * TRUTH VALUE REVISION
+ * Merge two observations (s1,c1) and (s2,c2) of the same atom.
+ * count-based:  n  = c/(1-c)   (k = 1)
+ *               n' = n1 + n2
+ *               s' = (s1*n1 + s2*n2) / (n1 + n2)
+ *               c' = n'/(n' + 1)
+ * All arithmetic is integer x100; we use the confidence->count proxy
+ * n = c*100/(100-c) guarded against c = 100 (treated as "sure").
+ * ============================================================================ */
+
+@module tv_revision
+{
+    @rules revise
+    {
+        /* Sure thing dominates: existing confidence 100 absorbs anything. */
+        [tv{s1, 100}, revise_tv{s2, c2}]'atom{I} ->
+            [tv{s1, 100}]'atom{I}
+
+        [tv{s1, 100}, revise_tv{s2, c2}]'link{I} ->
+            [tv{s1, 100}]'link{I}
+
+        /* General case: weighted-by-count merge (see header). n1 = c1 when
+         * c1 < 100 is the k=1 proxy, so s' = (s1*c1 + s2*c2)/(c1+c2). */
+        [tv{s1, c1}, revise_tv{s2, c2}]'atom{I} ->
+            [tv{round((s1*c1 + s2*c2)/(c1+c2)),
+                round((c1+c2)*100/(c1+c2+100))}]'atom{I}
+            where c1 < 100 and (c1 + c2) > 0
+
+        [tv{s1, c1}, revise_tv{s2, c2}]'link{I} ->
+            [tv{round((s1*c1 + s2*c2)/(c1+c2)),
+                round((c1+c2)*100/(c1+c2+100))}]'link{I}
+            where c1 < 100 and (c1 + c2) > 0
+    }
+}
+
+/* ============================================================================
+ * ECAN ATTENTION SPREADING  (Economic Attention Networks)
+ * STI is a conserved currency. Each spreading step:
+ *   1. Every atom in the attentional focus pays a wage w (its "rent").
+ *   2. That wage is split as income among the atoms it is linked to
+ *      (its outgoing set for links, its incoming links for nodes).
+ * Implemented as antiport exchanges across the link membrane boundary:
+ * the source's sti decreases, the target's sti increases, total conserved.
+ *
+ * Because all applicable rules fire in one maximally-parallel step, one
+ * "spread" transition diffuses STI across the entire focus simultaneously.
+ * ============================================================================ */
+
+@module ecan_spread(wage)
+{
+    @rules spread
+    {
+        /* Source atom in focus (sti >= wage) pays the wage ... */
+        [av{sti, lti}]'atom{I} ->
+            [av{sti - wage, lti}]'atom{I} (sti_pay{I, wage}, out)
+            where sti >= wage
+
+        /* ... and each linked neighbour collects it as income.
+         * link_member{L, M} asserts atom M is in link L's outgoing set. */
+        [sti_pay{I, w}, link_member{L, M}]'link{L} ->
+            [link_member{L, M}]'link{L} (sti_income{M, w}, out)
+
+        /* Income arrives at the target atom. */
+        [av{sti, lti}, sti_income{M, w}]'atom{M} ->
+            [av{sti + w, lti}]'atom{M}
+    }
+
+    /* Long-term importance slowly accrues from STI: lti += sti/1000. */
+    @rules accrue_lti
+    {
+        [av{sti, lti}]'atom{I} ->
+            [av{sti, lti + round(sti/1000)}]'atom{I}
+            where sti > 0
+    }
+}
+
+/* ============================================================================
+ * HEBBIAN LEARNING
+ * "Atoms that fire together wire together."  When two atoms are both in
+ * the attentional focus simultaneously, create (or strengthen) a
+ * symmetric HebbianLink between them.  Co-presence is detected by a
+ * handshake: each focused atom broadcasts a hebb_pulse; two pulses for
+ * distinct ids in the same parent membrane trigger link creation.
+ * ============================================================================ */
+
+@module hebbian_learning(strength0)
+{
+    @rules pulse
+    {
+        /* A focused atom emits a one-step pulse. */
+        [av{sti, lti}]'atom{I} ->
+            [av{sti, lti}]'atom{I} (hebb_pulse{I}, out)
+            where sti > 0
+    }
+
+    @rules wire
+    {
+        /* Two simultaneous pulses from distinct atoms -> HebbianLink. */
+        [hebb_pulse{I}, hebb_pulse{J}]'atomspace ->
+            [hebb_pulse{I}, hebb_pulse{J}]'atomspace
+            [hebb_link{I, J} atype{hebbian} tv{strength0, 100} av{0,0}]'atomspace
+            where I < J
+
+        /* If the link already exists, strengthen it instead (revise TV up). */
+        [hebb_link{I, J} tv{s, c}]'atomspace ->
+            [hebb_link{I, J} tv{min(100, s + 1), c}]'atomspace
+            where I < J
+    }
+}
+
+/* ============================================================================
+ * PATTERN MATCHER
+ * Query the space by type and/or by membership.  A query object placed in
+ * the atomspace membrane rewrites to the set of matching atom ids.
+ *   query_type{T}        -> match{I} for every atom of type T
+ *   query_link{T, X}     -> match{L} for type-T links containing atom X
+ * ============================================================================ */
+
+@module atomspace_matcher
+{
+    @rules by_type
+    {
+        [query_type{T}]'atomspace [atype{T}]'atom{I} ->
+            [query_type{T}]'atomspace (match{I}, out)
+
+        [query_type{T}]'atomspace [atype{T}]'link{I} ->
+            [query_type{T}]'atomspace (match{I}, out)
+    }
+
+    @rules links_containing
+    {
+        [query_link{T, X}]'atomspace
+        [atype{T}, link_member{L, X}]'link{L} ->
+            [query_link{T, X}]'atomspace (match{L}, out)
+    }
+}
+
+/* ============================================================================
+ * ATTENTIONAL FOCUS
+ * The set of atoms whose STI meets/exceeds a threshold.  Membership is
+ * derived, not stored: a rule flags qualifying atoms in_focus{}, and the
+ * focus can be harvested as match{I} objects on demand.
+ * ============================================================================ */
+
+@module attentional_focus(threshold)
+{
+    @rules mark_focus
+    {
+        [av{sti, lti}]'atom{I} ->
+            [av{sti, lti}, in_focus{}]'atom{I}
+            where sti >= threshold
+
+        /* Atoms that drop below threshold leave the focus. */
+        [in_focus{}, av{sti, lti}]'atom{I} ->
+            [av{sti, lti}]'atom{I}
+            where sti < threshold
+    }
+
+    @rules harvest_focus
+    {
+        [collect_focus{}]'atomspace [in_focus{}]'atom{I} ->
+            [collect_focus{}]'atomspace (focus_member{I}, out)
+    }
+}
+
+/* ============================================================================
+ * COMPOSITE ATOMSPACE
+ * Convenience model wiring a fresh space with a focus threshold and a
+ * spreading wage so a demo/test can drive ECAN with a single object.
+ * ============================================================================ */
+
+@model atomspace_system(focus_threshold, spread_wage)
+{
+    @model<membrane_computing>
+
+    [atomspace
+        focus_threshold{focus_threshold}
+        spread_wage{spread_wage}
+        config{tv_revision, ecan_spread, hebbian_learning,
+               atomspace_matcher, attentional_focus}
+    ]'main
+}

@@ -1,0 +1,192 @@
+/*
+ * topology.pli - Membrane Arity Topologies & Categorical Parallelism
+ *
+ * This module makes concrete a deep structural observation about membrane
+ * computing: the *shape* of a membrane tree is simultaneously
+ *
+ *   1. a ROOTED TREE, enumerated by the Matula numbers (the bijection between
+ *      rooted trees and prime factorisations: a tree with children of Matula
+ *      numbers m1..mk gets Matula number p_{m1} * p_{m2} * ... * p_{mk}, where
+ *      p_i is the i-th prime);
+ *
+ *   2. the ARITY of a categorical logic -- a membrane with k children is a
+ *      k-ary production; a chain of nested membranes is a chain rule, and a
+ *      membrane dividing into siblings is a product rule;
+ *
+ *   3. a MIXED-RADIX computational basis: a membrane of degree b replicated to
+ *      depth n realises b^n parallel lanes, so different radices give
+ *      different "word sizes" of parallel operation:
+ *         [2]^n    binary      (2^n boolean lanes)
+ *         [3]^n    ternary     (3^n trit lanes)
+ *         [2|2]^n  orthogonal binary pairs ("quaternionic": 4^n states as
+ *                  two independent binary axes)
+ *         [5]^n    quinternary (5^n lanes)
+ *      Because P-System rules are maximally parallel, every lane's operation
+ *      fires in the SAME step -- so [2]^n, [3]^n and [5]^n ops genuinely
+ *      proceed in parallel within one transition.
+ *
+ *   4. an EVOLUTIONARY / DEVELOPMENTAL engine: the partition function over
+ *      free hyper-multisets acts as "natural selection as root selection",
+ *      and the product (branching) / chain (nesting) rules generate the
+ *      ELEMENTARY DIFFERENTIALS of a B-series (Runge-Kutta) time-step
+ *      integrator -- differential "success" is literally the action of these
+ *      combinators.
+ *
+ * All indices and weights are integers (Matula numbers and counts are exact;
+ * continuous values, if any, are scaled by 100 per the nn.pli convention).
+ */
+
+@model<membrane_computing>
+
+@import "integration.pli"   /* plingua_compat: divide/dissolve macros */
+
+/* ============================================================================
+ * MIXED-RADIX PARALLEL BASES
+ * basis{b, n} declares a radix-b, depth-n parallel array.  lane{b, n, i, v}
+ * is lane i (0 <= i < b^n) holding value v.  A single map_rule applies f to
+ * every lane in one maximally-parallel step.  Heterogeneous bases coexist in
+ * the same parent membrane, so binary / ternary / quinternary ops interleave.
+ * ============================================================================ */
+
+@module radix_basis(b, n)
+{
+    @initial
+    {
+        [basis{b, n}
+            radix{b}
+            depth{n}
+            lane_count{0}       /* filled to b^n by expand */
+        ]'topology
+    }
+
+    @rules expand
+    {
+        /* Realise b^n lanes: each expansion step multiplies the lane count by
+         * the radix until depth n is reached.  lane_count tracks b^k. */
+        [radix{b}, depth{n}, lane_count{0}]'basis{b, n} ->
+            [radix{b}, depth{n}, lane_count{1}]'basis{b, n}
+
+        [radix{b}, depth{n}, lane_count{c}]'basis{b, n} ->
+            [radix{b}, depth{n}, lane_count{c * b}]'basis{b, n}
+            where c < (b ^ n)
+    }
+
+    /* map: apply an integer op to every lane value simultaneously. */
+    @rules map_add(delta)
+    {
+        [lane{b, i, v}]'basis{b, n} ->
+            [lane{b, i, v + delta}]'basis{b, n}
+    }
+}
+
+/* Binary, ternary, orthogonal-binary-pair and quinternary bases. */
+@module binary_basis(n)      { radix_basis(2, n) }
+@module ternary_basis(n)     { radix_basis(3, n) }
+@module quaternionic_basis(n){ radix_basis(4, n) }   /* [2|2]^n = 4^n */
+@module quinternary_basis(n) { radix_basis(5, n) }
+
+/* ============================================================================
+ * MATULA / PRIME-POWER INDEXING OF MEMBRANE TREES
+ * The Matula number of a rooted tree encodes its shape as a prime
+ * factorisation.  matula{node, m} assigns each membrane its Matula number.
+ * A membrane whose children have Matula numbers m1..mk gets
+ *   m = p_{m1} * p_{m2} * ... * p_{mk}
+ * We carry a small prime table prime{i, p_i} to compute child indices.
+ * Two membranes are isomorphic (same topology) iff equal Matula numbers --
+ * this gives a canonical, order-independent identity for membrane shapes.
+ * ============================================================================ */
+
+@module matula_index
+{
+    @initial
+    {
+        [matula
+            prime{1, 2}
+            prime{2, 3}
+            prime{3, 5}
+            prime{4, 7}
+            prime{5, 11}
+            prime{6, 13}
+            prime{7, 17}
+            prime{8, 19}
+            prime{9, 23}
+            prime{10, 29}
+        ]'topology
+    }
+
+    @rules assign
+    {
+        /* Leaf membrane (no children) -> Matula number 1. */
+        [leaf{node}]'topology -> [matula{node, 1}]'topology
+
+        /* A node with a single child of Matula number m gets p_m.
+         * (Chained / nested arity: the "chain rule" of the tree.) */
+        [matula{child, m}, parent{node, child}, prime{m, p}]'topology ->
+            [matula{node, p}]'topology
+
+        /* A node with two children of Matula numbers a and b gets p_a * p_b
+         * (the "product rule": branching arity). */
+        [matula{c1, a}, matula{c2, b}, parent{node, c1}, parent{node, c2},
+         prime{a, pa}, prime{b, pb}]'topology ->
+            [matula{node, pa * pb}]'topology
+            where c1 < c2
+    }
+}
+
+/* ============================================================================
+ * ELEMENTARY DIFFERENTIALS  (product & chain rules)
+ * In a B-series / Runge-Kutta reading, each rooted tree is an elementary
+ * differential.  Branching (product rule) and nesting (chain rule) generate
+ * them:
+ *   product:  [F]^k      -> k-th power of a subtree (k children of shape F)
+ *   chain:    F o G      -> substitute G at the root of F (nesting)
+ * The order of a tree (number of nodes) is the order of the differential.
+ * ============================================================================ */
+
+@module elementary_differentials
+{
+    @rules generate
+    {
+        /* Product rule: a node branching into k identical children of order r
+         * yields a tree of order k*r + 1 (the "+1" is the new root). */
+        [order{child, r}, branches{node, child, k}]'topology ->
+            [order{node, k * r + 1}]'topology
+
+        /* Chain rule: nesting a tree of order s under one of order r yields
+         * order r + s. */
+        [order{outer, r}, order{inner, s}, nested{outer, inner}]'topology ->
+            [order{combined, r + s}]'topology
+    }
+}
+
+/* ============================================================================
+ * PARTITION FUNCTION  ("natural selection as root selection")
+ * A population of candidate membrane trees is a free hyper-multiset.  Each
+ * candidate tree{t} carries a fitness fit{t, f}; the partition function
+ *   Z = sum_t exp(-beta * f)      (here: sum of fitnesses, integer)
+ * normalises selection.  Root selection picks the tree whose root Matula
+ * number dominates the fitness landscape -- i.e. the fittest topology is
+ * selected as the new developmental root.  Maximally parallel: every
+ * candidate is scored in one step.
+ * ============================================================================ */
+
+@module partition_selection
+{
+    @rules select
+    {
+        /* Accumulate the partition function over all candidates. */
+        [fit{t, f}]'topology -> [fit{t, f}, zcontrib{f}]'topology
+
+        /* Root selection: the candidate with maximal fitness becomes the
+         * developmental root (all others are pruned / not selected). */
+        [fit{t, f}]'topology ->
+            [selected_root{t}]'topology
+            where forall_max fit{t}
+
+        /* Non-maximal candidates are marked for dissolution (selection
+         * pressure), leaving the selected root to develop. */
+        [fit{t, f}]'topology ->
+            [pruned{t}]'topology
+            where not_max fit{t}
+    }
+}

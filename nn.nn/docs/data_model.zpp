@@ -1,0 +1,614 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Z++ Formal Specification: Neural Network Data Model                        │
+│                                                                             │
+│ This specification formalizes the data structures and invariants of the    │
+│ neural network library's core data layer, including Tensors, Modules,      │
+│ Parameters, and their relationships.                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 1: BASIC TYPES AND DOMAINS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ℝ ─────────────────────────────────────────────────────────────────────────┐
+│ Real numbers - base type for tensor elements                               │
+│ Represents floating-point values used in computations                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ℕ ─────────────────────────────────────────────────────────────────────────┐
+│ Natural numbers - used for dimensions, indices, counts                     │
+│ ℕ = {0, 1, 2, 3, ...}                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ℤ ─────────────────────────────────────────────────────────────────────────┐
+│ Integers - used for signed indices and class labels                        │
+│ ℤ = {..., -2, -1, 0, 1, 2, ...}                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ 𝔹 ─────────────────────────────────────────────────────────────────────────┐
+│ Boolean type for flags and mode indicators                                 │
+│ 𝔹 = {true, false}                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ModuleType ────────────────────────────────────────────────────────────────┐
+│ ModuleType ::= Container | SimpleLayer | TransferFunction |                │
+│                ConvolutionalLayer | TableLayer | CriterionType              │
+│                                                                             │
+│ Enumeration of module categories in the system                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TrainingMode ──────────────────────────────────────────────────────────────┐
+│ TrainingMode ::= Training | Evaluation                                      │
+│                                                                             │
+│ Indicates whether module is in training or evaluation mode                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 2: TENSOR REPRESENTATION
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ Shape ─────────────────────────────────────────────────────────────────────┐
+│ Shape == seq ℕ                                                              │
+│                                                                             │
+│ A sequence of natural numbers representing tensor dimensions                │
+│ Examples:                                                                   │
+│   [3, 4]      - 2D tensor (matrix) with 3 rows and 4 columns              │
+│   [10]        - 1D tensor (vector) with 10 elements                        │
+│   [2, 3, 4]   - 3D tensor with dimensions 2×3×4                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TensorData ────────────────────────────────────────────────────────────────┐
+│ TensorData == seq ℝ                                                         │
+│                                                                             │
+│ Flat sequence of real numbers representing tensor elements in row-major    │
+│ order. The actual multi-dimensional structure is defined by Shape.         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Tensor ────────────────────────────────────────────────────────────────────┐
+│ shape : Shape                                                               │
+│ data : TensorData                                                           │
+│ ndim : ℕ                                                                    │
+│                                                                             │
+│ ndim = #shape                                                               │
+│ #data = ∏(shape)    -- Product of all dimensions                           │
+│ #shape ≥ 1          -- At least 1-dimensional                              │
+│ ∀ d : shape • d > 0 -- All dimensions must be positive                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+  A Tensor encapsulates multi-dimensional numerical data with explicit shape.
+  The invariants ensure:
+  - Number of dimensions matches shape length
+  - Total data elements equals product of dimensions
+  - Shape is non-empty and all dimensions are positive
+
+┌─ TensorCompatible ──────────────────────────────────────────────────────────┐
+│ t1, t2 : Tensor                                                             │
+│                                                                             │
+│ t1.shape = t2.shape                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Two tensors are compatible if they have identical shapes, enabling
+  element-wise operations.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 3: MODULE PARAMETERS
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ParameterName ─────────────────────────────────────────────────────────────┐
+│ ParameterName == seq Char                                                   │
+│                                                                             │
+│ String identifier for parameters (e.g., "weight", "bias")                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Parameter ─────────────────────────────────────────────────────────────────┐
+│ name : ParameterName                                                        │
+│ value : Tensor                                                              │
+│ gradient : Tensor                                                           │
+│ requiresGrad : 𝔹                                                            │
+│                                                                             │
+│ TensorCompatible(value, gradient)                                           │
+│ #name > 0                                                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+  A Parameter represents a learnable tensor with:
+  - name: identifier for the parameter
+  - value: current parameter values
+  - gradient: accumulated gradients (same shape as value)
+  - requiresGrad: whether to compute gradients for this parameter
+
+┌─ ParameterSet ──────────────────────────────────────────────────────────────┐
+│ params : ParameterName ⇸ Parameter                                          │
+│                                                                             │
+│ ∀ pname ∈ dom params • params(pname).name = pname                          │
+│ ∀ p1, p2 ∈ ran params • p1.name ≠ p2.name ⇒ p1 ≠ p2                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  A ParameterSet is a partial function from names to parameters.
+  Invariants ensure parameter names are consistent and unique.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 4: MODULE BASE SCHEMA
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ModuleIdentifier ──────────────────────────────────────────────────────────┐
+│ ModuleIdentifier == ℕ                                                       │
+│                                                                             │
+│ Unique identifier for each module instance in the system                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Module ────────────────────────────────────────────────────────────────────┐
+│ moduleId : ModuleIdentifier                                                 │
+│ moduleType : ModuleType                                                     │
+│ parameters : ParameterSet                                                   │
+│ output : Tensor                                                             │
+│ gradInput : Tensor                                                          │
+│ mode : TrainingMode                                                         │
+│                                                                             │
+│ -- No additional invariants at base level                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+  The Module schema defines the fundamental state of any neural network
+  component:
+  - moduleId: unique identifier
+  - moduleType: classification of module functionality
+  - parameters: learnable parameters (may be empty for stateless modules)
+  - output: result of last forward pass
+  - gradInput: gradient with respect to input from last backward pass
+  - mode: training or evaluation mode
+
+┌─ StatelessModule ───────────────────────────────────────────────────────────┐
+│ Module                                                                      │
+│                                                                             │
+│ dom parameters = ∅                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Stateless modules (e.g., activation functions) have no learnable parameters.
+
+┌─ ParameterizedModule ───────────────────────────────────────────────────────┐
+│ Module                                                                      │
+│                                                                             │
+│ dom parameters ≠ ∅                                                          │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Parameterized modules have at least one learnable parameter.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 5: CONTAINER MODULES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ModuleSequence ────────────────────────────────────────────────────────────┐
+│ ModuleSequence == seq Module                                                │
+│                                                                             │
+│ Ordered sequence of modules                                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ Container ─────────────────────────────────────────────────────────────────┐
+│ Module                                                                      │
+│ subModules : ModuleSequence                                                 │
+│                                                                             │
+│ moduleType = Container                                                      │
+│ #subModules ≥ 1                                                             │
+│ ∀ i, j : dom subModules • i ≠ j ⇒                                          │
+│     subModules(i).moduleId ≠ subModules(j).moduleId                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Container extends Module to hold a sequence of sub-modules.
+  Invariants:
+  - Must contain at least one sub-module
+  - All sub-module IDs must be distinct
+
+┌─ Sequential ────────────────────────────────────────────────────────────────┐
+│ Container                                                                   │
+│                                                                             │
+│ ∀ i : 1..#subModules-1 •                                                    │
+│     TensorCompatible(subModules(i).output, subModules(i+1).gradInput)      │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Sequential chains modules so output of module i feeds into module i+1.
+  Tensor compatibility must hold between consecutive modules after forward pass.
+
+┌─ Parallel ──────────────────────────────────────────────────────────────────┐
+│ Container                                                                   │
+│ inputDimension : ℕ                                                          │
+│ outputDimension : ℕ                                                         │
+│                                                                             │
+│ inputDimension > 0 ∧ outputDimension > 0                                    │
+│ #subModules ≥ 1                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Parallel applies sub-modules to slices of input along a specific dimension
+  and concatenates outputs.
+
+┌─ Concat ────────────────────────────────────────────────────────────────────┐
+│ Container                                                                   │
+│ concatDimension : ℕ                                                         │
+│                                                                             │
+│ concatDimension > 0                                                         │
+│ #subModules ≥ 1                                                             │
+│ ∀ m : ran subModules • concatDimension ≤ m.output.ndim                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Concat applies each sub-module to the same input and concatenates outputs
+  along the specified dimension. All outputs must have sufficient dimensions.
+
+┌─ ConcatTable ───────────────────────────────────────────────────────────────┐
+│ Container                                                                   │
+│                                                                             │
+│ #subModules ≥ 1                                                             │
+│ output.ndim = 1                                                             │
+│ #output.data = #subModules                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+  ConcatTable applies each sub-module to the input and outputs a table (vector)
+  of results.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 6: SIMPLE LAYER MODULES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ Linear ────────────────────────────────────────────────────────────────────┐
+│ ParameterizedModule                                                         │
+│ inputSize : ℕ                                                               │
+│ outputSize : ℕ                                                              │
+│ weight : Tensor                                                             │
+│ bias : Tensor                                                               │
+│                                                                             │
+│ moduleType = SimpleLayer                                                    │
+│ inputSize > 0 ∧ outputSize > 0                                              │
+│ weight.shape = [outputSize, inputSize]                                      │
+│ bias.shape = [outputSize]                                                   │
+│ "weight" ∈ dom parameters                                                   │
+│ "bias" ∈ dom parameters                                                     │
+│ parameters("weight").value = weight                                         │
+│ parameters("bias").value = bias                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Linear module implements affine transformation: y = Wx + b
+  - weight: matrix of size outputSize × inputSize
+  - bias: vector of size outputSize
+  - Parameters are registered in the parameter set
+
+┌─ Identity ──────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│                                                                             │
+│ moduleType = SimpleLayer                                                    │
+│ TensorCompatible(output, gradInput)                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Identity is a pass-through module: output = input, gradInput = gradOutput
+
+┌─ Reshape ───────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ targetShape : Shape                                                         │
+│                                                                             │
+│ moduleType = SimpleLayer                                                    │
+│ #targetShape ≥ 1                                                            │
+│ ∀ d : targetShape • d > 0                                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Reshape changes tensor shape while preserving total number of elements.
+  Invariant: product of targetShape dimensions must equal product of input shape.
+
+┌─ Mean ──────────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ reduceDimension : ℕ                                                         │
+│                                                                             │
+│ moduleType = SimpleLayer                                                    │
+│ reduceDimension > 0                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Mean computes the average along a specified dimension.
+
+┌─ Max ───────────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ reduceDimension : ℕ                                                         │
+│ indices : Tensor                                                            │
+│                                                                             │
+│ moduleType = SimpleLayer                                                    │
+│ reduceDimension > 0                                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Max computes maximum values along a dimension and stores indices for backprop.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 7: TRANSFER FUNCTION MODULES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ TransferFunction ──────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│                                                                             │
+│ moduleType = TransferFunction                                               │
+│ TensorCompatible(output, gradInput)                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Base schema for all transfer/activation functions.
+  They are element-wise operations, so input and output have same shape.
+
+┌─ Sigmoid ───────────────────────────────────────────────────────────────────┐
+│ TransferFunction                                                            │
+│                                                                             │
+│ ∀ i : dom output.data • 0 < output.data(i) < 1                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Sigmoid activation: σ(x) = 1 / (1 + e^(-x))
+  Output values are bounded in (0, 1).
+
+┌─ Tanh ──────────────────────────────────────────────────────────────────────┐
+│ TransferFunction                                                            │
+│                                                                             │
+│ ∀ i : dom output.data • -1 < output.data(i) < 1                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Hyperbolic tangent activation: tanh(x)
+  Output values are bounded in (-1, 1).
+
+┌─ ReLU ──────────────────────────────────────────────────────────────────────┐
+│ TransferFunction                                                            │
+│                                                                             │
+│ ∀ i : dom output.data • output.data(i) ≥ 0                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Rectified Linear Unit: ReLU(x) = max(0, x)
+  Output values are non-negative.
+
+┌─ PReLU ─────────────────────────────────────────────────────────────────────┐
+│ ParameterizedModule                                                         │
+│ alpha : Tensor                                                              │
+│                                                                             │
+│ moduleType = TransferFunction                                               │
+│ "alpha" ∈ dom parameters                                                    │
+│ ∀ i : dom alpha.data • alpha.data(i) > 0                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Parametric ReLU: PReLU(x) = x if x > 0, else α·x
+  Alpha parameters are learned during training and must be positive.
+
+┌─ Softmax ───────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ dim : ℕ                                                                     │
+│                                                                             │
+│ moduleType = TransferFunction                                               │
+│ dim ≤ output.ndim                                                           │
+│ ∀ i : dom output.data • output.data(i) > 0                                │
+│ sum(output.data) = 1.0                                                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Softmax converts logits to probability distribution.
+  All outputs are positive and sum to 1.
+
+┌─ LogSoftmax ────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ dim : ℕ                                                                     │
+│                                                                             │
+│ moduleType = TransferFunction                                               │
+│ dim ≤ output.ndim                                                           │
+│ ∀ i : dom output.data • output.data(i) ≤ 0                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+  LogSoftmax computes log probabilities (numerically stable).
+  All outputs are non-positive (log of values in (0,1]).
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 8: CRITERION/LOSS MODULES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ Criterion ─────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ lossValue : ℝ                                                               │
+│                                                                             │
+│ moduleType = CriterionType                                                  │
+│ lossValue ≥ 0                                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Base schema for loss functions. Loss values are non-negative.
+
+┌─ MSECriterion ──────────────────────────────────────────────────────────────┐
+│ Criterion                                                                   │
+│ prediction : Tensor                                                         │
+│ target : Tensor                                                             │
+│                                                                             │
+│ TensorCompatible(prediction, target)                                        │
+│ TensorCompatible(prediction, gradInput)                                     │
+│ lossValue = (1/#prediction.data) × Σ(prediction.data - target.data)²       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Mean Squared Error for regression tasks.
+  Computes average squared difference between predictions and targets.
+
+┌─ ClassNLLCriterion ─────────────────────────────────────────────────────────┐
+│ Criterion                                                                   │
+│ logProbs : Tensor                                                           │
+│ targetClass : ℤ                                                             │
+│                                                                             │
+│ logProbs.ndim = 1                                                           │
+│ 0 ≤ targetClass < #logProbs.data                                           │
+│ lossValue = -logProbs.data(targetClass)                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Negative Log Likelihood loss for classification.
+  Input is log probabilities (typically from LogSoftmax).
+  Target is class index.
+
+┌─ BCECriterion ──────────────────────────────────────────────────────────────┐
+│ Criterion                                                                   │
+│ prediction : Tensor                                                         │
+│ target : Tensor                                                             │
+│                                                                             │
+│ TensorCompatible(prediction, target)                                        │
+│ ∀ i : dom prediction.data • 0 < prediction.data(i) < 1                    │
+│ ∀ i : dom target.data • target.data(i) ∈ {0, 1}                           │
+│ lossValue = -(1/#target.data) ×                                            │
+│             Σ(target·log(prediction) + (1-target)·log(1-prediction))       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Binary Cross Entropy for binary classification.
+  Predictions must be probabilities in (0,1).
+  Targets must be binary (0 or 1).
+
+┌─ AbsCriterion ──────────────────────────────────────────────────────────────┐
+│ Criterion                                                                   │
+│ prediction : Tensor                                                         │
+│ target : Tensor                                                             │
+│                                                                             │
+│ TensorCompatible(prediction, target)                                        │
+│ lossValue = (1/#prediction.data) × Σ|prediction.data - target.data|        │
+└─────────────────────────────────────────────────────────────────────────────┘
+  L1/Absolute Error loss (Mean Absolute Error).
+  Computes average absolute difference.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 9: CONVOLUTION LAYER MODULES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ ConvNd[Rank : ℕ₁] ─────────────────────────────────────────────────────────┐
+│ ParameterizedModule                                                         │
+│ inChannels : ℕ                                                              │
+│ outChannels : ℕ                                                             │
+│ kernelShape : seq ℕ                                                         │
+│ stride : seq ℕ                                                              │
+│ padding : seq ℕ                                                             │
+│ dilation : seq ℕ                                                            │
+│ weight : Tensor                                                             │
+│ bias : Tensor                                                               │
+│                                                                             │
+│ moduleType = ConvolutionalLayer                                             │
+│ inChannels > 0 ∧ outChannels > 0                                            │
+│ #kernelShape = Rank ∧ #stride = Rank ∧ #padding = Rank ∧ #dilation = Rank  │
+│ ∀ i : 1..Rank • kernelShape(i) > 0 ∧ stride(i) > 0 ∧ dilation(i) > 0       │
+│ weight.shape = ⟨outChannels, inChannels⟩ ⌢ kernelShape                     │
+│ bias.shape = [outChannels]                                                  │
+│ "weight" ∈ dom parameters ∧ "bias" ∈ dom parameters                        │
+│                                                                             │
+│ -- Output shape law (single invariant, all ranks):                         │
+│ ∀ inShape : seq ℕ | #inShape = Rank •                                       │
+│     outShape(i) = ⌊(inShape(i) + 2·padding(i)                              │
+│                     − dilation(i)·(kernelShape(i) − 1) − 1) / stride(i)⌋   │
+│                   + 1,  ∀ i ∈ 1..Rank                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Rank-parametric nD convolution. Dimension is a parameter, not a class:
+  a single generic schema replaces per-rank Temporal/Spatial/Volumetric
+  schemas. TemporalConvolution = ConvNd[1], SpatialConvolution = ConvNd[2],
+  VolumetricConvolution = ConvNd[3]; ranks 4 and above require no new schema.
+  Reference implementation: lang/pl/nn_nd.pl (convnd_module/5,8).
+
+┌─ PoolNd[Rank : ℕ₁] ─────────────────────────────────────────────────────────┐
+│ Module                                                                      │
+│ kernelShape : seq ℕ                                                         │
+│ stride : seq ℕ                                                              │
+│ padding : seq ℕ                                                             │
+│ mode : {max, avg}                                                           │
+│                                                                             │
+│ #kernelShape = Rank ∧ #stride = Rank ∧ #padding = Rank                     │
+│ ∀ i : 1..Rank • kernelShape(i) > 0 ∧ stride(i) > 0                         │
+│                                                                             │
+│ -- Same output shape law as ConvNd with dilation(i) = 1                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Rank-parametric pooling: reduction (max or mean) over an arbitrary window
+  of dimensions, sharing the ConvNd output shape invariant.
+
+┌─ FractalModule ─────────────────────────────────────────────────────────────┐
+│ Module                                                                      │
+│ depth : ℕ₁                                                                  │
+│ base : Module                                                               │
+│                                                                             │
+│ -- Self-similar container recursion (FractalNet):                          │
+│ f(1, base) = base                                                           │
+│ f(k, base) = concat_avg⟨sequential⟨f(k−1, base), f(k−1, base)⟩, base⟩,     │
+│              k > 1                                                          │
+│                                                                             │
+│ -- Longest path grows as 2^(depth−1) while the definition stays O(1)       │
+│ maxDepth(f(k, base)) = 2^(k−1)                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Fractal topology container. concat_avg averages branch outputs elementwise;
+  drop-path regularization is a stochastic branch mask over concat_avg.
+
+┌─ SpatialConvolution ────────────────────────────────────────────────────────┐
+│ ParameterizedModule                                                         │
+│ nInputPlane : ℕ                                                             │
+│ nOutputPlane : ℕ                                                            │
+│ kernelWidth : ℕ                                                             │
+│ kernelHeight : ℕ                                                            │
+│ strideWidth : ℕ                                                             │
+│ strideHeight : ℕ                                                            │
+│ padWidth : ℕ                                                                │
+│ padHeight : ℕ                                                               │
+│ weight : Tensor                                                             │
+│ bias : Tensor                                                               │
+│                                                                             │
+│ moduleType = ConvolutionalLayer                                             │
+│ nInputPlane > 0 ∧ nOutputPlane > 0                                          │
+│ kernelWidth > 0 ∧ kernelHeight > 0                                          │
+│ strideWidth > 0 ∧ strideHeight > 0                                          │
+│ weight.shape = [nOutputPlane, nInputPlane, kernelHeight, kernelWidth]       │
+│ bias.shape = [nOutputPlane]                                                 │
+│ "weight" ∈ dom parameters ∧ "bias" ∈ dom parameters                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+  2D Spatial Convolution layer for image processing.
+  Applies convolution filters across spatial dimensions.
+
+┌─ TemporalConvolution ───────────────────────────────────────────────────────┐
+│ ParameterizedModule                                                         │
+│ inputFrameSize : ℕ                                                          │
+│ outputFrameSize : ℕ                                                         │
+│ kernelWidth : ℕ                                                             │
+│ stride : ℕ                                                                  │
+│ weight : Tensor                                                             │
+│ bias : Tensor                                                               │
+│                                                                             │
+│ moduleType = ConvolutionalLayer                                             │
+│ inputFrameSize > 0 ∧ outputFrameSize > 0                                    │
+│ kernelWidth > 0 ∧ stride > 0                                                │
+│ weight.shape = [outputFrameSize, inputFrameSize, kernelWidth]               │
+│ bias.shape = [outputFrameSize]                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+  1D Temporal Convolution for sequence data.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 10: TABLE LAYER MODULES
+══════════════════════════════════════════════════════════════════════════════
+
+┌─ TensorTable ───────────────────────────────────────────────────────────────┐
+│ TensorTable == seq Tensor                                                   │
+│                                                                             │
+│ Sequence of tensors, used for table operations                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SplitTable ────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ splitDimension : ℕ                                                          │
+│ outputTable : TensorTable                                                   │
+│                                                                             │
+│ moduleType = TableLayer                                                     │
+│ splitDimension > 0                                                          │
+│ #outputTable > 0                                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Splits a tensor into a table of tensors along a dimension.
+
+┌─ JoinTable ─────────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ joinDimension : ℕ                                                           │
+│ inputTable : TensorTable                                                    │
+│                                                                             │
+│ moduleType = TableLayer                                                     │
+│ joinDimension > 0                                                           │
+│ #inputTable > 0                                                             │
+│ ∀ i, j : dom inputTable • i ≠ j ⇒                                          │
+│     inputTable(i).ndim = inputTable(j).ndim                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Joins a table of tensors into a single tensor along a dimension.
+  All input tensors must have the same number of dimensions.
+
+┌─ SelectTable ───────────────────────────────────────────────────────────────┐
+│ StatelessModule                                                             │
+│ selectIndex : ℕ                                                             │
+│ inputTable : TensorTable                                                    │
+│                                                                             │
+│ moduleType = TableLayer                                                     │
+│ 1 ≤ selectIndex ≤ #inputTable                                              │
+│ output = inputTable(selectIndex)                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+  Selects a single tensor from a table by index.
+
+══════════════════════════════════════════════════════════════════════════════
+SECTION 11: DATA MODEL SUMMARY
+══════════════════════════════════════════════════════════════════════════════
+
+This formal specification defines:
+
+1. **Basic Types**: Real numbers, naturals, integers, booleans, and enums for
+   module classification and training modes.
+
+2. **Tensors**: Multi-dimensional arrays with explicit shape and data, ensuring
+   dimensional consistency and positive sizes.
+
+3. **Parameters**: Named, learnable tensors with gradients, organized into sets
+   with uniqueness constraints.
+
+4. **Module Hierarchy**: Base Module schema extended by:
+   - Containers (Sequential, Parallel, Concat, ConcatTable)
+   - Simple Layers (Linear, Identity, Reshape, Mean, Max)
+   - Transfer Functions (Sigmoid, Tanh, ReLU, PReLU, Softmax, LogSoftmax)
+   - Criterions (MSE, ClassNLL, BCE, Abs)
+   - Convolutional Layers (Spatial, Temporal)
+   - Table Layers (Split, Join, Select)
+
+5. **Invariants**: Each schema includes structural invariants ensuring:
+   - Shape compatibility between related tensors
+   - Parameter consistency and registration
+   - Value range constraints (e.g., probabilities in [0,1])
+   - Structural requirements (e.g., positive dimensions)
+
+This data model serves as the foundation for the operational specifications
+that follow in operations.zpp and system_state.zpp.

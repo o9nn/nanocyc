@@ -1,0 +1,523 @@
+/*
+ * Advanced Backpropagation in PLingua
+ * P-Systems membrane computing implementation of sophisticated gradient
+ * computation techniques beyond basic backprop.
+ *
+ * Implemented techniques:
+ *   1. Gradient clipping (by value and by norm)
+ *   2. Gradient accumulation over micro-batches
+ *   3. Second-order methods (Newton's method approximation)
+ *   4. Natural gradient (Fisher-vector product approximation)
+ *   5. Hessian-vector products (for curvature estimation)
+ *   6. Truncated BPTT (for long sequences)
+ *   7. Gradient checkpointing (recompute activations to save memory)
+ *   8. Mixed-precision gradient scaling
+ *   9. Per-layer gradient statistics tracking
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * GRADIENT CLIPPING
+ * Two strategies:
+ *   clip_by_value: clamp each gradient element to [-clip, +clip]
+ *   clip_by_norm:  scale all gradients so ||g|| <= max_norm
+ * ============================================================================ */
+
+@module gradient_clip_by_value(clip)
+{
+    @initial
+    {
+        [clip_val
+            clip{clip}
+        ]'main
+    }
+
+    @rules clip_grad
+    {
+        [grad{j, g}, clip{c}]'clip_val ->
+            [grad{j, min(c, max(-c, g))}]'clip_val
+    }
+}
+
+@module gradient_clip_by_norm(max_norm)
+{
+    @initial
+    {
+        [clip_norm
+            max_norm{max_norm}
+            norm_sq{0}
+            norm_ready{0}
+        ]'main
+    }
+
+    /* Step 1: compute squared norm */
+    @rules accumulate_sq
+    {
+        [grad{j, g}, norm_sq{s}]'clip_norm ->
+            [norm_sq{s + g * g}, grad{j, g}]'clip_norm
+    }
+
+    /* Step 2: compute actual norm */
+    @rules compute_norm
+    {
+        [norm_sq{s}]'clip_norm ->
+            [grad_norm{sqrt(s)}, norm_sq{s}]'clip_norm
+            where not_exists grad_norm
+    }
+
+    /* Step 3: scale gradients if norm > max_norm */
+    @rules scale_if_needed
+    {
+        [grad{j, g}, grad_norm{n}, max_norm{mn}]'clip_norm ->
+            [grad{j, g * mn / n}]'clip_norm
+            where n > mn
+
+        [grad{j, g}, grad_norm{n}, max_norm{mn}]'clip_norm ->
+            [grad{j, g}]'clip_norm
+            where n <= mn
+    }
+
+    @rules cleanup
+    {
+        [grad_norm{n}]'clip_norm -> []'clip_norm
+        [norm_sq{s}]'clip_norm  -> [norm_sq{0}]'clip_norm
+    }
+}
+
+/* ============================================================================
+ * GRADIENT ACCUMULATION
+ * Accumulate gradients from multiple micro-batches before updating weights.
+ * Useful when GPU memory cannot hold a full batch.
+ * ============================================================================ */
+
+@module gradient_accumulator(accumulation_steps)
+{
+    @initial
+    {
+        [grad_acc
+            accum_steps{accumulation_steps}
+            current_step{0}
+        ]'main
+    }
+
+    /* Accumulate incoming gradient */
+    @rules accumulate
+    {
+        [new_grad{j, g}, accumulated{j, ag}]'grad_acc ->
+            [accumulated{j, ag + g}]'grad_acc
+        [new_grad{j, g}]'grad_acc ->
+            [accumulated{j, g}]'grad_acc
+            where not_exists accumulated{j}
+        [current_step{s}]'grad_acc ->
+            [current_step{s + 1}]'grad_acc
+            where exists new_grad
+    }
+
+    /* When accumulation_steps reached: normalise and release */
+    @rules release_grad
+    {
+        [accumulated{j, ag}, current_step{s}, accum_steps{n}]'grad_acc ->
+            []'grad_acc (grad{j, ag / n}, out)
+            where s >= n
+
+        /* Reset counter */
+        [current_step{s}, accum_steps{n}]'grad_acc ->
+            [current_step{0}]'grad_acc
+            where s >= n
+    }
+}
+
+/* ============================================================================
+ * SECOND-ORDER GRADIENT DESCENT (Newton's Method Approximation)
+ * Uses diagonal Hessian approximation H_ii ≈ (grad_t - grad_{t-1}) / (theta_t - theta_{t-1})
+ * Update: w = w - lr * grad / (|H_diag| + eps)
+ * ============================================================================ */
+
+@module diagonal_newton(learning_rate, epsilon)
+{
+    @initial
+    {
+        [diag_newton
+            lr{learning_rate}
+            eps{epsilon}
+        ]'main
+    }
+
+    /* Store previous gradient for Hessian approximation */
+    @rules store_prev_grad
+    {
+        [grad{j, g}, prev_grad{j, pg}]'diag_newton ->
+            [prev_grad{j, g}, grad{j, g}]'diag_newton
+        [grad{j, g}]'diag_newton ->
+            [prev_grad{j, g}, grad{j, g}]'diag_newton
+            where not_exists prev_grad{j}
+    }
+
+    /* Store previous weight */
+    @rules store_prev_weight
+    {
+        [weight{j, w}, prev_weight{j, pw}]'diag_newton ->
+            [prev_weight{j, w}, weight{j, w}]'diag_newton
+        [weight{j, w}]'diag_newton ->
+            [prev_weight{j, w}, weight{j, w}]'diag_newton
+            where not_exists prev_weight{j}
+    }
+
+    /* Estimate diagonal Hessian: H_ii = (g_t - g_{t-1}) / (w_t - w_{t-1}) */
+    @rules estimate_hessian
+    {
+        [grad{j, g}, prev_grad{j, pg}, weight{j, w}, prev_weight{j, pw}, eps{e}]'diag_newton ->
+            [hessian_diag{j, abs(g - pg) / (abs(w - pw) + e)}]'diag_newton
+            where abs(w - pw) > 0
+        [grad{j, g}, prev_grad{j, pg}]'diag_newton ->
+            [hessian_diag{j, 1}]'diag_newton
+            where not_exists hessian_diag{j}
+    }
+
+    /* Newton update: w = w - lr * g / (H_ii + eps) */
+    @rules update_weight
+    {
+        [weight{j, w}, grad{j, g}, hessian_diag{j, h}, lr{l}, eps{e}]'diag_newton ->
+            [weight{j, w - l * g / (h + e)}]'diag_newton
+    }
+
+    @rules cleanup
+    {
+        [hessian_diag{j, h}]'diag_newton -> []'diag_newton
+    }
+}
+
+/* ============================================================================
+ * NATURAL GRADIENT
+ * F(theta) * delta_theta = grad_L   =>   delta_theta = F^{-1} * grad_L
+ * where F is the Fisher information matrix approximated by gradient outer products.
+ * Diagonal approximation: F_ii ≈ E[grad_i^2]
+ * Equivalent to AdaGrad / RMSprop with full Fisher in the diagonal case.
+ * ============================================================================ */
+
+@module natural_gradient(learning_rate, damping, decay)
+{
+    @initial
+    {
+        [nat_grad
+            lr{learning_rate}
+            damping{damping}
+            decay{decay}
+        ]'main
+    }
+
+    /* Accumulate Fisher diagonal (EMA of squared gradients) */
+    @rules update_fisher
+    {
+        [fisher{j, f}, grad{j, g}, decay{d}]'nat_grad ->
+            [fisher{j, (d * f + (100 - d) * g * g) / 100}]'nat_grad
+        [grad{j, g}]'nat_grad ->
+            [fisher{j, g * g}]'nat_grad
+            where not_exists fisher{j}
+    }
+
+    /* Natural gradient update: w = w - lr * grad / (F_ii + lambda) */
+    @rules update_weight
+    {
+        [weight{j, w}, grad{j, g}, fisher{j, f}, lr{l}, damping{lam}]'nat_grad ->
+            [weight{j, w - l * g / (f + lam)}]'nat_grad
+    }
+}
+
+/* ============================================================================
+ * HESSIAN-VECTOR PRODUCTS (Pearlmutter 1994)
+ * Computes Hv without explicitly forming H using automatic differentiation:
+ * Hv = lim_{eps->0} [grad(theta + eps*v) - grad(theta)] / eps
+ * Used in conjugate gradient and other Krylov methods.
+ * ============================================================================ */
+
+@module hessian_vector_product(epsilon_hv)
+{
+    @initial
+    {
+        [hvp
+            eps_hv{epsilon_hv}
+        ]'main
+    }
+
+    /* Perturb weights by eps*v */
+    @rules perturb_weights
+    {
+        [weight{j, w}, direction{j, v}, eps_hv{e}]'hvp ->
+            [weight_plus{j, w + e * v}]'hvp
+    }
+
+    /* Compute gradient at perturbed point (delegated to parent network) */
+    @rules request_perturbed_grad
+    {
+        [weight_plus{j, wp}]'hvp ->
+            []'hvp (eval_grad_at{j, wp}, out)
+    }
+
+    /* Receive gradient at perturbed point and compute HVP */
+    @rules compute_hvp
+    {
+        [grad_at_plus{j, gp}, grad{j, g}, eps_hv{e}]'hvp ->
+            [hv_product{j, (gp - g) / e}]'hvp
+    }
+}
+
+/* ============================================================================
+ * TRUNCATED BPTT (for long sequences)
+ * Unrolls only K time steps for gradient computation.
+ * ============================================================================ */
+
+@module truncated_bptt(truncation_length)
+{
+    @initial
+    {
+        [tbptt
+            K{truncation_length}
+            current_t{1}
+            buffer_start{1}
+        ]'main
+    }
+
+    /* Buffer the last K hidden states */
+    @rules buffer_hidden
+    {
+        [hidden{t, h, hv}, current_t{ct}, K{k}]'tbptt ->
+            [buffered_h{t, h, hv}]'tbptt
+        /* Drop hidden states older than K steps */
+        [buffered_h{t, h, hv}, current_t{ct}, K{k}]'tbptt ->
+            []'tbptt
+            where ct - t > k
+    }
+
+    /* Detach gradient at boundary (stop gradient) */
+    @rules detach_boundary
+    {
+        [grad_h{t, h, g}, buffer_start{bs}]'tbptt ->
+            [grad_h{t, h, 0}]'tbptt
+            where t == bs
+    }
+
+    /* Advance and reset buffer */
+    @rules advance
+    {
+        [current_t{ct}, K{k}]'tbptt ->
+            [current_t{ct + 1}, buffer_start{max(1, ct + 1 - k)}]'tbptt
+    }
+}
+
+/* ============================================================================
+ * GRADIENT CHECKPOINTING
+ * During forward pass: discard intermediate activations.
+ * During backward pass: recompute activations from the nearest checkpoint.
+ * Trades compute for memory.
+ * ============================================================================ */
+
+@module gradient_checkpoint(checkpoint_freq)
+{
+    @initial
+    {
+        [gcp
+            freq{checkpoint_freq}
+            step{0}
+        ]'main
+    }
+
+    /* Save checkpoint every freq steps */
+    @rules save_checkpoint
+    {
+        [activation{layer, v}, step{s}, freq{f}]'gcp ->
+            [checkpoint{layer, s, v}]'gcp
+            where s mod f == 0
+        [activation{layer, v}, step{s}, freq{f}]'gcp ->
+            []'gcp
+            where s mod f != 0
+    }
+
+    /* During backward: signal recompute if activation missing */
+    @rules request_recompute
+    {
+        [need_activation{layer}]'gcp ->
+        {
+            /* Find nearest checkpoint <= layer */
+            [checkpoint{cp_layer, s, v}]'gcp ->
+                []'gcp (recompute_from{cp_layer, layer}, out)
+                where cp_layer <= layer
+        }
+    }
+
+    @rules step_advance
+    {
+        [step{s}]'gcp -> [step{s + 1}]'gcp
+    }
+}
+
+/* ============================================================================
+ * MIXED-PRECISION GRADIENT SCALING
+ * Scales loss up by scale_factor to preserve gradients in fp16 range.
+ * After backward, unscales gradients before applying optimizer.
+ * ============================================================================ */
+
+@module loss_scaler(initial_scale, growth_factor, backoff_factor, growth_interval)
+{
+    @initial
+    {
+        [scaler
+            scale{initial_scale}
+            growth{growth_factor}
+            backoff{backoff_factor}
+            interval{growth_interval}
+            steps_since_update{0}
+            found_inf{0}
+        ]'main
+    }
+
+    /* Scale the loss */
+    @rules scale_loss
+    {
+        [loss{v}, scale{s}]'scaler ->
+            [scaled_loss{v * s}]'scaler
+    }
+
+    /* Unscale gradients after backward */
+    @rules unscale_grads
+    {
+        [grad{j, g}, scale{s}]'scaler ->
+            [unscaled_grad{j, g / s}]'scaler
+    }
+
+    /* Check for inf/nan in gradients */
+    /* Note: g != g is the IEEE 754 NaN self-comparison idiom (NaN != NaN is true).
+     * If PLingua provides isnan(g), prefer that over this pattern. */
+    @rules check_inf
+    {
+        [unscaled_grad{j, g}]'scaler ->
+            [found_inf{1}]'scaler
+            where g == inf or g != g
+        [unscaled_grad{j, g}]'scaler ->
+            [safe_grad{j, g}]'scaler
+            where g != inf and g == g
+    }
+
+    /* Update scale factor */
+    @rules update_scale
+    {
+        /* Inf found: reduce scale */
+        [found_inf{1}, scale{s}, backoff{b}]'scaler ->
+            [scale{s * b / 100}, found_inf{0}, steps_since_update{0}]'scaler
+
+        /* No inf, enough steps: increase scale */
+        [found_inf{0}, steps_since_update{ss}, interval{iv},
+         scale{s}, growth{g}]'scaler ->
+            [scale{s * g / 100}, steps_since_update{0}]'scaler
+            where ss >= iv
+
+        /* No inf, not enough steps */
+        [found_inf{0}, steps_since_update{ss}]'scaler ->
+            [steps_since_update{ss + 1}]'scaler
+    }
+}
+
+/* ============================================================================
+ * PER-LAYER GRADIENT STATISTICS
+ * Track mean, variance, max of gradients per layer for monitoring.
+ * ============================================================================ */
+
+@module gradient_monitor
+{
+    @initial
+    {
+        [grad_monitor]'main
+    }
+
+    /* Collect gradient statistics per layer */
+    @rules collect_stats
+    {
+        [grad{layer, j, g}, grad_sum{layer, s}, grad_count{layer, n},
+         grad_sq_sum{layer, sq}, grad_max{layer, mx}]'grad_monitor ->
+            [grad_sum{layer, s + g},
+             grad_sq_sum{layer, sq + g * g},
+             grad_count{layer, n + 1},
+             grad_max{layer, max(abs(g), mx)}]'grad_monitor
+        [grad{layer, j, g}]'grad_monitor ->
+            [grad_sum{layer, g}, grad_sq_sum{layer, g * g},
+             grad_count{layer, 1}, grad_max{layer, abs(g)}]'grad_monitor
+            where not_exists grad_sum{layer}
+    }
+
+    /* Compute and emit statistics */
+    @rules compute_stats
+    {
+        [grad_sum{layer, s}, grad_sq_sum{layer, sq}, grad_count{layer, n}]'grad_monitor ->
+            [grad_mean{layer, s / n},
+             grad_std{layer, sqrt(sq / n - (s / n) * (s / n))}]'grad_monitor
+
+        /* Emit for logging */
+        [grad_mean{layer, mu}, grad_std{layer, sigma}, grad_max{layer, mx}]'grad_monitor ->
+            []'grad_monitor (log_grad_stats{layer, mu, sigma, mx}, out)
+    }
+
+    @rules cleanup
+    {
+        [grad_sum{layer, s}]'grad_monitor     -> []'grad_monitor
+        [grad_sq_sum{layer, sq}]'grad_monitor -> []'grad_monitor
+        [grad_count{layer, n}]'grad_monitor   -> []'grad_monitor
+        [grad_max{layer, mx}]'grad_monitor    -> []'grad_monitor
+        [grad_mean{layer, mu}]'grad_monitor   -> []'grad_monitor
+        [grad_std{layer, s}]'grad_monitor     -> []'grad_monitor
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE: Full training pipeline with advanced backprop
+ * ============================================================================ */
+
+@model advanced_training_pipeline(input_size, hidden_size, output_size)
+{
+    @membrane_structure
+    {
+        [main
+            /* Network layers */
+            [layer1     linear_layer(input_size, hidden_size)]'main
+            [bn1        batch_norm(hidden_size, 1, 10)]'main
+            [act1       relu_activation]'main
+            [drop1      dropout(20)]'main
+            [layer2     linear_layer(hidden_size, output_size)]'main
+
+            /* Gradient management */
+            [clip       gradient_clip_by_norm(1000)]'main
+            [accumulator gradient_accumulator(4)]'main
+            [monitor    gradient_monitor]'main
+
+            /* Loss scaling */
+            [scaler     loss_scaler(65536, 200, 50, 2000)]'main
+
+            /* Optimizer with momentum */
+            [optimizer  adam(1, 90, 99, 1)]'main
+        ]
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Advanced Backpropagation in PLingua"
+    version: "1.0.0"
+    description: "Sophisticated gradient computation techniques as P-Systems"
+    features: [
+        "Gradient clipping (by value and norm)",
+        "Gradient accumulation over micro-batches",
+        "Diagonal Newton's method",
+        "Natural gradient (diagonal Fisher)",
+        "Hessian-vector products (Pearlmutter)",
+        "Truncated BPTT",
+        "Gradient checkpointing",
+        "Mixed-precision loss scaling",
+        "Per-layer gradient statistics"
+    ]
+}

@@ -1,0 +1,264 @@
+/*
+ * Probabilistic P-Systems for Bayesian Layers in PLingua
+ * Stochastic membrane computing for Bayesian neural networks:
+ * weight distributions instead of point weights, the
+ * reparameterization trick, KL regularization (Bayes-by-Backprop)
+ * and Monte-Carlo prediction with uncertainty estimates.
+ *
+ * Probabilistic rule semantics: where the target simulator supports
+ * native probabilistic P-System rules (rules annotated with firing
+ * probabilities), the prob_rule macro below can map directly onto
+ * them. Otherwise, rule probabilities are expressed with the
+ * `random(0, 100) >= p` guard convention already used by dropout.pli.
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ */
+
+@model<probabilistic_psystems>
+
+/* ============================================================================
+ * PROBABILISTIC RULE MACRO
+ * Wrapper so modules can target simulators with native probabilistic
+ * rule syntax; falls back to the random-guard convention.
+ * ============================================================================ */
+
+@module probabilistic_rules
+{
+    /* Fire lhs -> rhs with probability p (0-100) */
+    @macro prob_rule(p, lhs, rhs, membrane)
+    {
+        [lhs]'membrane -> [rhs]'membrane where random(0, 100) < p
+    }
+}
+
+/* ============================================================================
+ * GAUSSIAN SAMPLER
+ * Approximate N(mean, std) sampling via the central-limit theorem:
+ * the sum of 12 uniform draws on [0, 100] has mean 600 and standard
+ * deviation ~100, so (sum - 600) approximates a standard normal
+ * scaled by 100. All other Bayesian modules use this primitive.
+ * ============================================================================ */
+
+@module gaussian_sampler(mean, std)
+{
+    @rules sample
+    {
+        /* Draw eps ~ N(0, 1) (scaled by 100) via 12 uniform draws */
+        [draw{}]'sampler ->
+            [eps{random(0,100) + random(0,100) + random(0,100)
+               + random(0,100) + random(0,100) + random(0,100)
+               + random(0,100) + random(0,100) + random(0,100)
+               + random(0,100) + random(0,100) + random(0,100) - 600}]'sampler
+
+        /* Shift and scale: sample = mean + std * eps */
+        [eps{e}]'sampler ->
+            []'sampler (sample{mean + round(std*e/100)}, out)
+    }
+}
+
+/* ============================================================================
+ * BAYESIAN LINEAR LAYER
+ * Point weights are replaced by distribution parameters:
+ *   w_mu{i, j, m}   - posterior mean
+ *   w_rho{i, j, r}  - pre-activation std; std = softplus(rho)
+ * Each forward pass samples weight{i, j, mu + std*eps} via the
+ * reparameterization trick and stores eps{i, j, e} for the backward
+ * pass, then reuses the standard linear forward rules from nn.pli.
+ * ============================================================================ */
+
+@module bayes_linear_layer(input_size, output_size)
+{
+    @initial
+    {
+        [bayes_layer
+            for (i = 1; i <= output_size; i++)
+            {
+                [neuron{i}
+                    for (j = 1; j <= input_size; j++)
+                    {
+                        w_mu{j, random(-50, 50)}
+                        w_rho{j, -300}     /* softplus(-3) ~ 0.05 -> small init std */
+                    }
+                    b_mu{random(-10, 10)}
+                    b_rho{-300}
+                ]'bayes_layer
+            }
+        ]'main
+    }
+
+    @rules sample_weights
+    {
+        /* std = softplus(rho) = log(1 + exp(rho)) (x100 scaled) */
+        [w_rho{j, r}]'neuron{i} ->
+            [w_rho{j, r}, w_std{j, round(100*log(1+exp(r/100)))}]'neuron{i}
+
+        /* Draw eps ~ N(0,1) per weight (central-limit approximation) */
+        [w_std{j, s}]'neuron{i} ->
+            [w_std{j, s},
+             eps{j, random(0,100) + random(0,100) + random(0,100)
+               + random(0,100) + random(0,100) + random(0,100)
+               + random(0,100) + random(0,100) + random(0,100)
+               + random(0,100) + random(0,100) + random(0,100) - 600}]'neuron{i}
+
+        /* Reparameterization trick: w = mu + std * eps */
+        [w_mu{j, m}, w_std{j, s}, eps{j, e}]'neuron{i} ->
+            [w_mu{j, m}, eps{j, e},
+             weight{j, m + round(s*e/100)}]'neuron{i}
+
+        /* Bias sampled the same way */
+        [b_mu{m}, b_rho{r}]'neuron{i} ->
+            [b_mu{m}, b_rho{r},
+             bias{m + round(log(1+exp(r/100))
+                  * (random(0,100) + random(0,100) + random(0,100)
+                   + random(0,100) + random(0,100) + random(0,100)
+                   + random(0,100) + random(0,100) + random(0,100)
+                   + random(0,100) + random(0,100) + random(0,100) - 600)
+                  / 100)}]'neuron{i}
+    }
+
+    @rules forward
+    {
+        /* Standard linear forward with the sampled weights */
+        [input{j, v}, weight{j, w}]'neuron{i} ->
+            [weight{j, w}, sum{i, round(v*w/100)}]'neuron{i}
+
+        [sum{i, s1}, sum{i, s2}]'neuron{i} ->
+            [sum{i, s1+s2}]'neuron{i}
+
+        [sum{i, s}, bias{b}]'neuron{i} ->
+            []'neuron{i} (output{i, s+b}, out)
+    }
+
+    @rules backward
+    {
+        /* Bayes-by-Backprop: receive output gradient */
+        (grad{i, g}, in) ->
+            [grad{i, g}]'neuron{i}
+
+        /* Weight gradient with respect to the sampled w */
+        [grad{i, g}, input{j, v}]'neuron{i} ->
+            [grad{i, g}, w_grad{j, round(g*v/100)}]'neuron{i}
+
+        /* mu update: gradient passes straight through (dw/dmu = 1) */
+        [w_mu{j, m}, w_grad{j, wg}, learning_rate{lr}]'neuron{i} ->
+            [w_mu{j, m - round(lr*wg/100)}, w_grad{j, wg},
+             learning_rate{lr}]'neuron{i}
+
+        /* rho update: dw/drho = eps * sigmoid(rho)
+         * (softplus derivative = sigmoid) */
+        [w_rho{j, r}, w_grad{j, wg}, eps{j, e}, learning_rate{lr}]'neuron{i} ->
+            [w_rho{j, r - round(lr * wg * e
+                    * round(100/(1+exp(-r/100))) / 1000000)},
+             learning_rate{lr}]'neuron{i}
+    }
+}
+
+/* ============================================================================
+ * KL DIVERGENCE REGULARIZER
+ * Closed-form KL between the Gaussian weight posterior
+ * N(mu, sigma^2) and a zero-mean Gaussian prior N(0, prior_std^2):
+ *   KL = log(prior_std/sigma) + (sigma^2 + mu^2)/(2*prior_std^2) - 1/2
+ * Per-weight terms are accumulated into a single kl_loss{v} object
+ * (pairwise-sum reduction) that is added to the criterion loss.
+ * Complements kl_div_criterion in criteria.pli.
+ * ============================================================================ */
+
+@module kl_divergence_regularizer(prior_std)
+{
+    @rules per_weight_kl
+    {
+        /* Compute sigma from rho, then the per-weight KL term */
+        [w_mu{j, m}, w_rho{j, r}]'neuron{i} ->
+            [w_mu{j, m}, w_rho{j, r},
+             kl_term{i, j,
+                round(100*log(prior_std/(100*log(1+exp(r/100)))))
+                + round((round(100*log(1+exp(r/100)))
+                         * round(100*log(1+exp(r/100))) + m*m)
+                        / (2*prior_std*prior_std/100))
+                - 50}]'neuron{i}
+    }
+
+    @rules accumulate
+    {
+        /* Send per-weight terms up and reduce pairwise */
+        [kl_term{i, j, t}]'neuron{i} ->
+            []'neuron{i} (kl_term{i, j, t}, out)
+
+        [kl_term{i1, j1, t1}, kl_term{i2, j2, t2}]'bayes_layer ->
+            [kl_term{i1, j1, t1+t2}]'bayes_layer
+
+        /* Single survivor becomes the KL loss added to the criterion */
+        [kl_term{i, j, t}, kl_done{}]'bayes_layer ->
+            []'bayes_layer (kl_loss{t}, out)
+
+        /* Total loss = data loss + kl_weight * KL / num_batches */
+        [loss{l}, kl_loss{k}, kl_weight{kw}]'criterion ->
+            [loss{l + round(kw*k/100)}]'criterion
+    }
+}
+
+/* ============================================================================
+ * MONTE-CARLO PREDICTION
+ * Run num_samples stochastic forward passes tagged with a sample
+ * index s (maximally parallel, like batch_processor in attention.pli),
+ * then reduce to predictive mean and variance objects for
+ * uncertainty estimation. Works with bayes_linear_layer sampling or
+ * dropout.pli kept in train mode (MC dropout).
+ * ============================================================================ */
+
+@module mc_predict(num_samples)
+{
+    @rules scatter
+    {
+        /* Replicate the input across sample indices; each replica
+         * triggers an independent stochastic forward pass */
+        [input{i, v}]'mc ->
+            [mc_input{s, i, v}]'mc where s <= num_samples
+    }
+
+    @rules gather_mean
+    {
+        /* Collect per-sample outputs and reduce to the sum */
+        [mc_output{s1, i, v1}, mc_output{s2, i, v2}]'mc ->
+            [mc_output{s1, i, v1+v2}, sq_sum{i, round(v1*v1/100) + round(v2*v2/100)}]'mc
+            where s1 < s2
+
+        /* Predictive mean */
+        [mc_output{s, i, v}, mean_done{i}]'mc ->
+            [pred_sum{i, v}]'mc (pred_mean{i, round(v/num_samples)}, out)
+    }
+
+    @rules gather_variance
+    {
+        /* Accumulate squared outputs, then
+         * var = E[y^2] - E[y]^2 (x100 scaled) */
+        [sq_sum{i, q1}, sq_sum{i, q2}]'mc ->
+            [sq_sum{i, q1+q2}]'mc
+
+        [sq_sum{i, q}, pred_sum{i, v}, var_done{i}]'mc ->
+            []'mc (pred_var{i,
+                round(q/num_samples)
+                - round(round(v/num_samples) * round(v/num_samples) / 100)},
+              out)
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Probabilistic P-Systems for Bayesian Layers in PLingua"
+    version: "1.0.0"
+    description: "Gaussian sampling, Bayesian linear layers, KL regularization, Monte-Carlo uncertainty"
+    depends: ["nn.pli", "criteria.pli", "dropout.pli"]
+
+    modules: [
+        "probabilistic_rules",
+        "gaussian_sampler(mean, std)",
+        "bayes_linear_layer(input_size, output_size)",
+        "kl_divergence_regularizer(prior_std)",
+        "mc_predict(num_samples)"
+    ]
+}

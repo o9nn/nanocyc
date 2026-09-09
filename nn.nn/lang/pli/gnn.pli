@@ -1,0 +1,342 @@
+/*
+ * Graph Neural Network Modules in PLingua
+ * Membranes as graph nodes: each graph node is a membrane [node{i} ...]
+ * holding feature objects feat{d, v}; edges are edge{i, j, w} objects
+ * in the enclosing graph membrane, so the membrane structure itself is
+ * the graph and message passing maps onto inter-membrane communication.
+ *
+ * Modules:
+ *   - message_passing: send/aggregate neighbor features (sum/mean/max)
+ *   - gcn_layer:       degree-normalized graph convolution + backward
+ *   - graph_attention_layer: GAT-style per-edge attention coefficients
+ *   - graph_readout:   global sum/mean/max pooling to a graph embedding
+ *
+ * Degree normalization: node degrees deg{i} are precomputed in @initial
+ * (or accumulated from edge objects); aggregated features are divided
+ * by deg to give the symmetric-normalization approximation used by GCN.
+ * Self-loops: edge{i, i, 100} objects (weight 1.0) are added in
+ * @initial so every node includes its own features in the aggregate.
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * MESSAGE PASSING
+ * For each edge (i -> j), copy the source node's features into the
+ * target node as msg{j, d, v} objects, then reduce incoming messages
+ * per node with the pairwise-reduction idiom from attention.pli.
+ * ============================================================================ */
+
+@module message_passing(num_nodes, feat_dim)
+{
+    @initial
+    {
+        [graph
+            for (i = 1; i <= num_nodes; i++)
+            {
+                [node{i}]'graph
+                /* Self-loop so a node sees its own features */
+                edge{i, i, 100}
+            }
+        ]'main
+    }
+
+    @rules send_messages
+    {
+        /* Node i exposes its features to the graph membrane */
+        [feat{d, v}]'node{i} ->
+            [feat{d, v}]'node{i} (node_feat{i, d, v}, out)
+
+        /* Each edge routes a weighted copy to the target node */
+        [node_feat{i, d, v}, edge{i, j, w}]'graph ->
+            [node_feat{i, d, v}, edge{i, j, w},
+             msg{j, d, round(v*w/100)}]'graph
+
+        /* Deliver messages into the target node membrane */
+        [msg{j, d, v}]'graph ->
+            [msg{d, v}]'node{j}
+    }
+
+    @rules aggregate_sum
+    {
+        /* Pairwise sum of incoming messages per dimension */
+        [msg{d, v1}, msg{d, v2}]'node{j} ->
+            [msg{d, v1+v2}]'node{j}
+
+        [msg{d, v}, agg_done{d}]'node{j} ->
+            [agg{d, v}]'node{j}
+    }
+
+    @rules aggregate_mean
+    {
+        /* Mean variant: divide the summed messages by the node degree */
+        [agg{d, v}, deg{n}, use_mean{}]'node{j} ->
+            [agg{d, round(v/n)}, deg{n}]'node{j}
+    }
+
+    @rules aggregate_max
+    {
+        /* Max variant: pairwise max instead of sum */
+        [msg{d, v1}, msg{d, v2}, use_max{}]'node{j} ->
+            [msg{d, max(v1, v2)}, use_max{}]'node{j}
+    }
+}
+
+/* ============================================================================
+ * GCN LAYER
+ * Graph convolution: aggregate neighbor features weighted by
+ * degree-normalized edge weights, then apply a shared linear
+ * projection and ReLU. Backward rules propagate gradients back
+ * along the (reversed) edges, in the simplified style of nn.pli.
+ * ============================================================================ */
+
+@module gcn_layer(num_nodes, in_dim, out_dim)
+{
+    @initial
+    {
+        [gcn
+            /* Shared projection weights across all nodes */
+            for (d1 = 1; d1 <= in_dim; d1++)
+            {
+                for (d2 = 1; d2 <= out_dim; d2++)
+                {
+                    weight{d1, d2, random(-50, 50)}
+                }
+            }
+            for (d2 = 1; d2 <= out_dim; d2++)
+            {
+                bias{d2, 0}
+            }
+
+            for (i = 1; i <= num_nodes; i++)
+            {
+                [node{i}
+                    deg{1}      /* self-loop counts once; incremented per edge */
+                ]'gcn
+                edge{i, i, 100}
+            }
+        ]'main
+    }
+
+    @rules compute_degrees
+    {
+        /* Count incoming edges (including self-loop) per node */
+        [edge{i, j, w}, count_deg{}]'gcn ->
+            [edge{i, j, w}, deg_inc{j}]'gcn
+
+        [deg_inc{j}]'gcn -> [deg_inc{j}]'node{j}
+
+        [deg_inc{j}, deg{n}]'node{j} ->
+            [deg{n+1}]'node{j}
+    }
+
+    @rules aggregate
+    {
+        /* Degree-normalized neighbor aggregation:
+         * h_j = sum_i edge_{i,j} * feat_i / deg_j */
+        [feat{d, v}]'node{i} ->
+            [feat{d, v}]'node{i} (node_feat{i, d, v}, out)
+
+        [node_feat{i, d, v}, edge{i, j, w}]'gcn ->
+            [node_feat{i, d, v}, edge{i, j, w},
+             msg{j, d, round(v*w/100)}]'gcn
+
+        [msg{j, d, v}]'gcn -> [msg{d, v}]'node{j}
+
+        [msg{d, v1}, msg{d, v2}]'node{j} ->
+            [msg{d, v1+v2}]'node{j}
+
+        [msg{d, v}, deg{n}, agg_done{d}]'node{j} ->
+            [agg{d, round(v/n)}, deg{n}]'node{j}
+    }
+
+    @rules project
+    {
+        /* Shared linear projection: out_{j,d2} = sum_d1 agg_{j,d1}*W_{d1,d2} + b */
+        [agg{d1, v}]'node{j} ->
+            [agg{d1, v}]'node{j} (agg_feat{j, d1, v}, out)
+
+        [agg_feat{j, d1, v}, weight{d1, d2, w}]'gcn ->
+            [agg_feat{j, d1, v}, weight{d1, d2, w},
+             proj_term{j, d2, round(v*w/100)}]'gcn
+
+        [proj_term{j, d2, t1}, proj_term{j, d2, t2}]'gcn ->
+            [proj_term{j, d2, t1+t2}]'gcn
+
+        /* Bias + ReLU */
+        [proj_term{j, d2, s}, bias{d2, b}, proj_done{j, d2}]'gcn ->
+            [bias{d2, b}]'gcn (output{j, d2, max(0, s + b)}, out)
+    }
+
+    @rules backward
+    {
+        /* Receive output gradients from the parent */
+        (grad{j, d2, g}, in) ->
+            [grad{j, d2, g}]'gcn
+
+        /* Weight gradients: dW_{d1,d2} = sum_j agg_{j,d1} * grad_{j,d2} */
+        [grad{j, d2, g}, agg_feat{j, d1, v}]'gcn ->
+            [grad{j, d2, g}, agg_feat{j, d1, v},
+             weight_grad{d1, d2, round(v*g/100)}]'gcn
+
+        /* Update shared weights */
+        [weight{d1, d2, w}, weight_grad{d1, d2, wg}, learning_rate{lr}]'gcn ->
+            [weight{d1, d2, w - round(lr*wg/100)}, learning_rate{lr}]'gcn
+
+        /* Reverse message passing: propagate gradients back along edges
+         * dfeat_i = sum_j edge_{i,j} * (grad_j . W^T) */
+        [grad{j, d2, g}, weight{d1, d2, w}]'gcn ->
+            [grad{j, d2, g}, weight{d1, d2, w},
+             agg_grad{j, d1, round(g*w/100)}]'gcn
+
+        [agg_grad{j, d1, g}, edge{i, j, w}]'gcn ->
+            [edge{i, j, w}]'gcn (feat_grad{i, d1, round(g*w/100)}, out)
+    }
+}
+
+/* ============================================================================
+ * GRAPH ATTENTION LAYER (GAT)
+ * Per-edge attention coefficient e_{i,j} = a . [h_i || h_j] computed
+ * from concatenated node features via a learnable attention vector,
+ * normalized per target node with the softmax-with-max-stabilization
+ * pattern from attention.pli, then used as message weights.
+ * ============================================================================ */
+
+@module graph_attention_layer(num_nodes, feat_dim)
+{
+    @initial
+    {
+        [gat
+            /* Attention vector a: first half applies to the source
+             * features, second half to the target features */
+            for (d = 1; d <= feat_dim; d++)
+            {
+                a_src{d, random(-50, 50)}
+                a_tgt{d, random(-50, 50)}
+            }
+
+            for (i = 1; i <= num_nodes; i++)
+            {
+                [node{i}]'gat
+                edge{i, i, 100}
+            }
+        ]'main
+    }
+
+    @rules attention_scores
+    {
+        /* Expose node features to the graph membrane */
+        [feat{d, v}]'node{i} ->
+            [feat{d, v}]'node{i} (node_feat{i, d, v}, out)
+
+        /* e_{i,j} = sum_d a_src_d * h_{i,d} + sum_d a_tgt_d * h_{j,d},
+         * computed only where an edge exists */
+        [node_feat{i, d, v}, a_src{d, av}, edge{i, j, w}]'gat ->
+            [node_feat{i, d, v}, a_src{d, av}, edge{i, j, w},
+             e_term{i, j, round(v*av/100)}]'gat
+
+        [node_feat{j, d, v}, a_tgt{d, av}, edge{i, j, w}]'gat ->
+            [node_feat{j, d, v}, a_tgt{d, av}, edge{i, j, w},
+             e_term{i, j, round(v*av/100)}]'gat
+
+        [e_term{i, j, t1}, e_term{i, j, t2}]'gat ->
+            [e_term{i, j, t1+t2}]'gat
+
+        /* LeakyReLU(0.2) as in the GAT paper */
+        [e_term{i, j, s}, e_done{i, j}]'gat ->
+            [e_score{i, j, (s > 0 ? s : round(s/5))}]'gat
+    }
+
+    @rules softmax_per_node
+    {
+        /* Max over incoming edges of node j, for stability */
+        [e_score{i, j, s}, node_max{j, m}]'gat ->
+            [e_score{i, j, s}, node_max{j, max(s, m)}]'gat
+
+        [e_score{i, j, s}, node_max_final{j, m}]'gat ->
+            [exp_e{i, j, exp((s-m)/100)}, node_max_final{j, m}]'gat
+
+        [exp_e{i, j, e}, node_sum{j, r}]'gat ->
+            [exp_e{i, j, e}, node_sum{j, r+e}]'gat
+
+        /* Attention coefficient alpha_{i,j} (scaled by 100) */
+        [exp_e{i, j, e}, node_sum_final{j, r}]'gat ->
+            [alpha{i, j, round(100*e/r)}, node_sum_final{j, r}]'gat
+    }
+
+    @rules attend
+    {
+        /* Weighted aggregation: h'_j = sum_i alpha_{i,j} * h_i */
+        [alpha{i, j, av}, node_feat{i, d, v}]'gat ->
+            [alpha{i, j, av}, node_feat{i, d, v},
+             out_term{j, d, round(av*v/100)}]'gat
+
+        [out_term{j, d, t1}, out_term{j, d, t2}]'gat ->
+            [out_term{j, d, t1+t2}]'gat
+
+        [out_term{j, d, o}, attend_done{j, d}]'gat ->
+            []'gat (output{j, d, o}, out)
+    }
+}
+
+/* ============================================================================
+ * GRAPH READOUT
+ * Global pooling of node features into a single graph-level
+ * embedding for graph classification, emitted `out` to the parent.
+ * ============================================================================ */
+
+@module graph_readout(num_nodes, feat_dim)
+{
+    @rules pool_sum
+    {
+        /* Collect node features in the readout membrane */
+        [feat{d, v}]'node{i} ->
+            []'node{i} (pool{d, v}, out)
+
+        /* Pairwise sum across nodes */
+        [pool{d, v1}, pool{d, v2}]'readout ->
+            [pool{d, v1+v2}]'readout
+    }
+
+    @rules pool_mean
+    {
+        /* Mean pooling: divide the summed features by num_nodes */
+        [pool{d, v}, use_mean{}, pool_done{d}]'readout ->
+            [use_mean{}]'readout (graph_embed{d, round(v/num_nodes)}, out)
+    }
+
+    @rules pool_max
+    {
+        /* Max pooling: pairwise max instead of sum */
+        [pool{d, v1}, pool{d, v2}, use_max{}]'readout ->
+            [pool{d, max(v1, v2)}, use_max{}]'readout
+    }
+
+    @rules emit
+    {
+        /* Sum pooling result (default) */
+        [pool{d, v}, pool_done{d}]'readout ->
+            []'readout (graph_embed{d, v}, out)
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Graph Neural Network Modules in PLingua"
+    version: "1.0.0"
+    description: "Message passing, GCN, graph attention (GAT) and readout with membranes as graph nodes"
+    depends: ["nn.pli"]
+
+    modules: [
+        "message_passing(num_nodes, feat_dim)",
+        "gcn_layer(num_nodes, in_dim, out_dim)",
+        "graph_attention_layer(num_nodes, feat_dim)",
+        "graph_readout(num_nodes, feat_dim)"
+    ]
+}

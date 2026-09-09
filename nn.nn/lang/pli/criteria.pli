@@ -1,0 +1,189 @@
+/*
+ * Extended Loss Functions / Criteria in PLingua
+ * Complements the core criteria (MSE, NLL, BCE, AbsError) in nn.pli with
+ * additional loss functions from the Lua/Torch nn reference.
+ *
+ * Each criterion is a @module with:
+ *   - compute_loss rules: derive total_loss objects from predicted/target
+ *   - gradient rules: emit gradient{i, g} objects for backpropagation
+ *
+ * Numerical convention: values scaled by 100, consistent with nn.pli.
+ */
+
+@model<membrane_computing>
+
+/* ============================================================================
+ * CROSS ENTROPY (fused LogSoftMax + NLL)
+ * CE = -log_softmax(x)[target_class]
+ * More numerically stable than applying softmax then NLL separately.
+ * ============================================================================ */
+
+@module cross_entropy_criterion
+{
+    @rules compute_loss
+    {
+        /* Find max logit for numerical stability */
+        [logit{i, x}, running_max{m}]'loss ->
+            [logit{i, x}, running_max{max(x, m)}]'loss
+
+        /* Compute shifted exponentials and their sum */
+        [logit{i, x}, max_logit{m}]'loss ->
+            [logit{i, x}, exp_value{i, exp((x-m)/100)}]'loss
+
+        [exp_value{i, e}]'loss ->
+            [sum_exp{e}]'loss
+
+        /* Loss: log(sum_exp) - (logit[class] - max) */
+        [logit{class, x}, target{class}, max_logit{m}, sum_exp{s}]'loss ->
+            [total_loss{round(100*log(s)) - (x - m)}]'loss
+
+        /* Gradient: softmax(x)_i - 1[i == class], scaled by 100 */
+        [exp_value{i, e}, sum_exp{s}, target{class}]'loss ->
+            []'loss (gradient{i, round(100*e/s) - 100}, out) where i == class
+        [exp_value{i, e}, sum_exp{s}, target{class}]'loss ->
+            []'loss (gradient{i, round(100*e/s)}, out) where i != class
+    }
+}
+
+/* ============================================================================
+ * SMOOTH L1 / HUBER LOSS
+ * L(e) = 0.5*e^2/beta      if |e| < beta
+ *      = |e| - 0.5*beta    otherwise
+ * Robust regression loss: quadratic near zero, linear for large errors.
+ * ============================================================================ */
+
+@module smooth_l1_criterion(beta)
+{
+    @rules compute_loss
+    {
+        /* Compute error */
+        [predicted{i, p}, target{i, t}]'loss ->
+            [error{i, p-t}]'loss
+
+        /* Quadratic region: |e| < beta */
+        [error{i, e}]'loss ->
+            [huber{i, round(e*e/(2*beta))}]'loss where abs(e) < beta
+
+        /* Linear region: |e| >= beta */
+        [error{i, e}]'loss ->
+            [huber{i, abs(e) - round(beta/2)}]'loss where abs(e) >= beta
+
+        /* Sum element losses */
+        [huber{i, l}]'loss ->
+            [total_loss{l}]'loss
+
+        /* Gradient: e/beta in quadratic region, sign(e) in linear region */
+        [error{i, e}]'loss ->
+            []'loss (gradient{i, round(100*e/beta)}, out) where abs(e) < beta
+        [error{i, e}]'loss ->
+            []'loss (gradient{i, 100}, out) where e >= beta
+        [error{i, e}]'loss ->
+            []'loss (gradient{i, -100}, out) where e <= -beta
+    }
+}
+
+/* ============================================================================
+ * MARGIN CRITERION (hinge loss)
+ * L = max(0, margin - y*x) where y in {-100, 100} (scaled +-1)
+ * Used for binary classification with SVM-style margins.
+ * ============================================================================ */
+
+@module margin_criterion(margin)
+{
+    @rules compute_loss
+    {
+        /* Compute margin violation: margin - y*x (y, x scaled by 100) */
+        [predicted{i, x}, target{i, y}]'loss ->
+            [violation{i, margin - round(y*x/100)}]'loss
+
+        /* Hinge: only positive violations contribute */
+        [violation{i, v}]'loss ->
+            [total_loss{v}]'loss where v > 0
+        [violation{i, v}]'loss ->
+            [total_loss{0}]'loss where v <= 0
+
+        /* Gradient: -y if violated, 0 otherwise */
+        [violation{i, v}, target{i, y}]'loss ->
+            []'loss (gradient{i, -y}, out) where v > 0
+        [violation{i, v}, target{i, y}]'loss ->
+            []'loss (gradient{i, 0}, out) where v <= 0
+    }
+}
+
+/* ============================================================================
+ * KL DIVERGENCE CRITERION
+ * KL(target || predicted) = sum(t * (log(t) - log_p))
+ * Expects predicted as log-probabilities (output of log_softmax) and
+ * target as a probability distribution (both scaled by 100).
+ * ============================================================================ */
+
+@module kl_div_criterion
+{
+    @rules compute_loss
+    {
+        /* Element loss: t * (log(t) - log_p), skip t == 0 terms */
+        [log_predicted{i, lp}, target{i, t}]'loss ->
+            [kl{i, round(t*(round(100*log(t/100)) - lp)/100)}]'loss where t > 0
+        [log_predicted{i, lp}, target{i, t}]'loss ->
+            [kl{i, 0}]'loss where t == 0
+
+        /* Sum element losses */
+        [kl{i, l}]'loss ->
+            [total_loss{l}]'loss
+
+        /* Gradient w.r.t. log_predicted: -t */
+        [target{i, t}]'loss ->
+            []'loss (gradient{i, -t}, out)
+    }
+}
+
+/* ============================================================================
+ * WEIGHTED CLASS NLL CRITERION
+ * NLL with per-class weights to handle class imbalance.
+ * class_weight{class, w} objects supply the weights (scaled by 100).
+ * ============================================================================ */
+
+@module weighted_nll_criterion(num_classes)
+{
+    @initial
+    {
+        /* Default: uniform weights (1.0 -> 100) */
+        for (c = 1; c <= num_classes; c++)
+        {
+            class_weight{c, 100}
+        }
+    }
+
+    @rules compute_loss
+    {
+        /* Weighted negative log likelihood */
+        [predicted{class, p}, target{class}, class_weight{class, w}]'loss ->
+            [total_loss{round(-w*log(p/100))}, class_weight{class, w}]'loss
+
+        /* Gradient: -w/p for true class, 0 for others */
+        [predicted{i, p}, target{class}, class_weight{class, w}]'loss ->
+            []'loss (gradient{i, round(-10000*w/(100*p))}, out) where i == class
+        [predicted{i, p}, target{class}]'loss ->
+            []'loss (gradient{i, 0}, out) where i != class
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION
+ * ============================================================================ */
+
+@info
+{
+    name: "Extended Loss Functions in PLingua"
+    version: "1.0.0"
+    description: "Additional criteria for the P-Systems NN library"
+    depends: ["nn.pli"]
+
+    modules: [
+        "cross_entropy_criterion",
+        "smooth_l1_criterion(beta)",
+        "margin_criterion(margin)",
+        "kl_div_criterion",
+        "weighted_nll_criterion(num_classes)"
+    ]
+}

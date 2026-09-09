@@ -1,0 +1,184 @@
+/*
+ * pln.pli - Probabilistic Logic Networks in P-Systems
+ *
+ * PLN is OpenCog's inference engine: classical logic extended with uncertain
+ * truth values, operating over the AtomSpace hypergraph.  This is the
+ * P-Systems counterpart of ReZorg/plingua's examples/opencog/opencog_pln.pli,
+ * expressed in nn.nn's pure @module/@rules educational dialect and built on
+ * the v2.3 atomspace.pli knowledge base.
+ *
+ * Truth values are SimpleTruthValues  tv{s, c}  (strength s, confidence c),
+ * integers scaled by 100, matching atomspace.pli.  Each inference rule is a
+ * membrane evolution rule: the premises are atom objects, the conclusion is a
+ * new (or revised) atom.  Because rule application is maximally parallel,
+ * forward-chaining over the whole knowledge base is a single transition, not
+ * a loop.
+ *
+ * Inference rules implemented (strength formulas, all ×100):
+ *   deduction   A->B (sAB), B->C (sBC)  |-  A->C :
+ *                 s = sAB*sBC/100                      (independence approx)
+ *   induction   A->B (sAB), A->C (sAC)  |-  B->C :
+ *                 s = sAB*sAC/100
+ *   abduction   A->B (sAB), B (sB)      |-  A :
+ *                 s = sAB*sB/100      (weakened -- abduction is tentative)
+ *   revision    tv{s1,c1} (+) tv{s2,c2} ->  tv{s',c'}  (delegate to atomspace)
+ *   conjunction A (sA), B (sB)  |-  A AND B : s = sA*sB/100
+ *   disjunction A (sA), B (sB)  |-  A OR B  : s = sA + sB - sA*sB/100
+ *   negation    A (sA)          |-  NOT A   : s = 100 - sA
+ *   modus_ponens A (sA), A->B (sAB)  |-  B : s = sA*sAB/100
+ *
+ * Confidence handling: a derived TV's confidence is the minimum of its
+ * premises' confidences, attenuated by a rule-specific factor (deduction
+ * 90/100, induction 80/100, abduction 50/100), reflecting how much the
+ * inference preserves certainty.
+ */
+
+@model<membrane_computing>
+
+@import "atomspace.pli"     /* tv{s,c}, atoms, tv_revision */
+@import "integration.pli"   /* plingua_compat macros */
+
+/* ============================================================================
+ * IMPLICATION LINKS
+ * An implication A->B is an atom link with type 'impl' whose outgoing set is
+ * {A, B}.  We surface it to the PLN engine as an imp{A, B, s, c} object in
+ * the enclosing membrane so the inference rules can match on it directly.
+ * ============================================================================ */
+
+@module pln_implication
+{
+    @rules surface
+    {
+        /* Lift an implication link into a matchable imp{} object. */
+        [atype{impl}, link_member{L, A}, link_member{L, B}, tv{s, c}]'link{L}
+            -> [atype{impl}, link_member{L, A}, link_member{L, B}, tv{s, c},
+                imp{A, B, s, c}]'link{L}
+            where A < B
+    }
+}
+
+/* ============================================================================
+ * DEDUCTION  (A->B, B->C |- A->C)
+ * ============================================================================ */
+
+@module pln_deduction
+{
+    @rules deduce
+    {
+        /* Two chained implications produce a transitive conclusion.
+         * s = sAB*sBC/100 ;  c = min(cAB,cBC)*90/100 */
+        [imp{A, B, sAB, cAB}, imp{B, C, sBC, cBC}]'pln ->
+            [imp{A, B, sAB, cAB}, imp{B, C, sBC, cBC},
+             deduce{A, C, round(sAB*sBC/100),
+                    round(min(cAB, cBC)*90/100)}]'pln
+            where A <> C
+    }
+}
+
+/* ============================================================================
+ * INDUCTION  (A->B, A->C |- B->C)
+ * ============================================================================ */
+
+@module pln_induction
+{
+    @rules induce
+    {
+        /* Shared antecedent: from A->B and A->C infer B->C.
+         * s = sAB*sAC/100 ;  c = min * 80/100 */
+        [imp{A, B, sAB, cAB}, imp{A, C, sAC, cAC}]'pln ->
+            [imp{A, B, sAB, cAB}, imp{A, C, sAC, cAC},
+             induce{B, C, round(sAB*sAC/100),
+                    round(min(cAB, cAC)*80/100)}]'pln
+            where B < C
+    }
+}
+
+/* ============================================================================
+ * ABDUCTION  (A->B, B |- A)   -- tentative, confidence attenuated 50/100
+ * ============================================================================ */
+
+@module pln_abduction
+{
+    @rules abduce
+    {
+        [imp{A, B, sAB, cAB}, tv{sB, cB}]'pln ->
+            [imp{A, B, sAB, cAB}, tv{sB, cB},
+             abduce{A, round(sAB*sB/100),
+                    round(min(cAB, cB)*50/100)}]'pln
+    }
+}
+
+/* ============================================================================
+ * LOGICAL OPERATORS  (conjunction / disjunction / negation / modus ponens)
+ * ============================================================================ */
+
+@module pln_operators
+{
+    @rules boolean_ops
+    {
+        /* Conjunction: s = sA*sB/100 */
+        [tv{sA, cA}, tv{sB, cB}, want_and{A, B}]'pln ->
+            [tv{sA, cA}, tv{sB, cB},
+             conj{A, B, round(sA*sB/100), min(cA, cB)}]'pln
+
+        /* Disjunction: s = sA + sB - sA*sB/100 */
+        [tv{sA, cA}, tv{sB, cB}, want_or{A, B}]'pln ->
+            [tv{sA, cA}, tv{sB, cB},
+             disj{A, B, sA + sB - round(sA*sB/100), min(cA, cB)}]'pln
+
+        /* Negation: s = 100 - sA */
+        [tv{sA, cA}, want_not{A}]'pln ->
+            [tv{sA, cA}, neg{A, 100 - sA, cA}]'pln
+
+        /* Modus ponens: A (sA), A->B (sAB) |- B : s = sA*sAB/100 */
+        [tv{sA, cA}, imp{A, B, sAB, cAB}]'pln ->
+            [tv{sA, cA}, imp{A, B, sAB, cAB},
+             mp{B, round(sA*sAB/100), min(cA, cAB)}]'pln
+    }
+}
+
+/* ============================================================================
+ * REVISION
+ * When an inference produces a conclusion that already exists, merge the two
+ * truth values using the atomspace count-based revision (revise_tv), rather
+ * than duplicating the atom.
+ * ============================================================================ */
+
+@module pln_revision
+{
+    @rules revise
+    {
+        [tv{s1, c1}, revise_tv{s2, c2}]'atom{I} ->
+            [tv{round((s1*c1 + s2*c2)/(c1+c2)),
+                round((c1+c2)*100/(c1+c2+100))}]'atom{I}
+            where c1 < 100 and (c1 + c2) > 0
+    }
+}
+
+/* ============================================================================
+ * FORWARD CHAINER
+ * One maximally-parallel step applies every applicable inference rule across
+ * the membrane -- this is the O(1)-transition forward chain that the
+ * imperative PLN backward/forward loop cannot reproduce.  A cycle token
+ * bounds the number of chained steps.
+ * ============================================================================ */
+
+@module pln_forward_chain(max_cycles)
+{
+    @initial
+    {
+        [pln cycle{0} pln_cfg{max_cycles}]'main
+    }
+
+    @rules step
+    {
+        /* Advance the chaining cycle while under the cap. */
+        [cycle{n}, pln_cfg{maxc}]'pln ->
+            [cycle{n + 1}, pln_cfg{maxc}]'pln
+            where n < maxc
+
+        /* Halt: report the derived facts. */
+        [cycle{maxc}]'pln ->
+            []'pln (pln_halted{maxc}, out)
+    }
+}
