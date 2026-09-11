@@ -1,0 +1,525 @@
+/*
+ * Time Crystal Neural Network Implementation in PLingua
+ * A P-Systems membrane computing implementation of feedforward neural networks
+ * whose neurons are TIME CRYSTALS: each neuron carries an 11-dimensional
+ * nested phase manifold with a closed tick clock loop, and computation is
+ * gated by Phase Prime Metric (PPM) resonance.
+ *
+ * Adapted from the standard-neuron implementation in nn.pli (issue #23):
+ * - Neural network layers as nested membranes
+ * - Forward propagation as object evolution and communication
+ * - Neurons as computational membranes with weighted rules
+ * - Activation functions as transformation rules
+ * - Backpropagation as reverse communication between membranes
+ *
+ * Time-crystal adaptation (nanobrain theory):
+ * - Every neuron is an 11-deep nest of phase membranes d1..d11 whose tick
+ *   pulse falls one dimension per step and wraps at d11 back to the neuron
+ *   rim, realising the closed time loop (cf. psystems/common/time_crystal_core.pli)
+ * - Each weight carries a prime index p_k from the 15 PPM primes
+ *   (2,3,5,7,11,13,17,19,23,29,31,37,41,43,47); the neuron's prime signature
+ *   gates its output (cf. psystems/common/alphabet_primes.pli)
+ * - Activations are phase-gated: the crystal only fires when the tick pulse
+ *   is at the rim (phase 0 of the 11-step clock)
+ * - Gradients propagate as phase corrections around the closed time loop;
+ *   error is measured as circular distance on the 11-cycle
+ * - Adjacent layers couple by resonance: frequency match exchanges in-phase
+ *   ticks, mismatch dissipates
+ *
+ * Traceability: src/cpp/nanobrain_time_crystal.h (TimeCrystalQuantumState,
+ *               TIME_CRYSTAL_DIMENSIONS = 11, prime_signature,
+ *               temporal_coherence, resonance_frequency, quantum_phase)
+ *
+ * Numerical convention: values scaled by 100 (0.5 -> 50), phases are integers
+ * on the 11-cycle (0..10), consistent with nn.pli.
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+
+/* ============================================================================
+ * TIME CRYSTAL NEURON CORE
+ * One neuron = one 11-dimensional time crystal: 11 nested phase membranes
+ * (the 11D manifold) with a tick pulse clocking one dimension deeper per
+ * step and wrapping at the innermost membrane d11 back to the rim — the
+ * closed time loop. A singularity_point at d11 reseeds the clock, so the
+ * crystal never damps (Winfree/UTC property: clocking under noise).
+ *
+ *   tc_neuron{i}               rim of the crystal (phase 0)
+ *     '- d1 ... d11            nested phase membranes (phases 1..10 + core)
+ *
+ * Inlined by convention from psystems/common/time_crystal_core.pli.
+ * ============================================================================ */
+
+@module time_crystal_neuron(neuron_id)
+{
+    @initial
+    {
+        [tc_neuron{neuron_id}
+            [d1 [d2 [d3 [d4 [d5 [d6 [d7 [d8 [d9 [d10
+                [d11 singularity_point ]'d11
+            ]'d10 ]'d9 ]'d8 ]'d7 ]'d6 ]'d5 ]'d4 ]'d3 ]'d2 ]'d1
+            tick                       /* the clock pulse starts at the rim */
+            phase{neuron_id, 0}        /* rim = phase 0 of the 11-cycle */
+            period{11}                 /* 11 nested phase dimensions */
+            coherence{neuron_id, 100}  /* temporal coherence, starts perfect */
+        ]'layer
+    }
+
+    /* Clock: the tick falls one phase membrane deeper per step */
+    @rules tick_in
+    {
+        [tick]'tc_neuron{neuron_id} -> [(tick)in_d1]'tc_neuron{neuron_id}
+        [tick]'d1  -> [(tick)in_d2]'d1
+        [tick]'d2  -> [(tick)in_d3]'d2
+        [tick]'d3  -> [(tick)in_d4]'d3
+        [tick]'d4  -> [(tick)in_d5]'d4
+        [tick]'d5  -> [(tick)in_d6]'d5
+        [tick]'d6  -> [(tick)in_d7]'d6
+        [tick]'d7  -> [(tick)in_d8]'d7
+        [tick]'d8  -> [(tick)in_d9]'d8
+        [tick]'d9  -> [(tick)in_d10]'d9
+        [tick]'d10 -> [(tick)in_d11]'d10
+    }
+
+    /* Closed time loop: at d11 the pulse wraps back out to the rim;
+     * the singularity point reseeds the clock so it never damps */
+    @rules tick_wrap
+    {
+        [tick]'d11 -> [(tick)out]'d11
+        [singularity_point]'d11 -> [singularity_point, tick]'d11
+    }
+
+    /* Phase register: the rim tracks the pulse position on the 11-cycle */
+    @rules phase_advance
+    {
+        [phase{i, p}, period{11}]'tc_neuron{i} ->
+            [phase{i, (p + 1) mod 11}, period{11}]'tc_neuron{i}
+    }
+}
+
+/* ============================================================================
+ * CRYSTAL ACTIVATION FUNCTIONS
+ * The standard activations of nn.pli gated by the crystal phase: the
+ * transform only fires when the tick pulse is at the rim (phase 0), so the
+ * neuron emits one activation per 11-step revolution of its clock.
+ * ============================================================================ */
+
+/* Crystal sigmoid: 1/(1+exp(-x)) applied on the rim phase */
+@module crystal_sigmoid_activation
+{
+    /* Phase-gated forward: sigmoid only when the pulse is at the rim */
+    [x{n}, phase{i, 0}]'i -> [csig{round(100/(1+exp(-n/100)))}, phase{i, 0}]'i
+
+    /* Derivative for backprop, equally phase-gated: sig*(1-sig) */
+    [csig{n}, grad{m}, phase{i, 0}]'i ->
+        [grad_csig{round(n*(100-n)*m/10000)}, phase{i, 0}]'i
+}
+
+/* Crystal tanh: (exp(x)-exp(-x))/(exp(x)+exp(-x)) applied on the rim phase */
+@module crystal_tanh_activation
+{
+    [x{n}, phase{i, 0}]'i ->
+        [ctanh{round(100*(exp(n/100)-exp(-n/100))/(exp(n/100)+exp(-n/100)))},
+               phase{i, 0}]'i
+
+    /* Derivative: 1 - tanh^2(x) */
+    [ctanh{n}, grad{m}, phase{i, 0}]'i ->
+        [grad_ctanh{round((10000-n*n)*m/10000)}, phase{i, 0}]'i
+}
+
+/* Crystal ReLU: max(0, x) applied on the rim phase */
+@module crystal_relu_activation
+{
+    [x{n}, phase{i, 0}]'i -> [crelu{max(0,n)}, phase{i, 0}]'i where n > 0
+    [x{n}, phase{i, 0}]'i -> [crelu{0}, phase{i, 0}]'i where n <= 0
+
+    /* Derivative: 1 if x > 0 else 0 */
+    [crelu{n}, grad{m}, phase{i, 0}]'i -> [grad_crelu{m}, phase{i, 0}]'i where n > 0
+    [crelu{n}, grad{m}, phase{i, 0}]'i -> [grad_crelu{0}, phase{i, 0}]'i where n <= 0
+}
+
+/* Phase encoder: pure time-crystal activation.
+ * Instead of squashing the amplitude, the input value is encoded as the
+ * PHASE at which the crystal next fires on its 11-cycle: phase = |x| mod 11.
+ * The neuron's output is the tick emitted at that phase — information lives
+ * in the time domain, not the amplitude domain. */
+@module phase_encoder
+{
+    /* Encode amplitude as a firing phase on the 11-cycle */
+    [x{n}]'i -> [fire_phase{abs(n) mod 11}]'i
+
+    /* The crystal emits its tick when the pulse reaches the encoded phase */
+    [fire_phase{p}, phase{i, p}]'i -> [cfired{i, 100}, phase{i, p}]'i
+
+    /* No emission at other phases: the encoded phase object simply lapses */
+    [fire_phase{p}, phase{i, q}]'i -> [phase{i, q}]'i where p != q
+
+    /* Derivative of a phase code is flat on the cycle: pass gradient through */
+    [cfired{i, n}, grad{m}]'i -> [grad_phase{m}]'i
+}
+
+/* ============================================================================
+ * TIME CRYSTAL LINEAR LAYER
+ * Fully connected layer of time-crystal neurons. Adapts linear_layer from
+ * nn.pli: each weight additionally carries a prime index k selecting one of
+ * the 15 PPM primes, and each neuron computes its prime signature as the
+ * product of its weight primes. The signature gates the output: a neuron
+ * only fires on its resonance tick — when its own prime signature divides
+ * the layer broadcast tick — implementing PPM pattern recognition at the
+ * neuron level.
+ * ============================================================================ */
+
+@module tc_linear_layer(input_size, output_size)
+{
+    /* Initialize crystal neurons, primed weights and biases */
+    @initial
+    {
+        /* Create output_size time-crystal neurons */
+        for (i = 1; i <= output_size; i++)
+        {
+            [tc_neuron{i} time_crystal_neuron(i)]'layer
+
+            /* Prime-indexed weights: w is the scaled weight, k the index
+             * (1..15) of this synapse's PPM prime */
+            for (j = 1; j <= input_size; j++)
+            {
+                weight{i, j, random(-50, 50), random(1, 15)}
+            }
+            bias{i, random(-10, 10)}
+        }
+
+        /* Layer broadcast tick: the resonance clock the signatures divide */
+        layer_tick{11}
+    }
+
+    /* Forward pass: weighted sum, bias, prime signature, resonance gate */
+    @rules forward
+    {
+        /* Weighted synapse: the prime index rides along with the product */
+        [input{j, v}, weight{i, j, w, k}]'layer ->
+            [psum{i, round(v*w/100), k}]'layer
+
+        /* Accumulate products into the neuron's weighted sum */
+        [psum{i, s1, k1}, psum{i, s2, k2}]'layer ->
+            [psum{i, s1 + s2, lcm(k1, k2)}]'layer
+
+        /* Prime signature: the product of the synapse primes (ordered factor)
+         * — computed alongside the sum as the neuron's resonance divisor */
+        [weight{i, j, w, k}, sig_acc{i, s}]'layer ->
+            [sig_acc{i, s * prime(k)}]'layer
+
+        /* Add bias once the sum settles */
+        [psum{i, s, ks}, bias{i, b}]'layer ->
+            [pre_act{i, s + b}]'layer
+
+        /* Resonance gate: the neuron only emits on a layer tick its prime
+         * signature divides — PPM gating of the weighted sum */
+        [pre_act{i, v}, sig_acc{i, sig}, layer_tick{t}]'layer ->
+            [output{i, v}]'layer where (t mod sig) == 0
+
+        /* Off-resonance: the pre-activation is held in the crystal, not
+         * emitted — the signal persists until the next resonant tick
+         * (time crystals are permanent under noise; nothing damps) */
+
+        /* Send output to the next layer */
+        [output{i, v}]'layer -> []'layer (output{i, v}, out)
+    }
+
+    /* Backward pass: gradients plus phase correction on the closed loop */
+    @rules backward
+    {
+        /* Receive gradient from the next layer */
+        (grad{i, g}, in) -> [grad{i, g}]'layer
+
+        /* Weight gradient: grad * input (prime index is preserved) */
+        [grad{i, g}, input{j, v}]'layer ->
+            [weight_grad{i, j, round(g*v/100)}]'layer
+
+        /* Update weights (prime indices are structural, not trained) */
+        [weight{i, j, w, k}, weight_grad{i, j, g}, learning_rate{lr}]'layer ->
+            [weight{i, j, w - round(lr*g/100), k}]'layer
+
+        /* Phase correction: the gradient also shifts the neuron's firing
+         * phase backward along the closed time loop (temporal backprop) */
+        [grad{i, g}, phase{i, p}]'layer ->
+            [phase{i, (p - (abs(g) mod 11) + 11) mod 11}]'layer
+
+        /* Input gradient for the previous layer */
+        [grad{i, g}, weight{i, j, w, k}]'layer ->
+            []'layer (grad{j, round(g*w/100)}, out)
+    }
+}
+
+/* ============================================================================
+ * RESONANCE COUPLING BETWEEN LAYERS
+ * Adjacent crystal layers couple by resonance instead of plain communication:
+ * when the emitting neuron's resonance frequency matches a receiver's prime
+ * signature, the layers exchange in-phase ticks (constructive interference);
+ * on mismatch the tick dissipates into the parent membrane (no transfer).
+ * frequency f is carried scaled x100 (e.g. 100 Hz -> 10000).
+ * ============================================================================ */
+
+@module resonance_coupling
+{
+    /* Frequency match: exchange in-phase ticks, coupling the two crystals */
+    [output{i, v, f}, sig{j, sig}]'coupling ->
+        [input{j, v, f}, tick_in_phase{i, j}]'coupling where (f mod sig) == 0
+
+    /* Frequency mismatch: the tick dissipates — energy returns to the skin,
+     * no signal crosses the layer boundary */
+    [output{i, v, f}, sig{j, sig}]'coupling ->
+        []'coupling (dissipated{i, j}, out) where (f mod sig) != 0
+}
+
+/* ============================================================================
+ * TEMPORAL COHERENCE CRITERION
+ * Loss for time-crystal networks: error is the CIRCULAR distance between the
+ * predicted phase and the target phase on the 11-cycle (phases live on a
+ * ring, so |10 - 0| = 1, not 10). Temporal coherence of the whole network is
+ * 100 - mean circular error.
+ * ============================================================================ */
+
+@module temporal_coherence_criterion
+{
+    @rules compute_loss
+    {
+        /* Raw phase difference on the 11-cycle */
+        [predicted{i, p}, target{i, t}]'loss ->
+            [phase_diff{i, abs(p - t)}]'loss
+
+        /* Circular wrap: min(d, 11 - d) */
+        [phase_diff{i, d}]'loss -> [circular_error{i, d}]'loss where d <= 5
+        [phase_diff{i, d}]'loss -> [circular_error{i, 11 - d}]'loss where d > 5
+
+        /* Total loss accumulates the circular errors */
+        [circular_error{i, e}]'loss -> [total_loss{e}]'loss
+
+        /* Network temporal coherence: 100 - error (percent, x100 scale) */
+        [circular_error{i, e}]'loss -> [coherence{100 - e*100/11}]'loss
+
+        /* Phase gradient: sign of the SHORTEST way round the cycle.
+         * Forward on the cycle if the raw difference stays within half a
+         * turn, backward (via the wrap) otherwise */
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, 1}, out) where (p - t + 11) mod 11 <= 5, p != t
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, -1}, out) where (p - t + 11) mod 11 > 5
+        [predicted{i, p}, target{i, t}]'loss ->
+            []'loss (gradient{i, 0}, out) where p == t
+    }
+}
+
+/* ============================================================================
+ * SEQUENTIAL TIME CRYSTAL CONTAINER
+ * Chains crystal layers; layers hand over on resonance: the output of layer
+ * i enters layer i+1 together with an in-phase tick so both crystals stay
+ * phase-locked through the forward pass.
+ * ============================================================================ */
+
+@module sequential_crystal_network(layers)
+{
+    /* Initialize sequential structure with multiple crystal layers */
+    @initial
+    {
+        [network
+            for (i = 1; i <= length(layers); i++)
+            {
+                [layer{i} layers[i]]'network
+            }
+        ]'main
+    }
+
+    /* Forward propagation with phase-locked handover */
+    @rules forward_propagate
+    {
+        /* Pass output from layer i to layer i+1 with a synchronising tick */
+        [output{j, v}]'layer{i} ->
+            [input{j, v}, sync_tick{i}]'layer{i+1} where i < length(layers)
+    }
+
+    /* Final layer output */
+    @rules output_layer
+    {
+        [output{j, v}]'layer{length(layers)} ->
+            []'layer{length(layers)} (result{j, v}, out)
+    }
+}
+
+/* ============================================================================
+ * TIME CRYSTAL TRAINING PROCEDURE
+ * Mini-batch descent with tick-phase alignment: a sample is only presented
+ * when the network clock is at the rim phase, and weight updates only land
+ * on resonant ticks; every update is followed by a phase correction so the
+ * crystals stay coherent. Training stops when temporal coherence crosses
+ * the threshold.
+ * ============================================================================ */
+
+@module train_crystal_network(network, data, epochs, learning_rate, coherence_threshold)
+{
+    @initial
+    {
+        [training
+            network_module{network}
+            hyperparams{epochs, learning_rate}
+            coherence_threshold{coherence_threshold}
+            dataset{data}
+        ]'main
+    }
+
+    /* Training loop */
+    @rules training_loop
+    {
+        /* For each epoch */
+        for (epoch = 1; epoch <= epochs; epoch++)
+        {
+            /* For each sample in dataset */
+            [dataset{samples}, network_module{net}]'training ->
+            {
+                for (sample in samples)
+                {
+                    /* Forward pass, gated on the rim phase */
+                    [input{sample.features}, phase{net, 0}]'net
+
+                    /* Compute circular loss and coherence */
+                    [output{predicted}, target{sample.label}]'loss_fn
+
+                    /* Backward pass: gradients + phase corrections */
+                    [gradient{g}]'net
+
+                    /* Update weights only on resonant ticks */
+                    [weights{w}, gradient{g}, learning_rate{lr},
+                     layer_tick{t}, sig_acc{s}]'net ->
+                        [weights{w - lr*g}]'net where (t mod s) == 0
+
+                    /* Phase correction follows every update */
+                    [gradient{g}, phase{net, p}]'net ->
+                        [phase{net, (p - (abs(g) mod 11) + 11) mod 11}]'net
+                }
+            }
+        }
+
+        /* Early stop: temporal coherence above threshold — the crystal
+         * network has phase-locked to the data */
+        [coherence{c}, coherence_threshold{ct}]'training ->
+            [converged{phase_locked}]'training where c >= ct
+    }
+}
+
+/* ============================================================================
+ * EXAMPLE TIME CRYSTAL NETWORK ARCHITECTURES
+ * ============================================================================ */
+
+/* XOR Time Crystal Network: the classic test, run on crystal neurons.
+ * Architecture: 2 -> 4 -> 1 with crystal tanh / crystal sigmoid gating. */
+@model xor_crystal_network
+{
+    @membrane_structure
+    {
+        [main
+            [input_layer tc_linear_layer(2, 4)]'main
+            [hidden_activation crystal_tanh_activation]'main
+            [output_layer tc_linear_layer(4, 1)]'main
+            [output_activation crystal_sigmoid_activation]'main
+        ]
+    }
+
+    @training_data
+    {
+        sample{[0, 0], [0]}
+        sample{[0, 1], [1]}
+        sample{[1, 0], [1]}
+        sample{[1, 1], [0]}
+    }
+}
+
+/* Binary Crystal Classifier: n -> h -> 1 with resonance coupling between
+ * the two crystal layers. */
+@model binary_crystal_classifier(input_size, hidden_size)
+{
+    @membrane_structure
+    {
+        [classifier
+            [layer1 tc_linear_layer(input_size, hidden_size)]'classifier
+            [activation1 crystal_relu_activation]'classifier
+            [coupling resonance_coupling]'classifier
+            [layer2 tc_linear_layer(hidden_size, 1)]'classifier
+            [activation2 crystal_sigmoid_activation]'classifier
+        ]
+    }
+}
+
+/* Multi-class Crystal Classifier: n -> h -> c; the phase encoder turns each
+ * logit into a firing phase and the class is read off the 11-cycle. */
+@model multiclass_crystal_classifier(input_size, hidden_size, num_classes)
+{
+    @membrane_structure
+    {
+        [classifier
+            [layer1 tc_linear_layer(input_size, hidden_size)]'classifier
+            [activation1 crystal_relu_activation]'classifier
+            [layer2 tc_linear_layer(hidden_size, num_classes)]'classifier
+            [output phase_encoder]'classifier
+        ]
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION AND METADATA
+ * ============================================================================ */
+
+@info
+{
+    name: "Time Crystal Neural Network in PLingua"
+    version: "1.0.0"
+    description: "P-Systems implementation of feedforward networks of time crystal neurons"
+    author: "nn.nn project"
+    depends: ["nn.pli"]
+
+    features: [
+        "Time crystal neurons: 11 nested phase membranes with closed tick loop",
+        "Singularity-reseeded clocks (clocking never damps)",
+        "Prime-indexed weights and PPM prime-signature gating",
+        "Phase-gated activations (sigmoid, tanh, relu) and phase encoding",
+        "Resonance coupling between layers (match -> exchange, mismatch -> dissipate)",
+        "Temporal backpropagation: gradients as phase corrections on the 11-cycle",
+        "Temporal coherence criterion: circular-distance loss, coherence metric",
+        "Phase-aligned training loop with coherence-threshold early stop"
+    ]
+
+    models: [
+        "XOR time crystal network",
+        "Binary crystal classifier",
+        "Multi-class crystal classifier"
+    ]
+}
+
+/*
+ * USAGE NOTES:
+ *
+ * This module adapts nn.pli from standard neurons to time crystal neurons:
+ *
+ * 1. A neuron is not a point unit but an 11-dimensional time crystal: 11
+ *    nested phase membranes whose tick pulse falls one dimension per step
+ *    and wraps at d11 back to the rim — a closed time loop, reseeded by a
+ *    singularity point so the clocking never damps.
+ * 2. Information is carried in the TIME domain: inputs can be encoded as
+ *    firing phases on the 11-cycle (phase_encoder) and activations only
+ *    leave the neuron when its clock is at the rim (phase 0).
+ * 3. Weights carry PPM prime indices; each neuron's prime signature (the
+ *    product of its synapse primes) gates its output against the layer
+ *    broadcast tick — the neuron fires only on resonant ticks.
+ * 4. Layers couple by resonance: frequency match exchanges in-phase ticks,
+ *    mismatch dissipates into the parent membrane.
+ * 5. Backpropagation becomes temporal: gradients update weights on resonant
+ *    ticks and apply phase corrections around the closed loop; error is the
+ *    circular distance on the 11-cycle (temporal coherence criterion).
+ *
+ * Shared time-crystal skin and prime alphabet are inlined by convention from
+ * psystems/common/time_crystal_core.pli and psystems/common/alphabet_primes.pli
+ * (P-Lingua has no import of those files; see psystems/README.md).
+ *
+ * This is a conceptual implementation showing how time crystal neural
+ * network operations can be expressed in membrane computing formalism.
+ */

@@ -41,6 +41,7 @@ This implementation demonstrates how neural network algorithms can be expressed 
 - **Arity Topologies**: mixed-radix membrane bases (`[2]^n` binary, `[3]^n` ternary, `[2|2]^n` quaternionic, `[5]^n` quinternary) executing heterogeneous ops in one parallel step; Matula/prime-power indexing of membrane trees; partition-function root selection; elementary differentials via product/chain rules
 - **P-Systems ↔ B-Series Bridge**: rooted trees and membrane nests are the same combinatorial object, so evolution and gradient descent run in one parallel step; elementary differentials get exact integer (Matula) expressions as the gradient basis; RK order conditions as finite tree sums; orbifold quotient = "natural selection as root selection"
 - **Closure Isomorphism**: `{circle ~ cycle ~ closure}` — one closure operator in spatial/temporal/causal frames, mapping `.mli`→CNN, `.gli`→RNN, `.nli`→GNN; the 3×3 ennead solves the frame problem; relevance flows like Ricci flow with the gauge field as the curvature lever
+- **Time Crystal Neurons**: feedforward networks of 11-dimensional time crystals — each neuron is an 11-deep nested phase membrane with a closed tick clock loop reseeded by a singularity point; weights carry PPM prime indices and the neuron's prime signature gates its output on resonant layer ticks; activations are phase-gated to the rim; backpropagation applies phase corrections around the closed time loop; loss is circular distance on the 11-cycle
 
 ## Installation
 
@@ -908,6 +909,7 @@ Completed extensions:
 - [x] Membrane arity topologies (mixed-radix bases, Matula indexing, partition selection) — `topology.pli`
 - [x] P-Systems ↔ B-Series bridge (shared tree/nest topology, gradient descent as ODE flow, orbifold root selection) — `bseries.pli`
 - [x] Closure isomorphism across spatial/temporal/causal frames (`.mli`→CNN, `.gli`→RNN, `.nli`→GNN) + ennead frame resolution + Ricci-flow relevance — `closures.pli`
+- [x] Time crystal neurons (11-phase clock loops, prime-signature gating, temporal backprop) — `time_crystal.pli`
 
 ## References
 
@@ -998,6 +1000,12 @@ The following modules extend the core implementation with advanced features:
 | Module | Description |
 |--------|-------------|
 | `closures.pli` | Closure isomorphism across frames: `{circle ~ cycle ~ closure}` — one closure operator in spatial/temporal/causal frames, mapping `.mli`→CNN (receptive field = spatial closure), `.gli`→RNN (recurrence = temporal closure), `.nli`→GNN (message passing = relational closure). `closure_isomorphism`, `spatial_cnn`, `temporal_rnn`, `causal_gnn` (Noether conserved currents), `ennead_frame` (3×3 balance solves the frame problem), `ricci_relevance` (Ricci-flow `g′=g−2·Ric·g`; the gauge field/connection is the curvature lever — holonomy of parallel transport = curvature; gauge invariance is the conserved quantity). |
+
+## Extensions (v2.8)
+
+| Module | Description |
+|--------|-------------|
+| `time_crystal.pli` | Time crystal neurons (issue #23): the nn.pli feedforward architecture adapted from standard neurons to 11-dimensional time crystals. `time_crystal_neuron` (11 nested phase membranes d1..d11, closed tick clock loop, singularity-reseeded clock — cf. `psystems/common/time_crystal_core.pli`), crystal activations (phase-gated sigmoid/tanh/relu + `phase_encoder` firing-phase code), `tc_linear_layer` (prime-indexed weights, PPM prime-signature gating against the layer broadcast tick — cf. `psystems/common/alphabet_primes.pli`), `resonance_coupling` (frequency match → in-phase tick exchange; mismatch → dissipation), `temporal_coherence_criterion` (circular-distance loss on the 11-cycle + coherence metric), `train_crystal_network` (phase-aligned updates, coherence-threshold early stop). Traceability: `src/cpp/nanobrain_time_crystal.h`. |
 
 ### Looking ahead: nD membranes and parallel ledgers
 
