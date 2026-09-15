@@ -1,30 +1,81 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric5_highof.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.6
- * Functionality: Metric 5: when the ordered factor is much greater than the integer itself.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.6 — Metric 5: when the ordered factor is much greater than
+ *           the integer itself (PPM-D, differential metric, Figure 3.7).
+ *
+ * Model (from the book):
+ *   Above the 12th prime (37), at N = 48 with OF = 48, the ordering of
+ *   primes starts generating geometries UNRELATED to the pattern of any
+ *   particular prime: for OF >> N the grouping and nesting of prime SETS
+ *   regulates the dynamics, and N or D no longer matter. Deleting the
+ *   3D part with OF < N leaves an ANNULAR 3D metric — a ring
+ *   architecture whose map accounts for superpositions that plain
+ *   self-similar systems cannot fathom, creating more virtual corner
+ *   points than there are singularities. Zooming the annulus always
+ *   resolves the same global motif: a TRIPLET OF TRIPLETS — never locally
+ *   self-similar, yet always triplet-of-triplet globally; the smallest
+ *   one forms at N = 12. (The book's analogies: OF as the modes of a
+ *   musical string, and the teardrop loop as the coffee-cup caustic =
+ *   cycloid.) The differential construction generalizes: any two
+ *   parameters (OF vs N here) define such an annular metric.
+ *
+ * Membranes:
+ *   compare : pits OF against N for each point of the metric
+ *   annulus : keeps only OF >= N points — the 3D annular metric
+ *   fractal : resolves annular neighborhoods into triplet-of-triplet
+ *             motifs, down to the seed at N = 12
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric5_HighOrderedFactor)
+ * Initial multiset: sample points around the crossover N = 48 / OF = 48
+ *                   and a triplet seed; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric5 ]'skin;
+@mu = [ []'compare []'annulus []'fractal ]'skin;
 
-@mskin = seed;
-@mmetric5 = unit(metric5), fuel;
+/* Sample initial multiset: points straddling the OF = N crossover (the
+ * low/high tags stand in for the OF ? N guard, which the simulator
+ * evaluates when full pLinguaCore guards are available). */
+@mskin = idle;
+@mcompare = point_low(24, 8), point_high(48, 48), point_high(60, 84);
+@mannulus = fuel;
+@mfractal = triplet_seed(12);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * compare : the differential test OF ? N
+ *   below : OF < N — the integer still dominates, point drops out of the
+ *           differential metric
+ *   cross : OF >= N — ordering dominates; from N = 48, OF = 48 on, the
+ *           groupings of prime sets take over and the point is promoted
+ *           into the annular metric
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric5 ]'skin;
-[step : work * unit(metric5) * fuel --> done(metric5) ]'metric5;
-[report : done(metric5) --> (result(metric5))out ]'metric5;
+[below : point_low(N, F) --> discarded(N) ]'compare;
+[cross : point_high(N, F) --> (annular(N, F))out ]'compare;
+[route_ann : annular(N, F) --> (annular(N, F))in_annulus ]'skin;
+
+/* --------------------------------------------------------------------------
+ * annulus : the kept points form the 3D ring — deleting OF < N from the 3D
+ *           OF-N plot exposes how groups of primes build higher-level
+ *           topologies with more virtual corners than singularities
+ * ------------------------------------------------------------------------*/
+[ring : annular(N, F) * fuel --> ring_point(N, F) ]'annulus;
+[report_ring : ring_point(N, F) --> (ring(N, F))out ]'annulus;
+[route_fract : ring(N, F) --> (ring(N, F))in_fractal ]'skin;
+
+/* --------------------------------------------------------------------------
+ * fractal : the triplet-of-triplet motif — every annular neighborhood
+ *           splits into three teardrops each of which splits into three
+ *           again; the smallest motif is reached at N = 12
+ * zoom    : one triplet-of-triplet subdivision
+ * seed    : the N = 12 seed closes the zoom descent
+ * ------------------------------------------------------------------------*/
+[zoom : ring(N, F) --> tot(N) ]'fractal;
+[zoom : tot(N) --> triplet(N) ]'fractal;
+[seed : triplet(N) * triplet_seed(12) --> fractal_seed(12) ]'fractal, 1;
+[report_tot : fractal_seed(K) --> (triplet_of_triplets(K))out ]'fractal;

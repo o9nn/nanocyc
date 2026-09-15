@@ -1,42 +1,134 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_core.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.1, 3.1.1-3.1.3
- * Functionality: Ten classes of PPM; 15 primes covering 99.99% of integers; ordered-factor metric and its 3D version; time-crystal decomposition/amplification via PPM.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.1 (ten classes of PPM — a pattern of primes),
+ *           3.1.1 (15 primes contribute to 99.99% of all integers),
+ *           3.1.2 (ordered factor metric and its 3D version),
+ *           3.1.3 (time-crystal decomposition & amplification via PPM).
+ *
+ * Model:
+ *   skin
+ *     |- ten_classes : registry of the ten PPM classes (Figure 3.1). Ten
+ *     |                operator tokens enter one per step, the registry
+ *     |                assembles the complete system-of-operators.
+ *     |- coverage    : 3.1.1 — exclusive prime contributions. Prime 2 covers
+ *     |                50% of all integers; each next prime adds only its
+ *     |                ORIGINAL share 1/P minus the share already claimed by
+ *     |                products with previous primes (C1+...+C47 = 100%).
+ *     |                12 primes reach 99.99%; primes 41,43,47 push the
+ *     |                total to ~100%. Active primes are sent on to the
+ *     |                factor membrane, the rest are marked silent
+ *     |                (inlined from common/alphabet_primes.pli).
+ *     |- of_metric   : 3.1.2 — OF(N) = HN(N) + NC(N): the number of
+ *     |                harmonics (proper divisors) plus the number of nested
+ *     |                cycles (proper divisors of proper divisors).
+ *     |- of3d        : 3.1.2 — rotating the 2D OF plot by 360 deg around the
+ *     |                integer axis yields the 3D PPM: point -> circle,
+ *     |                teardrop -> ellipsoid, dumbbell disc -> nephroid.
+ *     '- tc_ppm      : 3.1.3 — a time crystal is DECOMPOSED into its prime
+ *                    ratio signature (N = 300 -> 2:2:3:5:5) and AMPLIFIED
+ *                    back into a fractal clock network (host sphere with
+ *                    2 guests, each with 3, ... 300+60+12+4+2+1 = 379
+ *                    clocks); a silent point between active ones links the
+ *                    neighboring integers.
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric base, OrderedFactor,
+ *               PPMMetric2_OrderedFactor, PPMCoherenceTable, PPMEvolution),
+ *               src/cpp/nanobrain_time_crystal.h (TimeCrystalQuantumState)
+ * Initial multiset: ten operator tokens, the 15 PPM primes with the first 12
+ *                   marked active, integer(300) with its divisors and prime
+ *                   signature, a 2D OF bar to rotate, a crystal to decompose
+ *                   and a seed pattern to amplify. The simulator can run at
+ *                   least one evolution step from this configuration.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'coverage []'of_metric []'of_metric_3d []'tc_decompose ]'skin;
+@mu = [ []'ten_classes []'coverage []'of_metric []'of3d []'tc_ppm ]'skin;
 
-@mskin = seed;
-@mcoverage = unit(coverage), fuel;
-@mof_metric = unit(of_metric), fuel;
-@mof_metric_3d = unit(of_metric_3d), fuel;
-@mtc_decompose = unit(tc_decompose), fuel;
+/* Sample initial multisets (>= 1 evolution step each). */
+@mskin = idle;
+@mten_classes = op_class(1), op_class(2), op_class(3), op_class(4), op_class(5),
+                op_class(6), op_class(7), op_class(8), op_class(9), op_class(10);
+@mcoverage = prime_active(2), prime_active(3), prime_active(5), prime_active(7),
+             prime_active(11), prime_active(13), prime_active(17),
+             prime_active(19), prime_active(23), prime_active(29),
+             prime_active(31), prime_active(37),
+             prime_rest(41), prime_rest(43), prime_rest(47);
+@mof_metric = integer(300), divisors(18), nested_cycles(9);
+@mof3d = of_bar(300, 30);
+@mtc_ppm = crystal(300), sig(2,2,3,5,5), seed(300),
+           layer_count(2,60), layer_count(60,12), layer_count(12,4),
+           layer_count(4,2), layer_count(2,1);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 3.1 — Ten classes of PPM: a system of operators, not one metric (Fig 3.1).
+ * register : each operator token joins the registry
+ * ppm_ready: all ten registered -> the PPM system of operators is complete
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_coverage ]'skin;
-[seed_dispense : seed --> (work)in_of_metric ]'skin;
-[seed_dispense : seed --> (work)in_of_metric_3d ]'skin;
-[seed_dispense : seed --> (work)in_tc_decompose ]'skin;
-[step : work * unit(coverage) * fuel --> done(coverage) ]'coverage;
-[step : work * unit(of_metric) * fuel --> done(of_metric) ]'of_metric;
-[step : work * unit(of_metric_3d) * fuel --> done(of_metric_3d) ]'of_metric_3d;
-[step : work * unit(tc_decompose) * fuel --> done(tc_decompose) ]'tc_decompose;
-[report : done(coverage) --> (result(coverage))out ]'coverage;
-[report : done(of_metric) --> (result(of_metric))out ]'of_metric;
-[report : done(of_metric_3d) --> (result(of_metric_3d))out ]'of_metric_3d;
-[report : done(tc_decompose) --> (result(tc_decompose))out ]'tc_decompose;
+[register : op_class(K) --> op_class(K) * registered(K) ]'ten_classes;
+[ppm_ready : op_class(1) * op_class(2) * op_class(3) * op_class(4)
+           * op_class(5) * op_class(6) * op_class(7) * op_class(8)
+           * op_class(9) * op_class(10)
+           --> (ppm_system(10))out ]'ten_classes, 1;
+
+/* --------------------------------------------------------------------------
+ * 3.1.1 — 15 primes cover 99.99% of all integers (common/alphabet_primes.pli
+ * inlined by convention).
+ * contribute : each prime claims its exclusive share of the integer space
+ *              (2 -> 50%, 3 -> 17%, 5 -> 9%, ...; 12 primes reach 99.99%)
+ * covers     : the 12 early primes saturate the coverage of the universe
+ * rest_full  : primes 41, 43, 47 complete the 100% pi-chart
+ * route_prime: active primes are routed to the ordered-factor membrane
+ * ------------------------------------------------------------------------*/
+[contribute : prime_active(P) --> contribution(P) ]'coverage;
+[covers : contribution(2) * contribution(3) * contribution(5)
+        * contribution(7) * contribution(11) * contribution(13)
+        * contribution(17) * contribution(19) * contribution(23)
+        * contribution(29) * contribution(31) * contribution(37)
+        --> coverage(99_99) ]'coverage, 1;
+[rest_full : prime_rest(P) --> contribution(P) ]'coverage, 2;
+[full_100 : coverage(99_99) * contribution(41) * contribution(43)
+          * contribution(47) --> (coverage(100))out ]'coverage, 3;
+[route_prime : prime_active(P) --> (prime(P))out ]'coverage, 4;
+[inject : prime(P) --> (prime(P))in_of_metric ]'skin;
+[silent_sink : prime_rest(P) --> (silent(P))out ]'coverage;
+
+/* --------------------------------------------------------------------------
+ * 3.1.2 — Ordered factor metric and its 3D version.
+ * harmonics : HN(N) = number of harmonics = proper divisors (Eq. 3.2)
+ * nest      : NC(N) = nested cycles over divisors of divisors (Eq. 3.3)
+ * of_value  : OF(N) = HN(N) + NC(N) — the ordered factor of N
+ * factor    : a prime divides the integer, emitting an ordered factor
+ * rotate    : 360 deg rotation of the 2D OF plot around the N axis
+ * shape3d   : the rotated bars assemble the 3D metric bodies
+ *             (teardrop->ellipsoid, vortex->spiral, disc->nephroid)
+ * ------------------------------------------------------------------------*/
+[harmonics : integer(N) * divisors(D) --> hn(N,D) ]'of_metric;
+[nest : integer(N) * nested_cycles(C) --> nc(N,C) ]'of_metric;
+[of_value : hn(N,H) * nc(N,C) --> (of(N,H+C))out ]'of_metric, 1;
+[factor : integer(N) * prime(P) --> ordered_factor(P) ]'of_metric;
+
+[rotate : of_bar(N,V) --> ring(N,V) ]'of3d;
+[shape3d : ring(N,V) --> teardrop(N) ]'of3d;
+[sweep3d : teardrop(N) --> ellipsoid(N) ]'of3d;
+[report3d : ellipsoid(N) --> (of3d(N))out ]'of3d;
+
+/* --------------------------------------------------------------------------
+ * 3.1.3 — Time-crystal decomposition & amplification via PPM.
+ * decompose : a time crystal collapses to its prime-ratio signature
+ *             (N = 300 -> 2:2:3:5:5 — a fractal shrinks to a seed)
+ * tick_sig  : the signature ticks the integer back onto the S-N plot
+ * amplify   : a seed plus one layer count grows one sphere layer of the
+ *             fractal clock network (300+60+12+4+2+1 = 379 clocks)
+ * net_done  : the five-layer host/guest network is the amplified crystal
+ * ------------------------------------------------------------------------*/
+[decompose : crystal(N) * sig(A,B,C,D,E) --> ratio(N,A,B,C,D,E) ]'tc_ppm;
+[tick_sig : ratio(N,A,B,C,D,E) --> (tick_sn(N))out ]'tc_ppm;
+[amplify : seed(N) * layer_count(H,G) --> layer(H,G) ]'tc_ppm;
+[net_done : layer(2,60) * layer(60,12) * layer(12,4) * layer(4,2)
+          * layer(2,1) --> (clock_network(379))out ]'tc_ppm, 1;

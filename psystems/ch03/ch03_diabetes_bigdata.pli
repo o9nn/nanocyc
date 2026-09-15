@@ -1,38 +1,123 @@
 /* ============================================================================
  * psystems/ch03/ch03_diabetes_bigdata.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.15
- * Functionality: Solution of a big-data problem on diabetes: PPM in an artificial brain.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.15 — Solution of a big-data problem on diabetes: PPM in an
+ *           artificial brain (Figures 3.14 and 3.15).
+ *
+ * Model (from the book):
+ *   The occurrence of diabetes in millions of patients is plotted against
+ *   two genetic expressions (one per axis; the perpendicular axis counts
+ *   patients). In any big data only one thing matters: how the most
+ *   SILENT and the most ACTIVE regions change (Ghosh et al. patents).
+ *   The image is divided into four layers; in each layer geometric shapes
+ *   cover regions of similar occurrence, and the side ratios of the
+ *   shapes are read as prime ratios — layer 3 objects like
+ *   A = 3:3:5:7:2 (630), B = 3:5:2:3:7 (630), C = 3:5:7 (105) ... and
+ *   layer 4 objects like E = 2:3:5 (30), I = 2:3:5:7 (210). The ratios
+ *   build the equivalent time crystal of each layer; moving from layer 1
+ *   to layer 4 the crystal grows by adding higher-resolution shapes.
+ *   The completed crystal goes to the PPM, which finds the divisors of
+ *   the integers as primes and joins linked integers with loops; the
+ *   transformed crystal is converted back into the starting image — but
+ *   the final image reveals FOUR regions where the starting image had
+ *   THREE: a totally new type of diabetes, happening for a unique
+ *   genetic composition, is discovered in the big data. If a symmetry
+ *   cannot be generated, the memory bank complements it, else the missing
+ *   crystal is sent out as a query; all inputs and outputs of the brain
+ *   jelly are quaternions (common/hypernumbers.pli).
+ *
+ * Membranes:
+ *   ingest     : the patient/gene expression map, split into four layers
+ *   zoom       : each layer is zoomed; silent and active regions counted
+ *   ratioize   : geometric shapes of a layer become prime-ratio objects
+ *   crystallize: the prime ratios assemble the layer's time crystal
+ *   ppm_filter : the three PPM classes (OF, PC, PG) transform the crystal
+ *   decide     : the transformed crystal is projected back — the hidden
+ *                fourth region emerges (a new diabetes subtype)
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric classes, PPMEvolution),
+ *               src/cpp/nanobrain_brain_jelly.h
+ * Initial multiset: a sample gene map with one silent region and the
+ *                   layer-3/4 prime-ratio objects of the book's table;
+ *                   runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'ingest []'ppm_filter []'decide ]'skin;
+@mu = [ []'ingest []'zoom []'ratioize []'crystallize []'ppm_filter
+        []'decide ]'skin;
 
-@mskin = seed;
-@mingest = unit(ingest), fuel;
-@mppm_filter = unit(ppm_filter), fuel;
-@mdecide = unit(decide), fuel;
+/* Sample initial multiset. */
+@mskin = genemap(diabetes);
+@mingest = fuel;
+@mzoom = silent_probe;
+@mratioize = shape(630), shape(105), shape(30), shape(210);
+@mcrystallize = fuel;
+@mppm_filter = metric(of), metric(pc), metric(pg);
+@mdecide = regions_seen(3);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * ingest : the big data is sliced into the four occurrence layers; each
+ *          layer slice is sent to the zoom membrane
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_ingest ]'skin;
-[seed_dispense : seed --> (work)in_ppm_filter ]'skin;
-[seed_dispense : seed --> (work)in_decide ]'skin;
-[step : work * unit(ingest) * fuel --> done(ingest) ]'ingest;
-[step : work * unit(ppm_filter) * fuel --> done(ppm_filter) ]'ppm_filter;
-[step : work * unit(decide) * fuel --> done(decide) ]'decide;
-[report : done(ingest) --> (result(ingest))out ]'ingest;
-[report : done(ppm_filter) --> (result(ppm_filter))out ]'ppm_filter;
-[report : done(decide) --> (result(decide))out ]'decide;
+[slice : genemap(D) --> layer(1) ]'ingest;
+[slice4 : fuel * genemap(D) --> layers(4) ]'ingest;
+[emit_layer : layer(K) --> (layer(K))out ]'ingest;
+[route_in : genemap(D) --> (genemap(D))in_ingest ]'skin;
+[route_layer : layer(K) --> (layer(K))in_zoom ]'skin;
+
+/* --------------------------------------------------------------------------
+ * zoom : every layer is searched for its most silent and most active
+ *        regions (the only signal the PPM philosophy reads in big data)
+ * ------------------------------------------------------------------------*/
+[scan : layer(K) * silent_probe --> region(K, silent) * region(K, active) ]'zoom;
+[emit_regions : region(K, silent) --> (silent_region(K))out ]'zoom;
+[route_sil : silent_region(K) --> (silent_region(K))in_ratioize ]'skin;
+
+/* --------------------------------------------------------------------------
+ * ratioize : the geometric shape covering a region is read as a ratio of
+ *            primes — the shape's side ratios ARE the prime signature
+ *            (630 -> 2:3:3:5:7, 105 -> 3:5:7, 30 -> 2:3:5, 210 -> 2:3:5:7)
+ * ------------------------------------------------------------------------*/
+[read630 : shape(630) --> ratio(630, 2,3,3,5,7) ]'ratioize;
+[read105 : shape(105) --> ratio(105, 3,5,7) ]'ratioize;
+[read30 : shape(30) --> ratio(30, 2,3,5) ]'ratioize;
+[read210 : shape(210) --> ratio(210, 2,3,5,7) ]'ratioize;
+[bind : ratio(N, A,B,C) * silent_region(K) --> object(K, N) ]'ratioize, 1;
+[bind5 : ratio(N, A,B,C,D) * silent_region(K) --> object(K, N) ]'ratioize, 1;
+[emit_obj : object(K, N) --> (object(K, N))out ]'ratioize;
+[route_obj : object(K, N) --> (object(K, N))in_crystallize ]'skin;
+
+/* --------------------------------------------------------------------------
+ * crystallize : the prime-ratio objects of a layer assemble its time
+ *               crystal; higher layers add higher-resolution shapes, so
+ *               the crystal grows from layer 1 to layer 4
+ * ------------------------------------------------------------------------*/
+[grow : object(K, N) * fuel --> crystal(K, N) ]'crystallize;
+[merge : crystal(K, N) * crystal(J, M) --> crystal(K+J, fused) ]'crystallize, 1;
+[emit_crys : crystal(K, N) --> (crystal(K, N))out ]'crystallize;
+[route_crys : crystal(K, N) --> (crystal(K, N))in_ppm_filter ]'skin;
+
+/* --------------------------------------------------------------------------
+ * ppm_filter : the three classes of PPM act in sequence — OF nucleates new
+ *              clocks from the divisors, PC converts to the language of
+ *              primes, PG links the prime gaps; if no symmetry emerges the
+ *              missing crystal is queried out (brain-jelly protocol)
+ * ------------------------------------------------------------------------*/
+[apply_of : crystal(K, N) * metric(of) --> crystal_of(K, N) ]'ppm_filter;
+[apply_pc : crystal_of(K, N) * metric(pc) --> crystal_pc(K, N) ]'ppm_filter, 1;
+[apply_pg : crystal_pc(K, N) * metric(pg) --> (crystal_ppm(K, N))out ]'ppm_filter, 2;
+[query : crystal(K, N) --> (missing_crystal(K))out ]'ppm_filter, 3;
+[route_ppm : crystal_ppm(K, N) --> (crystal_ppm(K, N))in_decide ]'skin;
+
+/* --------------------------------------------------------------------------
+ * decide : the transformed crystal is projected back onto the image — the
+ *          loops between linked integers reveal the hidden FOURTH region:
+ *          a new diabetes subtype for a unique genetic composition
+ * ------------------------------------------------------------------------*/
+[reveal : crystal_ppm(K, N) * regions_seen(3) --> regions_found(4) ]'decide, 1;
+[report : regions_found(4) --> (new_subtype(diabetes))out ]'decide;

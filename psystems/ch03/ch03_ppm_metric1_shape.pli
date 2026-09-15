@@ -1,30 +1,95 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric1_shape.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.2
- * Functionality: Metric 1: an integer is replaced by a typical geometric shape.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.2 — Metric 1: an integer is replaced by a typical geometric
+ *           shape (PPM-S / PTC, "primes of a time crystal", Figure 3.3).
+ *
+ * Model (from the book):
+ *   N = a^p * b^q * c^r is a product of primes (300 = 2^2 * 3 * 5^2).
+ *     C = p+q+r           number of constituent primes (300 -> 5)
+ *     D = (p+1)(q+1)(r+1) number of divisors         (300 -> 18)
+ *     S = C!/(p! q! r!)   ordered prime arrangements (300 -> 30, 12 -> 3)
+ *   The S symmetries sit at the corners of a geometric shape with S
+ *   vertices: S = 1 dimensionless point, S = 2 a line, S = 3..6 a 2D
+ *   shape, S = 7..20 a 3D shape; larger S is a COMPOSITE — 30 = 3 x 10,
+ *   so N = 180 (S = 30) is a triangle whose three corners each carry a
+ *   pentagonal prism. Composition nests lower-dimensional shapes inside
+ *   higher-dimensional ones (point -> line -> 2D -> 3D). A change of the
+ *   integer is a symmetry breaking (140 -> hexagonal prism S = 12,
+ *   141 -> line S = 2), a phase transition of the time crystal.
+ *   Shape letters come from common/gml_shapes.pli (inlined by convention).
+ *
+ * Membranes:
+ *   factor  : reads the prime powers, emits C, D and the multiplicities
+ *   s_calc  : computes S = C!/(p! q! r!) by cancellation
+ *   assign  : maps S to its GML geometric shape class
+ *   compose : builds composite shapes for S > 20
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric1_GeometricShape),
+ *               src/cpp/nanobrain_fractal.h (GML shapes)
+ * Initial multiset: integer(300) with prime powers, integer(180) for the
+ *                   composite path; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric1 ]'skin;
+@mu = [ []'factor []'s_calc []'assign []'compose ]'skin;
 
-@mskin = seed;
-@mmetric1 = unit(metric1), fuel;
+/* Sample initial multiset: two integers with their prime-power profiles. */
+@mskin = idle;
+@mfactor = integer(300), powers(300, 2, 1, 2),
+           integer(180), powers(180, 2, 2, 1);
+@ms_calc = fuel;
+@massign = fuel;
+@mcompose = fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * factor_out : the prime powers yield C = p+q+r primes and D = (p+1)(q+1)(r+1)
+ *              divisors; both are sent to the S membrane
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric1 ]'skin;
-[step : work * unit(metric1) * fuel --> done(metric1) ]'metric1;
-[report : done(metric1) --> (result(metric1))out ]'metric1;
+[factor_out : integer(N) * powers(N,P,Q,R)
+            --> (cpack(N, P+Q+R, (P+1)*(Q+1)*(R+1), P, Q, R))out ]'factor;
+[route_c : cpack(N,C,D,P,Q,R) --> (cpack(N,C,D,P,Q,R))in_s_calc ]'skin;
+
+/* --------------------------------------------------------------------------
+ * s_value  : S = C!/(p! q! r!) — the permutation count of C primes divided
+ *            by the permutations of the repeating ones; for 300 with
+ *            multiplicities (2,1,2), S = 5!/(2! 1! 2!) = 30; for 180 with
+ *            (2,2,1), S = 5!/(2! 2! 1!) = 30 as well — different integers
+ *            may share a shape (constellation twins)
+ * ------------------------------------------------------------------------*/
+[s_value : cpack(N,C,D,P,Q,R) * fuel
+         --> (s_value(N, fact(C)/(fact(P)*fact(Q)*fact(R))))out ]'s_calc;
+[route_s : s_value(N,S) --> (s_value(N,S))in_assign ]'skin;
+
+/* --------------------------------------------------------------------------
+ * Shape assignment (GML): a few shapes generate 99.99% of all integers.
+ * to_point / to_line : S = 1 -> dimensionless point; S = 2 -> line (1D)
+ * to_2d              : S = 3..6 -> 2D shape (triangle, square, pentagon,
+ *                      hexagon)
+ * to_3d              : S = 7..20 -> 3D shape (cube, prism, dodecahedron)
+ * to_composite       : S > 20 -> composite, sent to the compose membrane
+ * ------------------------------------------------------------------------*/
+[to_point : s_value(N,1) * fuel --> (shape(N, point))out ]'assign;
+[to_line : s_value(N,2) * fuel --> (shape(N, line))out ]'assign;
+[to_2d : s_value(N,S) * fuel --> (shape(N, planar(S)))out ]'assign;
+[to_3d : s_value(N,S) * fuel --> (shape(N, solid(S)))out ]'assign;
+[to_composite : s_value(N,S) * fuel --> (s_value(N,S))out ]'assign, 1;
+[route_comp : s_value(N,S) --> (s_value(N,S))in_compose ]'skin;
+
+/* --------------------------------------------------------------------------
+ * compose : S = 30 = 3 x 10 -> a triangle of three pentagonal prisms; the
+ *           composite nests lower-dimensional shapes inside higher ones
+ * emit    : the composite is the geometric replacement of the integer
+ * ------------------------------------------------------------------------*/
+[compose : s_value(N,S) * fuel --> composite(N, triangle, prism10(S/3)) ]'compose;
+[emit : composite(N, G, H) --> (shape(N, composite(G, H)))out ]'compose;
+
+/* --------------------------------------------------------------------------
+ * report : the geometric replacement of the integer leaves the metric
+ * ------------------------------------------------------------------------*/
+[report : shape(N, G) --> replacement(N, G) ]'skin;

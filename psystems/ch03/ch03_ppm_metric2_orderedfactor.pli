@@ -1,30 +1,72 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric2_orderedfactor.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.3
- * Functionality: Metric 2: product of primes forming integers leads to a unique ordered-factor metric.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.3 — Metric 2: the product of primes forming integers leads
+ *           to a UNIQUE ordered factor metric (PPM-OF, Figure 3.4).
+ *
+ * Model (from the book):
+ *   An integer is not one product but ALL ordered products of its primes:
+ *   N = 12 has 3 prime-only orderings (2x2x3, 2x3x2, 3x2x2) and 8 ordered
+ *   factorizations if composite factors are admitted (2x6, 6x2, 3x4, 4x3,
+ *   ...). Ordering matters: three balls holding two balls each is a very
+ *   different architecture from two balls holding three. The vertical axis
+ *   of the OF metric counts these ordered compositions; because the count
+ *   depends only on HOW MANY primes are involved and their multiplicities
+ *   (not WHICH primes), the OF plot is prime-independent — the same
+ *   self-similar fold recurs all over the integer space, giving the metric
+ *   its fractal nature, while every integer still owns a unique OF value.
+ *   OF(N) = HN(N) + NC(N): harmonics (proper divisors) plus nested cycles
+ *   (divisors of divisors). A slice of length N of the OF metric is the
+ *   design of a universal sensor for that integer range.
+ *
+ * Membranes:
+ *   compositions : permutes the multiset of prime factors, emitting one
+ *                  ordered composition per rule firing
+ *   of_axis      : collects compositions into the OF(N) point, adds HN + NC
+ *   uniqueness   : asserts that two distinct integers never share the full
+ *                  OF profile (the metric is a bijection onto its image)
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric2_OrderedFactor,
+ *               OrderedFactor)
+ * Initial multiset: integer(12) with its ordered prime factors and divisor
+ *                   counts; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric2 ]'skin;
+@mu = [ []'compositions []'of_axis []'uniqueness ]'skin;
 
-@mskin = seed;
-@mmetric2 = unit(metric2), fuel;
+/* Sample initial multiset: N = 12 = 2x2x3 with its 3 prime orderings. */
+@mskin = idle;
+@mcompositions = integer(12), prime_seq(2,2,3), prime_seq(2,3,2),
+                 prime_seq(3,2,2);
+@mof_axis = hn(12, 5), nc(12, 2);
+@muniqueness = of_point(12), of_peer(24);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * compose : every ordered arrangement of the prime factors of N is one
+ *           composition — order carries geometric significance (2x3 /= 3x2
+ *           as architectures, though both count as 6)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric2 ]'skin;
-[step : work * unit(metric2) * fuel --> done(metric2) ]'metric2;
-[report : done(metric2) --> (result(metric2))out ]'metric2;
+[compose : integer(N) * prime_seq(A,B,C) --> composition(N, ord(A,B,C)) ]'compositions;
+
+/* --------------------------------------------------------------------------
+ * count   : compositions are counted on the vertical axis of the metric
+ * of_value: OF(N) = HN(N) + NC(N) — harmonics plus nested cycles
+ * emit    : the (N, OF) point joins the metric plot
+ * ------------------------------------------------------------------------*/
+[count : composition(N, O) --> count(N, 1) ]'of_axis;
+[of_value : hn(N,H) * nc(N,C) --> of(N, H+C) ]'of_axis, 1;
+[emit : of(N,V) --> (point(N, V))out ]'of_axis;
+
+/* --------------------------------------------------------------------------
+ * unique : two integers with different factor profiles hold different OF
+ *          points — the metric is unique per integer (fractal recurrence is
+ *          of the PATTERN, not of the value)
+ * ------------------------------------------------------------------------*/
+[unique : of_point(N) * of_peer(M) --> distinct(N, M) ]'uniqueness;
+[report : distinct(N, M) --> (unique_of(N))out ]'uniqueness;

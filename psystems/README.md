@@ -23,6 +23,13 @@ psystems/
 │   ├── ecan_attention.pli
 │   └── pln_truth.pli
 ├── ch01/ … ch10/        ← one folder per chapter issue (#6 = ch01 … #15 = ch10)
+│   └── ch03/            ← Phase Prime Metric (issue #8): ch03_ppm_core.pli
+│                          (3.1, 3.1.1–3.1.3), ch03_ppm_metric1_shape.pli …
+│                          ch03_ppm_metric10_imaginary.pli (3.2–3.11),
+│                          ch03_prime_operators.pli (3.12),
+│                          ch03_ppm_evolution.pli (3.13–3.14),
+│                          ch03_diabetes_bigdata.pli (3.15),
+│                          ch03_prime_classes.pli (3.16, 3.16.1–3.16.2)
 ```
 
 Naming: `chNN_<feature>.pli` (e.g. `ch03_ppm_metric3_phasepath.pli`).
