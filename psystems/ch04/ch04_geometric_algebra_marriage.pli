@@ -1,34 +1,97 @@
 /* ============================================================================
  * psystems/ch04/ch04_geometric_algebra_marriage.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.12
- * Functionality: A marriage between fractal mechanics and geometric algebra.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.12 (a marriage between fractal mechanics and the geometric
+ *                 algebra)
+ * Functionality: This is the chapter's synthesis. FRACTAL MECHANICS supplies
+ *   the DYNAMICS: many imaginary worlds running at once, each a time-crystal
+ *   clock with its own action quantum, coupled through singularity points in
+ *   a multilevel phase space (4.1-4.4). GEOMETRIC ALGEBRA (the Clifford
+ *   algebra of the dodecanion, 4.9) supplies the LANGUAGE: multivectors,
+ *   grades, the geometric product, projection and rotation, which describe
+ *   the SHAPE of any one state. The MARRIAGE is the identification of the
+ *   two: a dynamical EVOLUTION in fractal mechanics IS a geometric product in
+ *   the algebra — a phase transport across a singularity is a rotor (a
+ *   rotation) in the dodecanion algebra, and a fractal condensation across
+ *   scales is a grade projection (reading a multivector's scalar, vector,
+ *   bivector ... parts). So the bride (mechanics) provides the motion and the
+ *   groom (algebra) provides the form, and their child is a mechanics whose
+ *   every step is simultaneously a physical evolution and a geometric
+ *   computation — the CFGA operator of 4.8.3 made physical.
+ *
+ *   Two side membranes (fm_side fractal mechanics, ga_side geometric algebra)
+ *   are wed by the skin into a single married object.
+ * Traceability: src/cpp/nanobrain_dodecanion.h (Dodecanion geometric product),
+ *               nanobrain_fractal.h
+ * Initial multiset: each side membrane holds a state token and fuel so the
+ *                   simulator runs at least one marriage step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.12): the two partners and their union.
+ *
+ *   skin (the wedding: identifies dynamics with geometry)
+ *     '- fm_side : fractal mechanics — the DYNAMICS (worlds, singularities)
+ *     '- ga_side : geometric algebra — the LANGUAGE (multivectors, products)
+ *
+ * The two partners are siblings; the skin reads one state from each and
+ * identifies them into the married object.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'fm_side []'ga_side ]'skin;
 
-@mskin = seed;
-@mfm_side = unit(fm_side), fuel;
-@mga_side = unit(ga_side), fuel;
+/* Sample initial multiset. */
+@mskin    = wed;
+@mfm_side = dynamics, fuel;
+@mga_side = multivector, fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * invite        : the skin invites both partners to the union
+ *
+ * -- fractal mechanics (the dynamics) ---------------------------------------
+ * fm_evolve     : a fractal-mechanical step: a phase is transported across a
+ *                 singularity — pure dynamics (4.2)
+ * fm_condense   : a fractal condensation across scales — dynamics over the
+ *                 multilevel tower (4.2.2)
+ *
+ * -- geometric algebra (the language) ---------------------------------------
+ * ga_product    : the geometric product of two multivectors — the algebra's
+ *                 single operation combining inner and outer products
+ * ga_project    : grade projection — reading a multivector's scalar, vector,
+ *                 bivector ... parts (the shape of a state)
+ *
+ * -- the marriage (4.12) ----------------------------------------------------
+ * wed_rotor     : IDENTIFICATION 1 — a phase transport across a singularity
+ *                 (mechanics) IS a rotor, a rotation, in the dodecanion
+ *                 algebra: evolution = geometric product
+ * wed_grade     : IDENTIFICATION 2 — a fractal condensation across scales
+ *                 (mechanics) IS a grade projection in the algebra:
+ *                 scale-collapse = grade read-out
+ * married       : the two identifications fuse into one object — a mechanics
+ *                 whose every step is at once a physical evolution and a
+ *                 geometric computation: the CFGA operator made physical
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_fm_side ]'skin;
-[seed_dispense : seed --> (work)in_ga_side ]'skin;
-[step : work * unit(fm_side) * fuel --> done(fm_side) ]'fm_side;
-[step : work * unit(ga_side) * fuel --> done(ga_side) ]'ga_side;
-[report : done(fm_side) --> (result(fm_side))out ]'fm_side;
-[report : done(ga_side) --> (result(ga_side))out ]'ga_side;
+[invite : wed --> (wed)in_fm_side ]'skin;
+[invite : wed --> (wed)in_ga_side ]'skin;
+
+[fm_evolve : dynamics * wed * fuel --> phase_transport(sing) ]'fm_side;
+[fm_condense : phase_transport(sing) --> condensation(scales) ]'fm_side;
+
+[ga_product : multivector * wed * fuel --> geometric_product(mv) ]'ga_side;
+[ga_project : geometric_product(mv) --> grade_projection(scalar_vector_bivector) ]'ga_side;
+
+[offer_fm : condensation(scales) --> (fm_term)out ]'fm_side;
+[offer_ga : grade_projection(scalar_vector_bivector) --> (ga_term)out ]'ga_side;
+
+[wed_rotor : fm_term --> rotor(phase_transport) ]'skin;
+[wed_grade : ga_term --> grade(condensation) ]'skin;
+
+[married : rotor(phase_transport) * grade(condensation)
+       --> fractal_geometric_algebra(married) ]'skin;

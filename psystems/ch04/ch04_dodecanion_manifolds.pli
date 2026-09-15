@@ -1,42 +1,97 @@
 /* ============================================================================
  * psystems/ch04/ch04_dodecanion_manifolds.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.9, 4.9.1
- * Functionality: Fundamentals of quaternion, octonion and dodecanion; the rule of the 11D manifolds (inlines common/hypernumbers.pli).
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.9   (the fundamentals of quaternion, octonion and dodecanion),
+ *           4.9.1 (the rule of the 11D manifolds)
+ * Functionality: The dodecanion brain is built from a ladder of hypercomplex
+ *   numbers, each doubling or extending the last and each losing a property.
+ *   The QUATERNION (4D: 1 real + 3 imaginary i,j,k) is the last ASSOCIATIVE
+ *   algebra — its three imaginary units square to -1 and multiply by the
+ *   cyclic rule ij=k, jk=i, ki=j. The OCTONION (8D: 1 + 7 imaginary e1..e7)
+ *   loses ASSOCIATIVITY — (ab)c need not equal a(bc) — so its products carry
+ *   a non-associative marker. The DODECANION (12D: 1 + 11 generators a1..a11)
+ *   is the nanobrain's own algebra: its 11 imaginary generators ARE the 11
+ *   dimensions of the time-crystal manifold, so multiplying dodecanions is
+ *   moving in the 11D phase space. THE RULE OF THE 11D MANIFOLDS: the eleven
+ *   generators are not independent directions but the eleven nested phase
+ *   membranes of one time crystal — each generator a_i rotates the phase in
+ *   dimension i, and the product of all eleven is the identity closed loop
+ *   (going once round all 11 dimensions returns to the start, the closed time
+ *   loop of psystems/common/time_crystal_core.pli).
+ *
+ *   Four membranes: quat, oct, dodec hold the three algebras; manifold_11d
+ *   holds the 11D rule. Hypernumber objects and products are inlined by
+ *   convention from psystems/common/hypernumbers.pli (P-Lingua has no import;
+ *   see psystems/README.md).
+ * Traceability: src/cpp/nanobrain_dodecanion.h (Dodecanion, from_octonion,
+ *               basis elements e0..e11), nanobrain_fractal.h
+ * Initial multiset: sample basis elements in each algebra membrane so the
+ *                   simulator runs at least one multiplication step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.9): the hypercomplex ladder.
+ *
+ *   skin
+ *     '- quat        : quaternions — associative (4D)
+ *     '- oct         : octonions — non-associative (8D)
+ *     '- dodec       : dodecanions — the 12D brain algebra
+ *     '- manifold_11d : the rule of the 11D manifolds (the 11 generators)
+ *
+ * The three algebras are siblings (each studied on its own); manifold_11d is
+ * the sibling that records how the 11 dodecanion generators form the 11D
+ * time-crystal manifold.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'quat []'oct []'dodec []'manifold_11d ]'skin;
 
-@mskin = seed;
-@mquat = unit(quat), fuel;
-@moct = unit(oct), fuel;
-@mdodec = unit(dodec), fuel;
-@mmanifold_11d = unit(manifold_11d), fuel;
+/* Sample initial multiset: basis elements per algebra (inlined hypernumbers). */
+@mskin       = probe;
+@mquat       = q(1), q(i), q(j), q(k), fuel;
+@moct        = o(1), o(e1), o(e2), o(e3), fuel;
+@mdodec      = d(1), d(a1), d(a2), d(a3), fuel;
+@mmanifold_11d = gen(1), gen(11), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * -- 4.9 quaternion / octonion / dodecanion ---------------------------------
+ * q_mul        : quaternion product — associative; imaginary units square to
+ *                -1 (q_imag) and multiply cyclically
+ * q_imag       : i*i = j*j = k*k = -1 — the quaternion's defining relations
+ * o_mul        : octonion product — carries a nonassoc marker: (ab)c != a(bc)
+ * d_mul        : dodecanion product across the 12 generators — the brain's
+ *                algebra of 11D phase moves
+ *
+ * -- 4.9.1 the rule of the 11D manifolds ------------------------------------
+ * gen_is_dim   : each dodecanion generator a_i IS a phase rotation in
+ *                dimension i of the time crystal — the generators are the 11
+ *                nested phase membranes, not independent axes
+ * loop_11d     : the ordered product of all 11 generators is the closed time
+ *                loop — going once round all 11 dimensions returns to the
+ *                start (the crystal's clock), so the 11D manifold is closed
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_quat ]'skin;
-[seed_dispense : seed --> (work)in_oct ]'skin;
-[seed_dispense : seed --> (work)in_dodec ]'skin;
-[seed_dispense : seed --> (work)in_manifold_11d ]'skin;
-[step : work * unit(quat) * fuel --> done(quat) ]'quat;
-[step : work * unit(oct) * fuel --> done(oct) ]'oct;
-[step : work * unit(dodec) * fuel --> done(dodec) ]'dodec;
-[step : work * unit(manifold_11d) * fuel --> done(manifold_11d) ]'manifold_11d;
-[report : done(quat) --> (result(quat))out ]'quat;
-[report : done(oct) --> (result(oct))out ]'oct;
-[report : done(dodec) --> (result(dodec))out ]'dodec;
-[report : done(manifold_11d) --> (result(manifold_11d))out ]'manifold_11d;
+[probe_route : probe --> (probe)in_dodec ]'skin;
+
+[q_mul  : q(A) * q(B) --> q(prod(A,B)) ]'quat;
+[q_imag : q(i)*2 --> q(minus1) ]'quat;
+[q_imag : q(j)*2 --> q(minus1) ]'quat;
+[q_imag : q(k)*2 --> q(minus1) ]'quat;
+
+[o_mul  : o(A) * o(B) --> o(prod(A,B)) * nonassoc ]'oct;
+
+[d_mul  : d(A) * d(B) --> d(prod(A,B)) ]'dodec;
+[d_mul  : probe * d(A) --> d(prod(probe,A)) ]'dodec;
+
+[gen_is_dim : gen(i) * fuel --> rotate(dim_i) ]'manifold_11d;
+[loop_11d   : gen(1) * gen(11) --> closed_loop ]'manifold_11d;
+
+[report : q(prod(A,B)) --> (result(quat))out ]'quat;
+[report : o(prod(A,B)) --> (result(oct))out ]'oct;
+[report : d(prod(A,B)) --> (result(dodec))out ]'dodec;
+[report : closed_loop --> (result(manifold_11d))out ]'manifold_11d;

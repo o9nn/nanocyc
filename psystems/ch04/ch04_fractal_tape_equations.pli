@@ -1,42 +1,116 @@
 /* ============================================================================
  * psystems/ch04/ch04_fractal_tape_equations.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.10, 4.10.1
- * Functionality: Twelve equations regulating a fractal tape for prime-based computing; projection from infinity — the future impacting the present.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.10   (twelve equations that regulate a fractal tape for prime
+ *                   based computing),
+ *           4.10.1 (projection from infinity, future impacting the present)
+ * Functionality: A fractal tape (ch02) is not read head-by-cell like a Turing
+ *   tape; it is REGULATED by twelve equations that together define how a
+ *   prime-based computation evolves. The twelve equations fall into three
+ *   quartets. Equations 1-4 govern the tape's PRIME structure: how cells are
+ *   indexed by the 15 PPM primes, how an ordered factor is read, how silent
+ *   primes are skipped, how active primes gate a step. Equations 5-8 govern
+ *   the tape's FRACTAL recursion: how entering a cell opens a sub-tape, how a
+ *   scale level is folded back, how self-similarity is preserved, how a result
+ *   is projected up a scale. Equations 9-12 govern the tape's CAUSAL closure:
+ *   how a future state is projected back, how the projection is combined with
+ *   the present, how the loop is closed, and how the tape halts. 4.10.1 is
+ *   the twelfth equation made explicit — PROJECTION FROM INFINITY: the tape's
+ *   halting state is not computed forward but projected backward from the
+ *   completed infinite computation, so the FUTURE (the converged answer)
+ *   impacts the PRESENT (the current cell) — the fractal tape computes by
+ *   letting its own final state reach back and steer the steps that produce
+ *   it.
+ *
+ *   Three quartet membranes (eq_1_4, eq_5_8, eq_9_12) are siblings; an
+ *   infinity membrane holds the projection-from-infinity closure.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_fractal_tape.h (FractalTape)
+ * Initial multiset: each quartet membrane holds a tape-state token and fuel;
+ *                   the infinity membrane holds the converged-answer seed so
+ *                   the simulator runs at least one regulation step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.10): twelve equations in three quartets.
+ *
+ *   skin
+ *     '- eq_1_4   : prime structure — indexing, ordered factor, silent/active
+ *     '- eq_5_8   : fractal recursion — descend, fold, self-similar, project up
+ *     '- eq_9_12  : causal closure — project back, combine, close, halt
+ *     '- infinity : 4.10.1 — projection from infinity (the future reaches back)
+ *
+ * The three quartets are siblings (the twelve equations act together on one
+ * tape); infinity is the sibling that closes the causal loop.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'eq_1_4 []'eq_5_8 []'eq_9_12 []'infinity ]'skin;
 
-@mskin = seed;
-@meq_1_4 = unit(eq_1_4), fuel;
-@meq_5_8 = unit(eq_5_8), fuel;
-@meq_9_12 = unit(eq_9_12), fuel;
-@minfinity = unit(infinity), fuel;
+/* Sample initial multiset. */
+@mskin     = regulate;
+@meq_1_4   = tape_state, fuel;
+@meq_5_8   = tape_state, fuel;
+@meq_9_12  = tape_state, fuel;
+@minfinity = converged, fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * -- 4.10 equations 1-4: prime structure ------------------------------------
+ * eq1_index     : each tape cell is indexed by a PPM prime — addressing is by
+ *                 prime, not by position
+ * eq2_factor    : a cell's content is read as an ordered factor over the
+ *                 15 primes (cf. common/alphabet_primes.pli)
+ * eq3_silent    : silent primes are skipped — a cell whose prime is silent
+ *                 contributes nothing this step
+ * eq4_active    : an active prime gates the step — only cells on active primes
+ *                 fire
+ *
+ * -- 4.10 equations 5-8: fractal recursion ----------------------------------
+ * eq5_descend   : entering a cell opens a whole sub-tape (fractal recursion)
+ * eq6_fold      : a scale level folds back into the cell above
+ * eq7_selfsim   : the same grammar recurs at every scale — self-similarity
+ * eq8_project_up: a result is projected up one scale level
+ *
+ * -- 4.10 equations 9-12: causal closure ------------------------------------
+ * eq9_back      : a future tape state is projected backward toward the present
+ * eq10_combine  : the back-projection is combined with the present cell
+ * eq11_close    : the causal loop closes — present and projected future agree
+ * eq12_halt     : the tape halts when the closed loop is consistent
+ *
+ * -- 4.10.1 projection from infinity ----------------------------------------
+ * project_inf   : the converged (infinite-time) answer is projected back from
+ *                 infinity into the present step — the future impacts the
+ *                 present, so the tape is steered by its own final state
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_eq_1_4 ]'skin;
-[seed_dispense : seed --> (work)in_eq_5_8 ]'skin;
-[seed_dispense : seed --> (work)in_eq_9_12 ]'skin;
-[seed_dispense : seed --> (work)in_infinity ]'skin;
-[step : work * unit(eq_1_4) * fuel --> done(eq_1_4) ]'eq_1_4;
-[step : work * unit(eq_5_8) * fuel --> done(eq_5_8) ]'eq_5_8;
-[step : work * unit(eq_9_12) * fuel --> done(eq_9_12) ]'eq_9_12;
-[step : work * unit(infinity) * fuel --> done(infinity) ]'infinity;
-[report : done(eq_1_4) --> (result(eq_1_4))out ]'eq_1_4;
-[report : done(eq_5_8) --> (result(eq_5_8))out ]'eq_5_8;
-[report : done(eq_9_12) --> (result(eq_9_12))out ]'eq_9_12;
-[report : done(infinity) --> (result(infinity))out ]'infinity;
+[regulate : regulate --> (regulate)in_eq_1_4 ]'skin;
+[regulate : regulate --> (regulate)in_eq_5_8 ]'skin;
+[regulate : regulate --> (regulate)in_eq_9_12 ]'skin;
+[regulate : regulate --> (regulate)in_infinity ]'skin;
+
+[eq1_index : tape_state * fuel --> indexed(prime_addr) ]'eq_1_4;
+[eq2_factor : indexed(prime_addr) --> ordered_factor(read) ]'eq_1_4;
+[eq3_silent : ordered_factor(read) --> skip(silent_primes) ]'eq_1_4;
+[eq4_active : skip(silent_primes) --> gated(active_primes) ]'eq_1_4;
+
+[eq5_descend : tape_state * fuel --> sub_tape(opened) ]'eq_5_8;
+[eq6_fold : sub_tape(opened) --> folded(scale_level) ]'eq_5_8;
+[eq7_selfsim : folded(scale_level) --> selfsimilar(grammar) ]'eq_5_8;
+[eq8_project_up : selfsimilar(grammar) --> projected(up_one_scale) ]'eq_5_8;
+
+[eq9_back : tape_state * fuel --> back_projection(future) ]'eq_9_12;
+[eq10_combine : back_projection(future) --> combined(present_future) ]'eq_9_12;
+[eq11_close : combined(present_future) --> closed(loop) ]'eq_9_12;
+[eq12_halt : closed(loop) --> halt(consistent) ]'eq_9_12;
+
+[project_inf : converged * fuel --> steered(present) ]'infinity;
+
+[report : gated(active_primes) --> (result(eq_1_4))out ]'eq_1_4;
+[report : projected(up_one_scale) --> (result(eq_5_8))out ]'eq_5_8;
+[report : halt(consistent) --> (result(eq_9_12))out ]'eq_9_12;
+[report : steered(present) --> (result(infinity))out ]'infinity;

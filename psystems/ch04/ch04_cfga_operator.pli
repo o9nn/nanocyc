@@ -1,30 +1,96 @@
 /* ============================================================================
  * psystems/ch04/ch04_cfga_operator.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.8.3
- * Functionality: CFGA operator that runs 13 math operations by itself in a time-crystal structure.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.8.3 (CFGA operator that runs 13 math operations by itself in a
+ *                  time crystal structure)
+ * Functionality: The CFGA (Circular Fractal Geometric Algebra) operator is a
+ *   SINGLE operator that, left to itself inside a time crystal, performs
+ *   thirteen mathematical operations in one self-driven cycle. The thirteen
+ *   operations are the four arithmetics (add, subtract, multiply, divide),
+ *   the two limit operations (differentiate, integrate), the three geometric
+ *   products of the algebra (inner, outer, geometric), and the four structural
+ *   operations (project, reject, rotate, reflect) — thirteen in all. The trick
+ *   is that a time crystal is a closed clock: the operator rides the tick
+ *   pulse around the 11-phase cycle (and on the extended 13-count of the
+ *   operation ring), and at each phase a different operation fires. Because
+ *   the loop is closed the operator never needs to be re-armed: it runs the
+ *   thirteen operations BY ITSELF, forever, one per tick, and the time-crystal
+ *   structure is what makes the sequence autonomous rather than externally
+ *   stepped.
+ *
+ *   Modeled as a cfga membrane holding the operator and a phase register; a
+ *   ring of operation slots op_1..op_13 fires in turn as the tick visits each
+ *   phase, and wraps. Inlined by convention from psystems/common/
+ *   time_crystal_core.pli (closed tick loop) and gml_shapes.pli (geometric
+ *   products).
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (closed time loop)
+ * Initial multiset: the cfga membrane holds the operator, a phase register,
+ *                   the 13 operation slots, and fuel so the simulator runs at
+ *                   least one full autonomous cycle.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.8.3): one operator riding a closed clock.
+ *
+ *   skin
+ *     '- cfga : the CFGA operator and its 13-slot operation ring, ticking
+ *               around the closed time-crystal loop by itself
+ * ------------------------------------------------------------------------*/
 @mu = [ []'cfga ]'skin;
 
-@mskin = seed;
-@mcfga = unit(cfga), fuel;
+/* Sample initial multiset: the operator, the phase register, the 13 slots. */
+@mskin = ignite;
+@mcfga = operator, phase(0), tick, fuel,
+         slot(add), slot(sub), slot(mul), slot(div),
+         slot(diff), slot(int),
+         slot(inner), slot(outer), slot(geometric),
+         slot(project), slot(reject), slot(rotate), slot(reflect);
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * ignite        : the skin drops the operator into its time crystal and the
+ *                 autonomous cycle begins
+ * tick_op       : at each tick the operator fires the operation whose slot the
+ *                 phase register points to — one operation per tick, thirteen
+ *                 in one revolution of the clock
+ * advance       : the phase register advances one slot per tick — the closed
+ *                 clock drives the operator, so no external stepping is needed
+ * wrap          : at the thirteenth slot the register wraps to the first — the
+ *                 time crystal's closed loop makes the thirteen-operation
+ *                 sequence repeat forever BY ITSELF
+ * fire_%s       : each operation slot transforms its operand: the four
+ *                 arithmetics, the two limits, the three geometric products,
+ *                 and the four structural operations of the algebra
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cfga ]'skin;
-[step : work * unit(cfga) * fuel --> done(cfga) ]'cfga;
-[report : done(cfga) --> (result(cfga))out ]'cfga;
+[ignite : ignite --> (operator)in_cfga ]'skin;
+
+[advance : phase(p) * tick --> phase(p1) ]'cfga;
+
+[fire_arith  : operator * slot(add) * fuel --> done(add) ]'cfga;
+[fire_arith  : operator * slot(sub) --> done(sub) ]'cfga;
+[fire_arith  : operator * slot(mul) --> done(mul) ]'cfga;
+[fire_arith  : operator * slot(div) --> done(div) ]'cfga;
+
+[fire_limit  : operator * slot(diff) --> done(diff) ]'cfga;
+[fire_limit  : operator * slot(int) --> done(int) ]'cfga;
+
+[fire_geom   : operator * slot(inner) --> done(inner) ]'cfga;
+[fire_geom   : operator * slot(outer) --> done(outer) ]'cfga;
+[fire_geom   : operator * slot(geometric) --> done(geometric) ]'cfga;
+
+[fire_struct : operator * slot(project) --> done(project) ]'cfga;
+[fire_struct : operator * slot(reject) --> done(reject) ]'cfga;
+[fire_struct : operator * slot(rotate) --> done(rotate) ]'cfga;
+[fire_struct : operator * slot(reflect) --> done(reflect) ]'cfga;
+
+[wrap : done(reflect) --> cycle_complete * phase(0) ]'cfga;
+
+[report : cycle_complete --> (result(cfga_13_ops))out ]'cfga;
