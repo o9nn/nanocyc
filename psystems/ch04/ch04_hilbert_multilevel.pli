@@ -1,38 +1,83 @@
 /* ============================================================================
  * psystems/ch04/ch04_hilbert_multilevel.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.2.1
- * Functionality: Multilevel geometric architecture of the Hilbert space as nested level membranes.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.2.1 (multilevel geometric architecture of the Hilbert space)
+ * Functionality: The quantum Hilbert space is FLAT — one linear space of state
+ *   vectors. Fractal mechanics needs a MULTILEVEL Hilbert space: a geometric
+ *   tower in which every level is itself a Hilbert space, and a basis vector
+ *   at one level EXPANDS into a whole Hilbert space at the level below. A
+ *   state is therefore not a point but a point-within-a-point-within-a-point.
+ *   Modeled as nested level membranes: level_0 (the coarsest, classical
+ *   reading) contains level_1 contains level_2 (the finest). A basis state
+ *   sent downward unfolds into a sub-basis; an amplitude sent upward is
+ *   coarse-grained by projection. The geometry is the architecture: each level
+ *   carries its own inner product (orthonormalisation), and levels are related
+ *   by an isometric embedding (finer resolves coarser without distortion).
+ *
+ *   Nesting IS the multilevel structure, so the membranes are concentric
+ *   (level_0 > level_1 > level_2), unlike the sibling worlds of
+ *   ch04_fractal_mechanics.pli.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (11D quantum manifold)
+ * Initial multiset: one basis state at level_0 and a fuel token per level so
+ *                   each level evolves at least one step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'level_0 []'level_1 []'level_2 ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.2.1): the Hilbert space is a tower of Hilbert spaces.
+ *
+ *   skin
+ *     '- level_0  : the coarsest Hilbert space (classical reading)
+ *         '- level_1  : entering one basis vector of level_0 opens level_1
+ *             '- level_2 : the finest subspace in this model
+ *
+ * Concentric nesting = "levels within levels": a vector at level_0 is a whole
+ * space at level_1. The same object grammar (basis, amp, ip) recurs at every
+ * level — self-similarity is the geometric architecture.
+ * ------------------------------------------------------------------------*/
+@mu = [ [ [ []'level_2 ]'level_1 ]'level_0 ]'skin;
 
-@mskin = seed;
-@mlevel_0 = unit(level_0), fuel;
-@mlevel_1 = unit(level_1), fuel;
-@mlevel_2 = unit(level_2), fuel;
+/* Sample initial multiset. */
+@mskin    = seed_basis;
+@mlevel_0 = basis(e0), fuel;
+@mlevel_1 = basis(e1), fuel;
+@mlevel_2 = basis(e2), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * admit_basis   : the skin places a seed basis state into the coarsest level
+ * unfold        : a basis vector at one level EXPANDS into a sub-basis one
+ *                 level down — the multilevel step: entering a state reveals
+ *                 the states within it (cf. fractal tape, ch02)
+ * refine        : the sub-basis is carried into the next finer level
+ * inner_product : each level orthonormalises its own basis — every level of
+ *                 the tower is a genuine Hilbert space with its own geometry
+ * isometry      : a finer basis state embeds upward without distortion —
+ *                 coarse-graining preserves norms, so the levels are related
+ *                 by isometries, not arbitrary maps
+ * coarsegrain   : an amplitude sent upward is projected onto the coarser
+ *                 level — the classical reading is a PROJECTION of the deep
+ *                 multilevel state, not a separate reality
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_level_0 ]'skin;
-[seed_dispense : seed --> (work)in_level_1 ]'skin;
-[seed_dispense : seed --> (work)in_level_2 ]'skin;
-[step : work * unit(level_0) * fuel --> done(level_0) ]'level_0;
-[step : work * unit(level_1) * fuel --> done(level_1) ]'level_1;
-[step : work * unit(level_2) * fuel --> done(level_2) ]'level_2;
-[report : done(level_0) --> (result(level_0))out ]'level_0;
-[report : done(level_1) --> (result(level_1))out ]'level_1;
-[report : done(level_2) --> (result(level_2))out ]'level_2;
+[admit_basis : seed_basis --> (basis(e0))in_level_0 ]'skin;
+
+[unfold : basis(e0) * fuel --> sub(e0,a) * sub(e0,b) ]'level_0;
+[refine : sub(e0,a) --> (basis(e1))in_level_1 ]'level_0;
+
+[unfold : basis(e1) * fuel --> sub(e1,a) * sub(e1,b) ]'level_1;
+[refine : sub(e1,a) --> (basis(e2))in_level_2 ]'level_1;
+
+[inner_product : basis(e2) * basis(e2) --> ortho(e2) ]'level_2;
+
+[isometry : sub(e1,a) --> iso(e1) ]'level_1;
+[coarsegrain : iso(e1) --> (proj(e0))out ]'level_1;
+
+[project : proj(e0) * basis(e0) --> amplitude(e0) ]'level_0;
+[report : amplitude(e0) --> (result(hilbert))out ]'level_0;

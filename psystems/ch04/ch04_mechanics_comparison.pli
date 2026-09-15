@@ -1,38 +1,96 @@
 /* ============================================================================
  * psystems/ch04/ch04_mechanics_comparison.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.3
- * Functionality: Classical vs quantum vs fractal mechanics: scale symmetry and scale relativity.
+ * Sections: 4.3 (a comparison between classical, quantum and fractal
+ *                mechanics: scale symmetry and scale relativity)
+ * Functionality: Three mechanics are placed side by side and the SAME probe
+ *   is run through each, so their differences show up as different answers to
+ *   one question. CLASSICAL mechanics: one world, continuous trajectories, no
+ *   action floor — a point follows a single path. QUANTUM mechanics: one
+ *   superposition, amplitudes that interfere, a single universal action
+ *   quantum h — a point is a wave until measured. FRACTAL mechanics: many
+ *   imaginary worlds at once, each with its own action quantum, connected by
+ *   singularities — a point is a clock among clocks. The comparison turns on
+ *   SCALE: classical mechanics is scale-INVARIANT (the laws look the same at
+ *   every size, a symmetry), quantum mechanics BREAKS scale symmetry (h sets
+ *   an absolute size), and fractal mechanics restores it as SCALE RELATIVITY
+ *   (the laws are the same at every scale but the CONSTANTS differ per scale
+ *   — the form is invariant, the values are relative to the scale's clock).
+ *
+ *   Three mechanics membranes are siblings; the skin injects one probe into
+ *   each and collects the three readings for the verdict.
  * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Initial multiset: the skin holds one probe token; each mechanics membrane
+ *                   holds fuel so the simulator runs at least one step each.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.3): the same probe, three mechanics.
+ *
+ *   skin
+ *     '- classical : one world, continuous path, no action floor
+ *     '- quantum   : one superposition, universal h
+ *     '- fractal   : many worlds, per-world action, singularity-connected
+ *
+ * The three are siblings so the probe can be run through each in parallel and
+ * their readings compared at the skin.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'classical []'quantum []'fractal ]'skin;
 
-@mskin = seed;
-@mclassical = unit(classical), fuel;
-@mquantum = unit(quantum), fuel;
-@mfractal = unit(fractal), fuel;
+/* Sample initial multiset. */
+@mskin     = probe, probe, probe;
+@mclassical = point, fuel;
+@mquantum   = amplitude, action(h), fuel;
+@mfractal   = clock, sing(s), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * inject        : the skin runs the SAME probe into each mechanics
+ *
+ * -- classical (4.3) -------------------------------------------------------
+ * cl_path       : a point follows a single continuous trajectory — one world,
+ *                 one path
+ * cl_scale_sym  : SCALE SYMMETRY — the law is unchanged under a change of
+ *                 size; classical mechanics is scale-invariant
+ *
+ * -- quantum (4.3) ---------------------------------------------------------
+ * qm_interfere  : amplitudes superpose and interfere — one world but many
+ *                 amplitudes at once
+ * qm_scale_break: SCALE SYMMETRY BROKEN — the universal action quantum h sets
+ *                 an absolute scale; the laws are NOT the same at every size
+ *
+ * -- fractal (4.3) ---------------------------------------------------------
+ * fm_worlds     : many clocks run at once, connected by a singularity — many
+ *                 worlds, each with its own action quantum (4.4)
+ * fm_scale_rel  : SCALE RELATIVITY — the FORM of the law is invariant across
+ *                 scales but the CONSTANTS are relative to each scale's clock;
+ *                 symmetry of form, relativity of values
+ *
+ * verdict       : the skin gathers the three readings into the comparison
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_classical ]'skin;
-[seed_dispense : seed --> (work)in_quantum ]'skin;
-[seed_dispense : seed --> (work)in_fractal ]'skin;
-[step : work * unit(classical) * fuel --> done(classical) ]'classical;
-[step : work * unit(quantum) * fuel --> done(quantum) ]'quantum;
-[step : work * unit(fractal) * fuel --> done(fractal) ]'fractal;
-[report : done(classical) --> (result(classical))out ]'classical;
-[report : done(quantum) --> (result(quantum))out ]'quantum;
-[report : done(fractal) --> (result(fractal))out ]'fractal;
+[inject : probe --> (probe)in_classical ]'skin;
+[inject : probe --> (probe)in_quantum ]'skin;
+[inject : probe --> (probe)in_fractal ]'skin;
+
+[cl_path : probe * point * fuel --> trajectory(single) ]'classical;
+[cl_scale_sym : trajectory(single) --> law(scale_invariant) ]'classical;
+
+[qm_interfere : probe * amplitude * fuel --> superposition(many_amp) ]'quantum;
+[qm_scale_break : superposition(many_amp) * action(h) --> law(absolute_scale) ]'quantum;
+
+[fm_worlds : probe * clock * sing(s) * fuel --> worlds(many_clocks) ]'fractal;
+[fm_scale_rel : worlds(many_clocks) --> law(scale_relativity) ]'fractal;
+
+[report : law(scale_invariant) --> (reading(classical))out ]'classical;
+[report : law(absolute_scale) --> (reading(quantum))out ]'quantum;
+[report : law(scale_relativity) --> (reading(fractal))out ]'fractal;
+
+[verdict : reading(classical) * reading(quantum) * reading(fractal)
+       --> comparison(three_mechanics) ]'skin;

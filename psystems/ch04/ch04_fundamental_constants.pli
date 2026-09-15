@@ -1,30 +1,78 @@
 /* ============================================================================
  * psystems/ch04/ch04_fundamental_constants.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.5
- * Functionality: A table of fundamental constants in nature as constant objects with unit-conversion rules.
+ * Sections: 4.5 (a table of fundamental constants in nature)
+ * Functionality: The fundamental constants are not arbitrary numbers but the
+ *   fixed conversion factors between the clocks and geometries of the
+ *   nanobrain. This model holds the table AS OBJECTS: each constant is a
+ *   constant object tagged with its dimension, and the unit-conversion rules
+ *   express how one constant is written in terms of the others. Planck's
+ *   constant h relates energy to frequency (a clock rate); the speed of light
+ *   c relates space to time; the gravitational constant G relates geometry to
+ *   mass; the elementary charge e relates field to current; Boltzmann's
+ *   constant k_B relates temperature to energy. Because 4.4 established that
+ *   each imaginary world has its own action quantum, h here is OUR world's
+ *   entry in the table — the table also carries the fine-structure constant
+ *   alpha, the dimensionless ratio that the fractal mechanics treats as a
+ *   prime-geometry invariant rather than a free parameter.
+ *
+ *   A single constants membrane holds the table; conversion rules rewrite one
+ *   constant object into its expression in the others, so the table is
+ *   self-consistent and machine-readable.
  * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Initial multiset: the constants membrane holds one object per fundamental
+ *                   constant plus a conversion token, so the simulator runs
+ *                   at least one conversion step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.5): one membrane, the table itself.
+ *
+ *   skin
+ *     '- constants : the table of fundamental constants as constant objects
+ * ------------------------------------------------------------------------*/
 @mu = [ []'constants ]'skin;
 
-@mskin = seed;
-@mconstants = unit(constants), fuel;
+/* Sample initial multiset: the fundamental constants as dimensioned objects. */
+@mskin       = query;
+@mconstants  = c(h, action), c(c, speed), c(G, gravity),
+               c(e, charge), c(k_B, thermal), c(alpha, dimensionless),
+               convert, fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * look_up       : a query enters the table and is matched to a constant
+ *                 object — the table answers "what is this constant" by
+ *                 returning its dimensioned value
+ * conv_energy   : h converts frequency into energy — E = h f — the bridge
+ *                 between a clock rate and an energy (4.4's per-world action)
+ * conv_spacetime: c converts a time into a length — the geometry of the
+ *                 light cone, the conversion between the clock and the ruler
+ * conv_mass     : G converts mass into curvature — geometry per unit mass
+ * conv_thermal  : k_B converts temperature into energy — the one place a
+ *                 statistical conversion survives the PPM (cf. ch04_noise_
+ *                 harvesting_ppm.pli, which replaces the rest)
+ * alpha_invariant : the fine-structure constant alpha is read off as a
+ *                 dimensionless prime-geometry invariant — not a free
+ *                 parameter but a fixed ratio the table records
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_constants ]'skin;
-[step : work * unit(constants) * fuel --> done(constants) ]'constants;
-[report : done(constants) --> (result(constants))out ]'constants;
+[look_up : query --> (query)in_constants ]'skin;
+
+[conv_energy    : c(h, action) * convert --> e_equals(h, freq) ]'constants;
+[conv_spacetime : c(c, speed) * convert --> length_equals(c, time) ]'constants;
+[conv_mass      : c(G, gravity) * convert --> curvature_equals(G, mass) ]'constants;
+[conv_thermal   : c(k_B, thermal) * convert --> energy_equals(k_B, temp) ]'constants;
+[alpha_invariant : c(alpha, dimensionless) * convert --> alpha(prime_ratio) ]'constants;
+
+[report : e_equals(h, freq) --> (result(h))out ]'constants;
+[report : length_equals(c, time) --> (result(c))out ]'constants;
+[report : curvature_equals(G, mass) --> (result(G))out ]'constants;
+[report : energy_equals(k_B, temp) --> (result(k_B))out ]'constants;
+[report : alpha(prime_ratio) --> (result(alpha))out ]'constants;

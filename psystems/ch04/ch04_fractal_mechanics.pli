@@ -1,42 +1,104 @@
 /* ============================================================================
  * psystems/ch04/ch04_fractal_mechanics.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.1.2, 4.2
- * Functionality: Multiple imaginary worlds operating at a time need fractal mechanics; fractal mechanics acts in the phase space connecting singularity points.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.1.2 (multiple imaginary worlds operating at a time need fractal
+ *                  mechanics),
+ *           4.2   (fractal mechanics acts in the phase space connecting
+ *                  singularity points)
+ * Functionality: Quantum mechanics admits ONE superposition; the nanobrain
+ *   runs MANY imaginary worlds at once, and that is what forces a new —
+ *   fractal — mechanics. Each imaginary world is a self-consistent time
+ *   crystal with its own phase register; they run in PARALLEL as sibling
+ *   membranes, never mixing their phases directly. Fractal mechanics is the
+ *   mechanics of the PHASE SPACE that connects the worlds: the worlds do not
+ *   interact through forces but through SINGULARITY POINTS — the shared points
+ *   where every world's clock is reseeded. A signal crosses from one world to
+ *   another only by passing through a singularity: it leaves its home world as
+ *   a phase, tunnels the singularity, and re-enters the target world as a
+ *   phase shift. The phase space is thus a network of worlds stitched together
+ *   at their singularities, and motion in it is phase transport across those
+ *   stitches.
+ *
+ *   The three worlds are sibling world membranes; the phase_space membrane is
+ *   their common parent-side corridor holding the singularity points that
+ *   connect them. Inlined by convention from psystems/common/
+ *   time_crystal_core.pli (singularity_point, 11-phase clock).
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (singularity points,
+ *               temporal_coherence)
+ * Initial multiset: each world holds a seed phase and fuel; the phase-space
+ *                   corridor holds a singularity point per connecting edge so
+ *                   the simulator runs at least one phase-transport step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.1.2/4.2): many worlds, one phase space.
+ *
+ *   skin (the manifold holding the imaginary worlds)
+ *     '- world_1      : imaginary world 1 — its own time crystal & phase
+ *     '- world_2      : imaginary world 2
+ *     '- world_3      : imaginary world 3
+ *     '- phase_space  : the corridor of singularity points connecting worlds
+ *
+ * Worlds are SIBLINGS (they run in parallel, none contains another); the
+ * phase space is their sibling corridor. Crossing between worlds is mediated
+ * by the skin (parent): a phase goes (…)out of its world, into the phase
+ * space, through a singularity, then (…)in to the target world — cell-like
+ * semantics forbid direct sibling-to-sibling sends.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'world_1 []'world_2 []'world_3 []'phase_space ]'skin;
 
-@mskin = seed;
-@mworld_1 = unit(world_1), fuel;
-@mworld_2 = unit(world_2), fuel;
-@mworld_3 = unit(world_3), fuel;
-@mphase_space = unit(phase_space), fuel;
+/* Sample initial multiset. */
+@mskin        = tunnel;
+@mworld_1     = phase(w1,0), fuel;
+@mworld_2     = phase(w2,3), fuel;
+@mworld_3     = phase(w3,7), fuel;
+@mphase_space = sing(s12), sing(s23), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * -- 4.1.2 many imaginary worlds at once -----------------------------------
+ * run_world     : every world advances its own phase on its own 11-cycle —
+ *                 the worlds evolve simultaneously and independently (this is
+ *                 what a single superposition cannot express)
+ * world_clock   : a world's phase register wraps on the 11-cycle: each world
+ *                 is a complete clock with its own period
+ *
+ * -- 4.2 phase space connecting singularity points -------------------------
+ * offer_phase   : a world emits a phase token toward the phase space — the
+ *                 first step of crossing is leaving the home world
+ * tunnel_sing   : in the phase space a phase token meets a singularity point
+ *                 and TUNNELS it: the singularity is the only door between
+ *                 worlds; what crosses is a pure phase shift, no particle
+ * reenter       : the tunneled phase re-enters the target world as a phase
+ *                 correction — the future state of one world impacts the
+ *                 present of another through their shared singularity
+ * connect       : the phase space records a stitch between two worlds each
+ *                 time a phase crosses, building the singularity network that
+ *                 IS the fractal phase space
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_world_1 ]'skin;
-[seed_dispense : seed --> (work)in_world_2 ]'skin;
-[seed_dispense : seed --> (work)in_world_3 ]'skin;
-[seed_dispense : seed --> (work)in_phase_space ]'skin;
-[step : work * unit(world_1) * fuel --> done(world_1) ]'world_1;
-[step : work * unit(world_2) * fuel --> done(world_2) ]'world_2;
-[step : work * unit(world_3) * fuel --> done(world_3) ]'world_3;
-[step : work * unit(phase_space) * fuel --> done(phase_space) ]'phase_space;
-[report : done(world_1) --> (result(world_1))out ]'world_1;
-[report : done(world_2) --> (result(world_2))out ]'world_2;
-[report : done(world_3) --> (result(world_3))out ]'world_3;
-[report : done(phase_space) --> (result(phase_space))out ]'phase_space;
+[run_world  : phase(w,p) * fuel --> phase(w,p1) ]'world_1;
+[run_world  : phase(w,p) * fuel --> phase(w,p1) ]'world_2;
+[run_world  : phase(w,p) * fuel --> phase(w,p1) ]'world_3;
+
+[offer_phase : phase(w,p) --> (phase_token(w,p))out ]'world_1;
+[offer_phase : phase(w,p) --> (phase_token(w,p))out ]'world_2;
+[offer_phase : phase(w,p) --> (phase_token(w,p))out ]'world_3;
+
+[admit : phase_token(w,p) --> (phase_token(w,p))in_phase_space ]'skin;
+
+[tunnel_sing : phase_token(w,p) * sing(s) * fuel --> crossing(w,p,s) ]'phase_space;
+[connect     : crossing(w,p,s) --> stitch(w,s) * (phase_shift(p))out ]'phase_space;
+
+[reenter : phase_shift(p) --> (phase_correction(p))in_world_2 ]'skin;
+
+[reseed : phase_correction(p) * phase(w,q) --> phase(w,q1) ]'world_2;
+
+[report : stitch(w,s) --> (result(phase_space))out ]'phase_space;

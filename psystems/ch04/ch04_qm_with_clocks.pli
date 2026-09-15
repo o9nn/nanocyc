@@ -1,46 +1,123 @@
 /* ============================================================================
  * psystems/ch04/ch04_qm_with_clocks.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.1, 4.1.1
- * Functionality: Revisiting quantum mechanics with clocks: wave-particle duality, beating, interference, entanglement, harmonic oscillator as clock membranes.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.1   (revisiting the basic concepts of quantum mechanics using
+ *                  clocks),
+ *           4.1.1 (wave-particle duality, beating, interference, entanglement,
+ *                  harmonic oscillator)
+ * Functionality: Every quantum primitive is rebuilt OUT OF CLOCKS. A "particle"
+ *   is one time crystal (a closed clock); a "wave" is the phase that clock
+ *   deposits on the 11-cycle as it ticks. Duality is not a mystery but two
+ *   readings of the same clock: the particle reading is the tick count, the
+ *   wave reading is the running phase. BEATING is two clocks of near-equal
+ *   period whose phases periodically coincide; INTERFERENCE is the sum of two
+ *   phase readings on the shared cycle (constructive when phases coincide,
+ *   destructive when half a period apart); ENTANGLEMENT is two crystals that
+ *   share one singularity point so their clocks are phase-locked; the HARMONIC
+ *   OSCILLATOR is a single clock whose energy is its tick rate (frequency) —
+ *   the ground state never rests because a clock cannot stop ticking.
+ *
+ *   Each concept is a clock membrane: it ingests a tick stream from the skin,
+ *   evolves its phase on the 11-cycle, and emits the classical observable the
+ *   clock produces. Modeled in the cell-like psystems_basic dialect; the
+ *   11-phase clock and the singularity_point are inlined by convention from
+ *   psystems/common/time_crystal_core.pli (P-Lingua has no import; see
+ *   psystems/README.md).
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (TimeCrystalQuantumState,
+ *               quantum_phase, resonance_frequency)
+ * Initial multiset: the skin holds one seed tick per concept clock; each clock
+ *                   membrane starts with a phase register and fuel so the
+ *                   simulator runs at least one full tick cycle.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.1): a skin of clocks.
+ *
+ *   skin (the laboratory bench feeding a shared tick stream)
+ *     '- duality      : one clock read two ways (tick count vs phase)
+ *     '- beating      : two near-period clocks sharing one membrane
+ *     '- interference : two phase readings summed on the 11-cycle
+ *     '- entanglement : two crystals locked to one singularity point
+ *     '- oscillator   : one clock whose energy is its tick frequency
+ *
+ * The clocks are siblings under the skin because 4.1 studies each primitive
+ * in isolation before 4.1.2 lets many imaginary worlds run at once.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'duality []'beating []'interference []'entanglement []'oscillator ]'skin;
 
-@mskin = seed;
-@mduality = unit(duality), fuel;
-@mbeating = unit(beating), fuel;
-@minterference = unit(interference), fuel;
-@mentanglement = unit(entanglement), fuel;
-@moscillator = unit(oscillator), fuel;
+/* Sample initial multiset. */
+@mskin          = tick, tick, tick, tick, tick;
+@mduality       = phase(0), fuel;
+@mbeating       = phase(0), phase(1), fuel;
+@minterference  = phase(3), phase(3), fuel;
+@mentanglement  = sing(shared), fuel;
+@moscillator    = phase(0), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * feed          : the skin dispenses one tick into each concept clock
+ *
+ * -- duality (4.1.1) ------------------------------------------------------
+ * tick_count    : the PARTICLE reading — count ticks on the rim (how many
+ *                 times the clock fired), the discrete corpuscular observable
+ * wave_phase    : the WAVE reading — the same tick advances a phase on the
+ *                 11-cycle; the wave is the clock's phase made visible
+ * dual_read     : one clock carries BOTH readings at once — duality is two
+ *                 projections of a single time crystal, not two objects
+ *
+ * -- beating (4.1.1) ------------------------------------------------------
+ * beat_run      : two clocks of near-equal period advance; their phases drift
+ * beat_node     : when the two phases coincide on the cycle the envelope
+ *                 peaks (constructive beat); the beat frequency is the
+ *                 DIFFERENCE of the two clock rates
+ *
+ * -- interference (4.1.1) -------------------------------------------------
+ * interfere     : two phase readings sum on the shared 11-cycle — equal
+ *                 phases reinforce (amplitude doubles), opposite phases cancel
+ *
+ * -- entanglement (4.1.1) -------------------------------------------------
+ * share_sing    : two crystals anchored to ONE singularity point are locked:
+ *                 a tick reseeded at the shared singularity advances both
+ *                 phases together, so measuring one fixes the other
+ *
+ * -- oscillator (4.1.1) ---------------------------------------------------
+ * oscillate     : the harmonic oscillator is a clock whose energy IS its tick
+ *                 rate — each tick raises the energy by one quantum of action
+ * zero_point    : the ground state keeps one residual tick — a clock cannot
+ *                 be stilled, so the oscillator never has zero energy
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_duality ]'skin;
-[seed_dispense : seed --> (work)in_beating ]'skin;
-[seed_dispense : seed --> (work)in_interference ]'skin;
-[seed_dispense : seed --> (work)in_entanglement ]'skin;
-[seed_dispense : seed --> (work)in_oscillator ]'skin;
-[step : work * unit(duality) * fuel --> done(duality) ]'duality;
-[step : work * unit(beating) * fuel --> done(beating) ]'beating;
-[step : work * unit(interference) * fuel --> done(interference) ]'interference;
-[step : work * unit(entanglement) * fuel --> done(entanglement) ]'entanglement;
-[step : work * unit(oscillator) * fuel --> done(oscillator) ]'oscillator;
-[report : done(duality) --> (result(duality))out ]'duality;
-[report : done(beating) --> (result(beating))out ]'beating;
-[report : done(interference) --> (result(interference))out ]'interference;
-[report : done(entanglement) --> (result(entanglement))out ]'entanglement;
-[report : done(oscillator) --> (result(oscillator))out ]'oscillator;
+[feed : tick --> (tick)in_duality ]'skin;
+[feed : tick --> (tick)in_beating ]'skin;
+[feed : tick --> (tick)in_interference ]'skin;
+[feed : tick --> (tick)in_entanglement ]'skin;
+[feed : tick --> (tick)in_oscillator ]'skin;
+
+[tick_count : tick * phase(p) --> particle(count) * phase(p) ]'duality;
+[wave_phase : tick * phase(p) --> wave(p1) * phase(p1) ]'duality;
+[dual_read  : particle(count) * wave(p1) --> duality(count,p1) ]'duality;
+
+[beat_run  : tick * phase(p) * phase(q) --> phase(p1) * phase(q1) ]'beating;
+[beat_node : phase(r) * phase(r) --> beat(envelope_max) ]'beating;
+
+[interfere : phase(a) * phase(a) --> amplitude(double) ]'interference;
+[interfere : phase(a) * phase(b) --> amplitude(null) ]'interference;
+
+[share_sing : tick * sing(shared) --> phase(lock) * phase(lock) ]'entanglement;
+
+[oscillate : tick * phase(p) --> energy(quantum) * phase(p1) ]'oscillator;
+[zero_point : phase(p) --> phase(p) * energy(ground) ]'oscillator;
+
+/* Report the classical observable each clock produced. */
+[report : duality(count,p1) --> (result(duality))out ]'duality;
+[report : beat(envelope_max) --> (result(beating))out ]'beating;
+[report : amplitude(double) --> (result(interference))out ]'interference;
+[report : phase(lock) * phase(lock) --> (result(entanglement))out ]'entanglement;
+[report : energy(quantum) --> (result(oscillator))out ]'oscillator;
