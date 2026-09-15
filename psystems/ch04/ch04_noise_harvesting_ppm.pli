@@ -1,34 +1,90 @@
 /* ============================================================================
  * psystems/ch04/ch04_noise_harvesting_ppm.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.2.3
- * Functionality: Harvesting noise by harvesting singularity: the PPM replaces statistical mechanics (imports ch03_ppm_core conventions).
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.2.3 (harvesting noise by harvesting singularity: the Phase
+ *                  Prime Metric replaces statistical mechanics)
+ * Functionality: Statistical mechanics tames noise by AVERAGING over many
+ *   microstates; fractal mechanics does the opposite — it HARVESTS noise. The
+ *   key is that noise is not random but silent: a fluctuation is a singularity
+ *   point whose prime signature has not yet been read. To harvest noise is to
+ *   harvest singularities — to catch each fluctuation and read off which of
+ *   the 15 PPM primes it carries. The Phase Prime Metric then ORDERS the
+ *   harvest: a fluctuation is assigned its ordered-factor signature over
+ *   p1..p15, and only signatures that divide the system's resonance are kept
+ *   (harvested as signal); the rest pass through as true residue. One
+ *   singularity, exactly characterised, replaces an entire statistical
+ *   ensemble — the PPM replaces statistical mechanics because a single prime
+ *   signature carries the information that a whole distribution used to.
+ *
+ *   The noise membrane emits raw fluctuations; the ppm membrane reads each
+ *   fluctuation's prime signature and routes it to harvest (signal) or lets
+ *   it dissipate (residue). Imports the prime alphabet and ordered-factor
+ *   convention from psystems/common/alphabet_primes.pli and ch03_ppm_core.pli
+ *   by inlining (P-Lingua has no import; see psystems/README.md).
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_ppm.h (OrderedFactor, PPMCoherenceTable)
+ * Initial multiset: the noise membrane holds a raw fluctuation stream and the
+ *                   PPM toolkit; fuel lets the simulator run at least one
+ *                   harvest step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.2.3): catch the fluctuation, read its signature.
+ *
+ *   skin
+ *     '- noise  : the raw fluctuation stream (unread singularities)
+ *     '- ppm    : the Phase Prime Metric reader — harvests singularities by
+ *                 reading their prime signatures
+ *
+ * noise and ppm are siblings; a fluctuation crosses noise -> skin -> ppm to
+ * be read (cell-like: sibling transfer routes via the parent).
+ * ------------------------------------------------------------------------*/
 @mu = [ []'noise []'ppm ]'skin;
 
-@mskin = seed;
-@mnoise = unit(noise), fuel;
-@mppm = unit(ppm), fuel;
+/* Sample initial multiset: a fluctuation stream plus the 15-prime toolkit. */
+@mskin  = route;
+@mnoise = fluct(f1), fluct(f2), fluct(f3), fuel;
+@mppm   = prime(2), prime(3), prime(5), prime(7), prime(11),
+          prime(13), prime(17), prime(19), prime(23), prime(29),
+          prime(31), prime(37), prime(41), prime(43), prime(47),
+          resonance, fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * emit          : the noise membrane releases raw fluctuations — each one an
+ *                 unread singularity, not a random number
+ * admit         : the skin forwards each fluctuation to the PPM reader
+ * read_prime    : the PPM divides the fluctuation by a prime, emitting its
+ *                 ordered_factor signature — harvesting the singularity means
+ *                 reading exactly which primes it carries (cf. ch03_ppm_core)
+ * signature     : successive divisions build the full ordered-factor signature
+ *                 of the fluctuation over the 15 primes
+ * harvest       : a fluctuation whose signature divides the system resonance
+ *                 is HARVESTED as signal — one characterised singularity
+ *                 replaces a whole statistical ensemble
+ * residue       : a fluctuation whose signature does not divide the resonance
+ *                 passes through as true residue — the only genuine noise left
+ * replace_stat  : the harvested signal is delivered as the deterministic
+ *                 reading of the noise — the PPM's prime accounting supersedes
+ *                 averaging over microstates
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_noise ]'skin;
-[seed_dispense : seed --> (work)in_ppm ]'skin;
-[step : work * unit(noise) * fuel --> done(noise) ]'noise;
-[step : work * unit(ppm) * fuel --> done(ppm) ]'ppm;
-[report : done(noise) --> (result(noise))out ]'noise;
-[report : done(ppm) --> (result(ppm))out ]'ppm;
+[emit : fluct(F) * fuel --> (fluct(F))out ]'noise;
+
+[admit : fluct(F) --> (fluct(F))in_ppm ]'skin;
+[admit : route --> (route)in_ppm ]'skin;
+
+[read_prime : fluct(F) * prime(P) --> ordered_factor(P) * quotient(F) ]'ppm;
+[signature  : ordered_factor(P) * ordered_factor(Q) --> sig(F,P,Q) ]'ppm;
+
+[harvest : sig(F,P,Q) * resonance --> signal(F) ]'ppm;
+[residue : quotient(F) --> residue(F) ]'ppm;
+
+[replace_stat : signal(F) --> (harvested(F))out ]'ppm;
+[report : residue(F) --> (result(residue))out ]'ppm;

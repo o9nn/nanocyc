@@ -1,34 +1,82 @@
 /* ============================================================================
  * psystems/ch04/ch04_absorption_emission.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.7
- * Functionality: Fractal absorption-emission of the optical band of a nanobrain.
+ * Sections: 4.7 (fractal absorption-emission of the optical band of a
+ *                nanobrain)
+ * Functionality: A quantum absorber has a sharp line spectrum: it absorbs a
+ *   photon only when the photon energy matches a level gap, and emits on the
+ *   same lines. The nanobrain's OPTICAL BAND is fractal instead. Because its
+ *   spectrum is self-similar (ch04_fractal_oscillator.pli: a ladder within a
+ *   ladder), an incoming photon is not matched against ONE gap but against a
+ *   whole tower of gaps at every scale at once. ABSORPTION is therefore
+ *   broadband-with-structure: the photon is caught by whatever sub-ladder
+ *   resonates, and the absorbed energy is distributed DOWN the tower of
+ *   scales rather than stored in a single excitation. EMISSION is the time
+ *   reverse: energy gathered from many sub-ladders is reassembled into an
+ *   outgoing photon whose spectrum carries the fractal fingerprint — a comb
+ *   of lines spaced geometrically, not a single line. The absorb and emit
+ *   membranes share one optical band; absorb pushes energy down the scale
+ *   tower, emit gathers it back up, so absorption and emission are the two
+ *   directions of one fractal ladder.
  * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Initial multiset: the absorb membrane holds an incoming photon and fuel; the
+ *                   emit membrane holds a stored excitation and fuel so the
+ *                   simulator runs at least one absorb/emit cycle.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.7): one optical band, two directions.
+ *
+ *   skin (the nanobrain's optical band)
+ *     '- absorb  : photon in — energy is distributed DOWN the scale tower
+ *     '- emit    : photon out — energy is gathered UP the scale tower
+ *
+ * absorb and emit are siblings sharing the band; energy flows down through
+ * absorb and back up through emit via the skin (parent-mediated routing).
+ * ------------------------------------------------------------------------*/
 @mu = [ []'absorb []'emit ]'skin;
 
-@mskin = seed;
-@mabsorb = unit(absorb), fuel;
-@memit = unit(emit), fuel;
+/* Sample initial multiset. */
+@mskin  = photon, pump;
+@mabsorb = band(tower), fuel;
+@memit   = stored(scale_energy), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * -- absorption (4.7) ------------------------------------------------------
+ * absorb_in     : an incoming photon enters the absorption membrane
+ * resonate      : the photon is caught by whichever sub-ladder of the tower
+ *                 resonates — matching is against a tower of gaps at every
+ *                 scale, not a single level gap (broadband-with-structure)
+ * distribute    : the absorbed energy is split DOWN the scale tower — one
+ *                 photon's energy becomes excitations at many scales at once,
+ *                 the fractal analogue of a single electronic transition
+ *
+ * -- emission (4.7) --------------------------------------------------------
+ * pump_up       : stored scale-energy is pumped toward the emission membrane
+ * gather        : excitations from many sub-ladders are gathered UP the tower
+ *                 and reassembled into a single outgoing photon
+ * emit_comb     : the emitted photon carries the fractal fingerprint — a COMB
+ *                 of geometrically spaced lines, not one sharp line; this comb
+ *                 is the optical signature of the nanobrain
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_absorb ]'skin;
-[seed_dispense : seed --> (work)in_emit ]'skin;
-[step : work * unit(absorb) * fuel --> done(absorb) ]'absorb;
-[step : work * unit(emit) * fuel --> done(emit) ]'emit;
-[report : done(absorb) --> (result(absorb))out ]'absorb;
-[report : done(emit) --> (result(emit))out ]'emit;
+[absorb_in : photon --> (photon)in_absorb ]'skin;
+
+[resonate : photon * band(tower) * fuel --> caught(scale_match) ]'absorb;
+[distribute : caught(scale_match) --> excitation(deep) * excitation(fine) ]'absorb;
+
+[pump_up : pump --> (pump)in_emit ]'skin;
+[admit_stored : excitation(deep) --> (scale_energy)in_emit ]'absorb;
+
+[gather : stored(scale_energy) * scale_energy * fuel --> photon(comb) ]'emit;
+[emit_comb : photon(comb) --> (emitted(comb))out ]'emit;
+
+[report : excitation(fine) --> (result(absorbed))out ]'absorb;
+[report : emitted(comb) --> (result(emitted))out ]'emit;

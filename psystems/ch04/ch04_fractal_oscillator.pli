@@ -1,34 +1,85 @@
 /* ============================================================================
  * psystems/ch04/ch04_fractal_oscillator.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.2.2
- * Functionality: Fractal harmonic oscillator, fractal condensation and peculiarities.
+ * Sections: 4.2.2 (fractal harmonic oscillator, fractal condensation,
+ *                  peculiarities)
+ * Functionality: The quantum harmonic oscillator has one ladder of equally
+ *   spaced levels. The FRACTAL harmonic oscillator has a ladder WITHIN a
+ *   ladder: every energy level is itself an oscillator with its own ladder,
+ *   recursively — the spectrum is self-similar, so a level's fine structure
+ *   repeats the whole spectrum at a smaller scale. Modeled as an oscillator
+ *   membrane whose excitation can descend into a sub-oscillator membrane.
+ *   FRACTAL CONDENSATION is the peculiar consequence: because every level
+ *   contains an oscillator, bosons can condense not only into the global
+ *   ground state but into the ground state of ANY sub-ladder — a condensate
+ *   at every scale at once (the condensate membrane). The peculiarities:
+ *   (i) the energy spacing is not uniform but geometric (each sub-ladder runs
+ *   at a prime-scaled frequency), and (ii) there is no true vacuum — every
+ *   apparent ground state is an excited state of a deeper ladder.
  * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Initial multiset: the oscillator holds one quantum and fuel; the condensate
+ *                   holds a seed boson so the simulator runs at least one
+ *                   ladder/condensation step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'oscillator []'condensate ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.2.2): a ladder within a ladder.
+ *
+ *   skin
+ *     '- oscillator  : the top-level harmonic oscillator ladder
+ *     |    '- sub_osc : entering one level opens a whole sub-oscillator
+ *     '- condensate : bosons accumulated at every scale at once
+ *
+ * oscillator contains sub_osc (self-similar recursion); condensate is a
+ * sibling that collects the condensate fraction from every scale.
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'sub_osc ]'oscillator []'condensate ]'skin;
 
-@mskin = seed;
-@moscillator = unit(oscillator), fuel;
-@mcondensate = unit(condensate), fuel;
+/* Sample initial multiset. */
+@mskin       = excite;
+@moscillator = quantum, fuel;
+@msub_osc    = quantum, fuel;
+@mcondensate = boson, fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * excite        : the skin pumps one quantum into the top ladder
+ * raise         : a quantum climbs one rung of the ladder (creation) — the
+ *                 oscillator's level rises with each tick of energy
+ * descend       : PECULIARITY 1 — a level of the ladder unfolds into a whole
+ *                 sub-oscillator: exciting level n reveals the ladder within
+ *                 level n (self-similar spectrum)
+ * geometric_gap : PECULIARITY 2 — the sub-ladder runs at a prime-scaled
+ *                 frequency, so the level spacing is geometric, not uniform
+ * sub_raise     : the sub-oscillator climbs its own ladder, repeating the
+ *                 parent spectrum at a smaller scale
+ * condense      : FRACTAL CONDENSATION — bosons sink into the ground state of
+ *                 whatever ladder they occupy, at EVERY scale simultaneously;
+ *                 the condensate membrane collects one condensate fraction per
+ *                 scale (a condensate within a condensate)
+ * no_vacuum     : PECULIARITY 3 — the condensate never empties: a ground state
+ *                 at one scale is an excited state of a deeper ladder, so
+ *                 there is no true vacuum
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_oscillator ]'skin;
-[seed_dispense : seed --> (work)in_condensate ]'skin;
-[step : work * unit(oscillator) * fuel --> done(oscillator) ]'oscillator;
-[step : work * unit(condensate) * fuel --> done(condensate) ]'condensate;
-[report : done(oscillator) --> (result(oscillator))out ]'oscillator;
-[report : done(condensate) --> (result(condensate))out ]'condensate;
+[excite : excite --> (quantum)in_oscillator ]'skin;
+
+[raise   : quantum * fuel --> level(1) ]'oscillator;
+[descend : level(1) --> (quantum)in_sub_osc ]'oscillator;
+
+[geometric_gap : quantum * fuel --> level(prime_scaled) ]'sub_osc;
+[sub_raise     : level(prime_scaled) --> sublevel(1) ]'sub_osc;
+
+[condense : level(1) --> (boson)in_condensate ]'oscillator;
+[condense : sublevel(1) --> (boson)out ]'sub_osc;
+
+[collect : boson * fuel --> condensate(ground) ]'condensate;
+[no_vacuum : condensate(ground) --> condensate(ground) * boson ]'condensate;
+
+[report : condensate(ground) --> (result(condensate))out ]'condensate;

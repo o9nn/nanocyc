@@ -1,34 +1,90 @@
 /* ============================================================================
  * psystems/ch04/ch04_microtubule_interference.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.6
- * Functionality: Quantum interference and fractal interference experiment on a single microtubule.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.6 (quantum interference and fractal interference experiment on
+ *                a single microtubule)
+ * Functionality: A single microtubule is the bench on which the difference
+ *   between quantum and fractal interference is made visible. In the QUANTUM
+ *   interference arm, a probe photon is split into two amplitudes that travel
+ *   the two protofilament paths of the microtubule and recombine: the output
+ *   is the classic two-path fringe — constructive where the path phases agree,
+ *   destructive where they differ by half a period, and ONE universal action
+ *   quantum h governs the phase accrued per unit length. In the FRACTAL
+ *   interference arm the same two paths are driven as time crystals: each path
+ *   is a clock with its OWN action quantum (4.4), and the two paths interfere
+ *   not by amplitude addition but by phase transport through the singularity
+ *   where the protofilaments meet. The fractal fringe therefore carries a fine
+ *   structure the quantum fringe cannot: a fringe WITHIN a fringe, one for
+ *   each scale at which the microtubule clocks. Reading both fringes off one
+ *   microtubule is the experiment that tells quantum and fractal apart.
+ *
+ *   Two arm membranes (mt_q quantum, mt_f fractal) are siblings inside the
+ *   skin; each takes a probe, runs it down two paths, recombines, and reports
+ *   its fringe.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (quantum_phase)
+ * Initial multiset: the skin holds one probe per arm; each arm holds two path
+ *                   clocks and fuel so the simulator runs at least one split/
+ *                   recombine cycle.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.6): one microtubule, two interference arms.
+ *
+ *   skin (the single microtubule under test)
+ *     '- mt_q  : the QUANTUM arm — two amplitude paths, one universal h
+ *     '- mt_f  : the FRACTAL arm — two clock paths, per-scale action quanta
+ *
+ * The arms are siblings so the same probe is run through both and their
+ * fringes compared at the skin.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'mt_q []'mt_f ]'skin;
 
-@mskin = seed;
-@mmt_q = unit(mt_q), fuel;
-@mmt_f = unit(mt_f), fuel;
+/* Sample initial multiset. */
+@mskin = probe, probe;
+@mmt_q = path(1), path(2), action(h), fuel;
+@mmt_f = clock(1), clock(2), sing(junction), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * inject        : the skin feeds one probe into each arm
+ *
+ * -- quantum arm (4.6) -----------------------------------------------------
+ * q_split       : the probe splits into two amplitudes, one per protofilament
+ *                 path
+ * q_accrued     : each amplitude accrues phase at the SAME universal rate h
+ *                 per unit length — quantum phase is single-scaled
+ * q_recombine   : the two amplitudes recombine — the fringe is constructive
+ *                 where the path phases agree, destructive where they differ
+ *                 by half a period; ONE fringe, governed by one h
+ *
+ * -- fractal arm (4.6) -----------------------------------------------------
+ * f_split       : the probe drives two clock paths, each with its OWN action
+ *                 quantum — the paths are time crystals, not bare amplitudes
+ * f_transport   : the paths interfere by phase transport THROUGH the
+ *                 singularity at the protofilament junction, not by amplitude
+ *                 addition (cf. ch04_fractal_mechanics.pli)
+ * f_fringe      : the fractal fringe has fine structure — a fringe WITHIN a
+ *                 fringe, one per scale at which the microtubule clocks; this
+ *                 is the signature no quantum fringe can produce
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_mt_q ]'skin;
-[seed_dispense : seed --> (work)in_mt_f ]'skin;
-[step : work * unit(mt_q) * fuel --> done(mt_q) ]'mt_q;
-[step : work * unit(mt_f) * fuel --> done(mt_f) ]'mt_f;
-[report : done(mt_q) --> (result(mt_q))out ]'mt_q;
-[report : done(mt_f) --> (result(mt_f))out ]'mt_f;
+[inject : probe --> (probe)in_mt_q ]'skin;
+[inject : probe --> (probe)in_mt_f ]'skin;
+
+[q_split : probe * path(1) * path(2) * fuel --> amp(1) * amp(2) ]'mt_q;
+[q_accrued : amp(P) * action(h) --> amp(P,phase) ]'mt_q;
+[q_recombine : amp(1,phase) * amp(2,phase) --> fringe(single) ]'mt_q;
+
+[f_split : probe * clock(1) * clock(2) * fuel --> tick(1) * tick(2) ]'mt_f;
+[f_transport : tick(1) * tick(2) * sing(junction) --> phase_shift(1,2) ]'mt_f;
+[f_fringe : phase_shift(1,2) --> fringe(nested) ]'mt_f;
+
+[report : fringe(single) --> (result(quantum))out ]'mt_q;
+[report : fringe(nested) --> (result(fractal))out ]'mt_f;

@@ -1,34 +1,97 @@
 /* ============================================================================
  * psystems/ch04/ch04_energy_worlds.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.2.4, 4.4
- * Functionality: Energy in the world of many interacting imaginary worlds; action is not limited to Planck's constant — every imaginary world has one.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.2.4 (what is energy in the world of many interacting imaginary
+ *                  worlds?),
+ *           4.4   (action is not limited to Planck's constant — every
+ *                  imaginary world has one)
+ * Functionality: In a single-world mechanics, energy is the conserved generator
+ *   of time translation and action is bounded below by Planck's constant h.
+ *   In the world of MANY interacting imaginary worlds both ideas generalise.
+ *   ENERGY becomes the currency of phase exchange between worlds: a world's
+ *   energy is not an absolute scalar but its capacity to shift the phases of
+ *   OTHER worlds through their shared singularities; the total is conserved
+ *   only across the WHOLE assembly, not world by world. And ACTION is not a
+ *   universal floor: EVERY imaginary world carries its OWN action quantum —
+ *   its own "Planck constant" set by the period of its own clock. A
+ *   slow-clocked world has a coarse action quantum, a fast-clocked world a
+ *   fine one, so a process that is indivisible in one world is smooth in
+ *   another. Planck's constant is demoted from a law of nature to the action
+ *   quantum of OUR world.
+ *
+ *   Two world membranes run as siblings, each with its own action quantum
+ *   (h_a, h_b); an exchange membrane lets a quantum of action cross from one
+ *   world to the other, conserving the total across the assembly.
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (resonance_frequency)
+ * Initial multiset: each world holds its own action quantum and energy; the
+ *                   exchange membrane holds a transfer token so the simulator
+ *                   runs at least one exchange step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'world_a []'world_b ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.2.4/4.4): two worlds, each with its own h.
+ *
+ *   skin
+ *     '- world_a  : imaginary world A — slow clock, coarse action quantum h_a
+ *     '- world_b  : imaginary world B — fast clock, fine action quantum h_b
+ *     '- exchange : the corridor where action crosses between worlds
+ *
+ * Worlds are siblings (parallel imaginary worlds); action crosses world ->
+ * skin -> exchange -> skin -> world, never directly sibling-to-sibling.
+ * ------------------------------------------------------------------------*/
+@mu = [ []'world_a []'world_b []'exchange ]'skin;
 
-@mskin = seed;
-@mworld_a = unit(world_a), fuel;
-@mworld_b = unit(world_b), fuel;
+/* Sample initial multiset: each world carries its OWN action quantum. */
+@mskin     = mediate;
+@mworld_a  = action(h_a), energy(3), fuel;
+@mworld_b  = action(h_b), energy(8), fuel;
+@mexchange = transfer, fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * -- 4.4 every world has its own action quantum ----------------------------
+ * own_quantum   : each world ticks with its OWN action quantum — h_a for the
+ *                 slow world, h_b for the fast; the quantum of action is the
+ *                 world's clock period, not a universal constant
+ * no_univ_floor : indivisibility is RELATIVE to a world: a quantum that is
+ *                 atomic in the coarse world is divisible in the fine one —
+ *                 Planck's constant is one world's action, not nature's floor
+ *
+ * -- 4.2.4 energy as inter-world phase currency ----------------------------
+ * spend         : a world spends one unit of energy to push a phase token
+ *                 toward the exchange corridor — energy is the capacity to
+ *                 shift ANOTHER world's phase, not an absolute scalar
+ * cross         : the phase token crosses the exchange membrane — this is the
+ *                 only channel through which one world's energy reaches another
+ * credit        : the target world receives the phase shift as an energy
+ *                 credit — its clock advances by the amount the sender spent
+ * conserve      : sender's loss equals receiver's gain — energy is conserved
+ *                 only across the WHOLE assembly of worlds, never within one
+ *                 world alone (a single world's books need not balance)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_world_a ]'skin;
-[seed_dispense : seed --> (work)in_world_b ]'skin;
-[step : work * unit(world_a) * fuel --> done(world_a) ]'world_a;
-[step : work * unit(world_b) * fuel --> done(world_b) ]'world_b;
-[report : done(world_a) --> (result(world_a))out ]'world_a;
-[report : done(world_b) --> (result(world_b))out ]'world_b;
+[own_quantum : action(h_a) * fuel --> tick_a ]'world_a;
+[own_quantum : action(h_b) * fuel --> tick_b ]'world_b;
+
+[no_univ_floor : tick_a --> quantum(coarse) ]'world_a;
+[no_univ_floor : tick_b --> quantum(fine) ]'world_b;
+
+[spend : energy(n) * fuel --> energy(n1) * (phase_push)out ]'world_a;
+
+[admit : phase_push --> (phase_push)in_exchange ]'skin;
+[cross : phase_push * transfer * fuel --> (phase_shift)out ]'exchange;
+
+[credit : phase_shift --> (phase_shift)in_world_b ]'skin;
+[credit : phase_shift * energy(m) --> energy(m1) ]'world_b;
+
+[conserve : energy(n1) * phase_push --> books(balance) ]'world_a;
+
+[report : books(balance) --> (result(conserved))out ]'world_a;
+[report : energy(m1) --> (result(world_b))out ]'world_b;

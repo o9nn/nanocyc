@@ -1,38 +1,107 @@
 /* ============================================================================
  * psystems/ch04/ch04_clock_arithmetic.pli
  *
- * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric algebra for a dodecanion brain
+ * NanoBrain CH04: Fractal mechanics is not quantum but original: geometric
+ * algebra for a dodecanion brain
  * Issue #9 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 4.8, 4.8.1-4.8.2
- * Functionality: Basic mathematics using clocks: numbers, equations, + - x /, differentiation, integration, PDEs and Lie algebra.
- * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 4.8   (basic mathematics using clocks),
+ *           4.8.1 (writing numbers, equations, addition, subtraction,
+ *                  multiplication, division),
+ *           4.8.2 (differentiation, integration and partial differential
+ *                  equations: Lie algebra)
+ * Functionality: All arithmetic is done BY CLOCKS. A NUMBER is a phase on the
+ *   11-cycle (the clock's position); an EQUATION is the assertion that two
+ *   clocks read the same phase. The four operations are clock compositions:
+ *   ADDITION advances a clock by the sum of two phases (the ticks add);
+ *   SUBTRACTION advances by a phase and back by another (ticks cancel);
+ *   MULTIPLICATION runs one clock's period per tick of another (rates
+ *   multiply); DIVISION counts how many times one period fits into another
+ *   (the quotient is a tick ratio). DIFFERENTIATION is the clock's own tick
+ *   rate — how fast the phase moves per step, the infinitesimal generator;
+ *   INTEGRATION is accumulating ticks into a total phase; a PARTIAL
+ *   DIFFERENTIAL EQUATION is a constraint coupling the tick rates of several
+ *   clocks at once. Because every operation is a clock composition, the
+ *   compositions close under a LIE ALGEBRA: the commutator of two operations
+ *   is the clock that measures how the order of two phase-shifts fails to
+ *   commute — the Lie bracket is the non-commutativity of clocks.
+ *
+ *   Three sibling membranes: arith (4.8.1 four operations), calculus (4.8.2
+ *   differentiation/integration/PDE), and lie (the bracket structure).
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               src/cpp/nanobrain_time_crystal.h (quantum_phase)
+ * Initial multiset: each membrane holds operand phases and fuel so the
+ *                   simulator runs at least one arithmetic/calculus/bracket
+ *                   step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* --------------------------------------------------------------------------
+ * Membrane structure (4.8): mathematics as clock composition.
+ *
+ *   skin
+ *     '- arith    : 4.8.1 — numbers, equations, + - x / as phase compositions
+ *     '- calculus : 4.8.2 — differentiate, integrate, PDEs as tick couplings
+ *     '- lie      : the Lie algebra closing the clock compositions
+ *
+ * Three siblings: the four operations, the calculus, and the bracket are
+ * studied as separate clock-machines fed by the skin.
+ * ------------------------------------------------------------------------*/
 @mu = [ []'arith []'calculus []'lie ]'skin;
 
-@mskin = seed;
-@marith = unit(arith), fuel;
-@mcalculus = unit(calculus), fuel;
-@mlie = unit(lie), fuel;
+/* Sample initial multiset. */
+@mskin     = op, op, op;
+@marith    = phase(a), phase(b), fuel;
+@mcalculus = clock(f), step, fuel;
+@mlie      = shift(X), shift(Y), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * -- 4.8.1 numbers, equations, four operations ------------------------------
+ * number_is_phase : a number IS a clock phase; two numbers are equal when
+ *                 their clocks read the same phase (an equation)
+ * add           : ADDITION — advance the clock by phase a then phase b; the
+ *                 result is the combined tick (a+b) on the cycle
+ * subtract      : SUBTRACTION — advance by a and back by b; the ticks cancel
+ * multiply      : MULTIPLICATION — run clock b's period once per tick of a;
+ *                 rates multiply, giving the product phase
+ * divide        : DIVISION — count how many periods of b fit in one of a; the
+ *                 quotient is the tick ratio
+ *
+ * -- 4.8.2 differentiation, integration, PDEs -------------------------------
+ * differentiate : DIFFERENTIATION — the derivative is the clock's tick rate:
+ *                 how far the phase moves per step (the infinitesimal
+ *                 generator of the clock's motion)
+ * integrate     : INTEGRATION — accumulate the per-step ticks into a total
+ *                 phase; the integral is the running sum of ticks
+ * pde           : a PARTIAL DIFFERENTIAL EQUATION couples the tick rates of
+ *                 several clocks at once — one constraint over many phases
+ *
+ * -- Lie algebra (4.8.2) ----------------------------------------------------
+ * bracket       : the LIE BRACKET [X,Y] is the residual clock left after
+ *                 doing shift X then Y versus Y then X — the commutator
+ *                 measures how two phase-shifts fail to commute; clock
+ *                 compositions close under it, forming the Lie algebra
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_arith ]'skin;
-[seed_dispense : seed --> (work)in_calculus ]'skin;
-[seed_dispense : seed --> (work)in_lie ]'skin;
-[step : work * unit(arith) * fuel --> done(arith) ]'arith;
-[step : work * unit(calculus) * fuel --> done(calculus) ]'calculus;
-[step : work * unit(lie) * fuel --> done(lie) ]'lie;
-[report : done(arith) --> (result(arith))out ]'arith;
-[report : done(calculus) --> (result(calculus))out ]'calculus;
-[report : done(lie) --> (result(lie))out ]'lie;
+[op_route : op --> (op)in_arith ]'skin;
+[op_route : op --> (op)in_calculus ]'skin;
+[op_route : op --> (op)in_lie ]'skin;
+
+[number_is_phase : phase(a) * phase(a) --> equal(same_phase) ]'arith;
+[add      : phase(a) * phase(b) * fuel --> sum(a_plus_b) ]'arith;
+[subtract : phase(a) * phase(b) --> diff(a_minus_b) ]'arith;
+[multiply : phase(a) * phase(b) --> product(a_times_b) ]'arith;
+[divide   : phase(a) * phase(b) --> quotient(a_over_b) ]'arith;
+
+[differentiate : clock(f) * step * fuel --> derivative(tick_rate) ]'calculus;
+[integrate     : derivative(tick_rate) --> integral(total_phase) ]'calculus;
+[pde           : clock(f) * clock(g) --> constraint(coupled_rates) ]'calculus;
+
+[bracket : shift(X) * shift(Y) * fuel --> commutator(XY_minus_YX) ]'lie;
+[bracket : commutator(XY_minus_YX) --> lie_bracket(X,Y) ]'lie;
+
+[report : sum(a_plus_b) --> (result(arith))out ]'arith;
+[report : integral(total_phase) --> (result(calculus))out ]'calculus;
+[report : lie_bracket(X,Y) --> (result(lie))out ]'lie;
