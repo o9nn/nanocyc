@@ -1,30 +1,77 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric6_holes.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.7
- * Functionality: Metric 6: empty space in the divisor ordering phase plot finds holes.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.7 — Metric 6: empty space in the plot of the ordering of
+ *           divisors in the phase plot finds holes (PPM-6, Figure 3.6d).
+ *
+ * Model (from the book):
+ *   Same polar plot as Metric 3, but as Nmax grows the lines connecting
+ *   the OF / CN / SN / NC values never pass through particular points.
+ *   These EMPTY (silent) points are not random: they are the invisible
+ *   points of an attractor, and they arrange themselves on circles whose
+ *   diameters generate the infinite series of e, pi and phi — three
+ *   fundamental constants regulating the clocking direction by creating
+ *   null points over the entire integer space. The holes mark where a
+ *   journey through a singularity can enter: looping circles one inside
+ *   another is CONTINUED FRACTION GEOMETRIC ALGEBRA (CFGA) — drawing
+ *   only circles, yet solving the integration of infinite mathematical
+ *   series. Around a density peak at N ~ prime1 x 10^+-prime2 the
+ *   non-linear prime distribution triggers structural phase transitions
+ *   of the metric.
+ *
+ * Membranes:
+ *   plot   : sweeps the polar OF plot, sorting each phase cell into a hit
+ *            (a value line passes) or a hole (no line ever passes)
+ *   holes  : collects the holes and shows they are not random — they fall
+ *            on the constant circles
+ *   cfga   : the constant circles loop one inside another, generating the
+ *            infinite series for e, pi, phi (continued fraction geometric
+ *            algebra)
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric6_HoleFinder, PrimeHole)
+ * Initial multiset: a phase sweep with sample hits and an empty cell;
+ *                   runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric6 ]'skin;
+@mu = [ []'plot []'holes []'cfga ]'skin;
 
-@mskin = seed;
-@mmetric6 = unit(metric6), fuel;
+/* Sample initial multiset: one sweep of the polar plot. */
+@mskin = idle;
+@mplot = sweep(360), hit(12, 8), hit(30, 10), empty(18, 0);
+@mholes = fuel;
+@mcfga = series(e), series(pi), series(phi);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * plot : the sweep classifies every polar cell
+ *   pass : a connecting line passes — the cell is a metric point
+ *   hole : no S / OF / D value ever lands here — the cell is a silent
+ *          point of the phase plot
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric6 ]'skin;
-[step : work * unit(metric6) * fuel --> done(metric6) ]'metric6;
-[report : done(metric6) --> (result(metric6))out ]'metric6;
+[pass : sweep(P) * hit(A, V) --> plotted(A, V) ]'plot;
+[hole : sweep(P) * empty(A, V) --> (hole(A))out ]'plot, 1;
+[route_hole : hole(A) --> (hole(A))in_holes ]'skin;
+
+/* --------------------------------------------------------------------------
+ * holes : the empty points are invisible attractor points; they are NOT
+ *         randomly distributed — a global phase regulation arranges them
+ * ------------------------------------------------------------------------*/
+[attract : hole(A) * fuel --> attractor_point(A) ]'holes;
+[regulate : attractor_point(A) --> (null_point(A))out ]'holes;
+
+/* --------------------------------------------------------------------------
+ * cfga : the silent points arrange on circles whose diameters generate the
+ *        infinite series of the fundamental constants e, pi and phi;
+ *        looping the circles one inside another IS the continued fraction
+ *        geometric algebra — the non-existent features of the PPM integrate
+ *        infinite series
+ * ------------------------------------------------------------------------*/
+[circle_const : series(K) --> circle(K) ]'cfga;
+[loop : circle(K) * null_point(A) --> looped(K, A) ]'cfga, 1;
+[inject_null : null_point(A) --> (null_point(A))in_cfga ]'skin;
+[report : looped(K, A) --> (constant_circle(K))out ]'cfga;

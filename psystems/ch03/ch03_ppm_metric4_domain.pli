@@ -1,30 +1,72 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric4_domain.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.5
- * Functionality: Metric 4: a domain of integers sets a limit on the usable 15 primes.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.5 — Metric 4: a domain of integers sets a limit on the
+ *           usable 15 primes (PPM-4, Figure 3.6a-c).
+ *
+ * Model (from the book):
+ *   The OF-N metric rises so fast with N that the angle of the line from
+ *   the OF center (N = 0) to the front of the plot is the observable:
+ *   initially the slope grows, above N = 10000 it saturates, and by
+ *   N = 1 million the slope curve has closed into a circle (90 deg = the
+ *   line is tangent). Saturation means no NEW pattern arrives from
+ *   infinity — larger integers retrace the teardrops and loops already
+ *   drawn by smaller ones. The natural domain limit is therefore
+ *     Nmax = 2*3*5*7*11*13*17*19*23*29*31*37 = 7.42 x 10^12
+ *   the product of the first 12 primes (only 12 contribute to 99.99%;
+ *   primes 13-15 barely matter). Beyond 47 or 53 new primes hardly
+ *   regulate any event statistically. The artificial brain is built as
+ *   10^11-10^12 clocks treated as ONE clock: when the metric reaches
+ *   Nmax, that final number is taken as 1 and the plot RESTARTS — the
+ *   book repeats the cycle four times (Figure 3.6c).
+ *
+ * Membranes:
+ *   slope  : tracks the OF-center angle as N grows
+ *   limit  : accumulates the product of the first 12 primes into Nmax and
+ *            restarts the count when saturation is reached
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric4_DomainLimit)
+ * Initial multiset: slope observations plus the 12 primes of the domain
+ *                   product; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric4 ]'skin;
+@mu = [ []'slope []'limit ]'skin;
 
-@mskin = seed;
-@mmetric4 = unit(metric4), fuel;
+/* Sample initial multiset. */
+@mskin = idle;
+@mslope = obs(10, 20), obs(10000, 80), obs(1000000, 90);
+@mlimit = prime(2), prime(3), prime(5), prime(7), prime(11), prime(13),
+          prime(17), prime(19), prime(23), prime(29), prime(31), prime(37);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * slope membrane: the angle of the OF-center line
+ * grow     : below N = 10000 the slope still rises with N
+ * saturate : above N = 10000 the slope no longer increases — the metric is
+ *            retracing its own loops, no new feedback from infinity
+ * circle   : at 90 deg the phase plot has closed into a circle (tangent)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric4 ]'skin;
-[step : work * unit(metric4) * fuel --> done(metric4) ]'metric4;
-[report : done(metric4) --> (result(metric4))out ]'metric4;
+[grow : obs(N, A) --> slope(N, A) ]'slope;
+[saturate : obs(N, A) --> saturated(N) ]'slope, 1;
+[circle : obs(N, 90) --> closed(N) ]'slope, 2;
+[report_slope : closed(N) --> (slope_circle(N))out ]'slope;
+
+/* --------------------------------------------------------------------------
+ * limit membrane: Nmax from the product of the first 12 primes
+ * multiply : the running product absorbs one prime per firing
+ * cap      : the full 12-prime product 7.42 x 10^12 is the domain cap —
+ *            12 primes cover 99.99% of the integer space, so a decision
+ *            system of 10^11-10^12 clocks needs no larger metric
+ * restart  : once capped, the domain folds back: Nmax becomes the new 1 and
+ *            the metric restarts its count (the cycle repeats, Figure 3.6c)
+ * ------------------------------------------------------------------------*/
+[multiply : product_acc(A) * prime(P) --> product_acc(A*P) ]'limit;
+[cap : prime(2) * prime(3) * prime(5) * prime(7) * prime(11) * prime(13)
+     * prime(17) * prime(19) * prime(23) * prime(29) * prime(31)
+     * prime(37) --> nmax(742000000000) ]'limit, 1;
+[restart : nmax(M) --> (domain_restart(M))out ]'limit;

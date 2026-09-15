@@ -1,38 +1,108 @@
 /* ============================================================================
  * psystems/ch03/ch03_prime_classes.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.16, 3.16.1-3.16.2
- * Functionality: Three classes of primes: ordered-factor metric OF, prime-composition metric PC, prime-gap metric PG; advantages of PPM.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.16 — Three classes of primes;
+ *           3.16.1 — Ordered factor metric OF, prime composition metric PC
+ *                    and prime gap metric PG (Figure 3.16);
+ *           3.16.2 — Advantages of PPM (Figure 3.17).
+ *
+ * Model (from the book):
+ *   Three metric classes drive the artificial brain in sequence — in
+ *   three layers the language of geometry brings integers from nature,
+ *   the language of primes brings symmetries from geometries, and the
+ *   language of symmetries brings the abstract language nature speaks.
+ *
+ *   OF (class I)  : ordered factor of N vs N. The input metric — most
+ *                   sensors are configured as this metric. Input data is
+ *                   11D from 12 imaginary worlds but holds 4D dynamics
+ *                   (a quaternion-like structure: simultaneous changes in
+ *                   four imaginary worlds at a time).
+ *   PC (class II) : the prime composition metric — the point where
+ *                   information from the external world is converted into
+ *                   the LANGUAGE OF PRIMES: a language with few letters
+ *                   (15 primes) writing infinitely many words. Any 3D
+ *                   structure is re-expressed as a ratio of primes. A
+ *                   feedback loop lifts the dynamics from 4D to 8D (8 of
+ *                   the 12 imaginary worlds).
+ *   PG (class III): the prime gap metric — the deepest core (analogous to
+ *                   the 47 Brodmann regions). All integers on the
+ *                   horizontal axis, the gap between primes on the
+ *                   vertical; it links pairs of primes, the non-geometric
+ *                   part of the pattern. A feedback loop synchronizes the
+ *                   symmetries from 8D to 12D.
+ *
+ *   Advantages (3.16.2, Figure 3.17): retrieving lost data from a
+ *   transmitted fraction; the drive to integrate discrete time crystals;
+ *   providing key information to rewire clocks; location/start/end/
+ *   halting of computing decided early; the non-reductionist approach
+ *   (no choice is ever rejected); quantum-like speedup without
+ *   entanglement (the fractal network); directional memory of virtually
+ *   infinite capacity. When the language of 15 primes meets the language
+ *   of 15 geometric shapes, the non-computer glues the user to nature.
+ *
+ * Membranes:
+ *   of_class : class I — sensory input metric (OF vs N)
+ *   pc_class : class II — prime language conversion with 4D -> 8D feedback
+ *   pg_class : class III — prime-gap core with 8D -> 12D feedback
+ *   advantages : the PPM advantage checklist (Figure 3.17)
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric2_OrderedFactor,
+ *               PPMCoherenceTable), src/cpp/nanobrain_brain_model.h
+ * Initial multiset: one raw sensory input, dimensional tokens and the
+ *                   advantage tokens; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'of_class []'pc_class []'pg_class ]'skin;
+@mu = [ []'of_class []'pc_class []'pg_class []'advantages ]'skin;
 
-@mskin = seed;
-@mof_class = unit(of_class), fuel;
-@mpc_class = unit(pc_class), fuel;
-@mpg_class = unit(pg_class), fuel;
+/* Sample initial multiset. */
+@mskin = sensory(input4d);
+@mof_class = fuel;
+@mpc_class = fuel;
+@mpg_class = fuel;
+@madvantages = adv(retrieve), adv(integrate), adv(rewire), adv(halt),
+               adv(nonreductionist), adv(speedup), adv(memory);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * OF class : the sensory entry — divisors of the input integers nucleate
+ *            new clocks; the 4D dynamic feature is extracted as a
+ *            quaternion-like structure and sent on to class II
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_of_class ]'skin;
-[seed_dispense : seed --> (work)in_pc_class ]'skin;
-[seed_dispense : seed --> (work)in_pg_class ]'skin;
-[step : work * unit(of_class) * fuel --> done(of_class) ]'of_class;
-[step : work * unit(pc_class) * fuel --> done(pc_class) ]'pc_class;
-[step : work * unit(pg_class) * fuel --> done(pg_class) ]'pg_class;
-[report : done(of_class) --> (result(of_class))out ]'of_class;
-[report : done(pc_class) --> (result(pc_class))out ]'pc_class;
-[report : done(pg_class) --> (result(pg_class))out ]'pg_class;
+[nucleate : sensory(X) * fuel --> divisors(X) * dyn4d(X) ]'of_class;
+[emit_of : dyn4d(X) --> (of_out(X))out ]'of_class, 1;
+[route_of : of_out(X) --> (of_out(X))in_pc_class ]'skin;
+
+/* --------------------------------------------------------------------------
+ * PC class : integers are converted into ratios of primes — the few
+ *            letters of the prime language; the feedback loop lifts the
+ *            dynamic content from 4D to 8D (eight imaginary worlds)
+ * ------------------------------------------------------------------------*/
+[to_primes : of_out(X) * fuel --> prime_ratio(X) * dyn8d(X) ]'pc_class;
+[emit_pc : prime_ratio(X) * dyn8d(X) --> (pc_out(X))out ]'pc_class, 1;
+[route_pc : pc_out(X) --> (pc_out(X))in_pg_class ]'skin;
+
+/* --------------------------------------------------------------------------
+ * PG class : the core metric — gaps between primes link pairs of primes
+ *            into the abstract pattern; the final feedback loop
+ *            synchronizes the symmetries from 8D to 12D — the output is
+ *            the identity nature speaks
+ * ------------------------------------------------------------------------*/
+[link_gaps : pc_out(X) * fuel --> prime_links(X) * dyn12d(X) ]'pg_class;
+[emit_pg : prime_links(X) * dyn12d(X) --> (identity(X))out ]'pg_class, 1;
+
+/* --------------------------------------------------------------------------
+ * advantages : each advantage of the PPM is checked off (Figure 3.17) —
+ *              with the language of 15 primes meeting the language of 15
+ *              geometric shapes, the non-computer searches outside by
+ *              itself instead of waiting for input
+ * ------------------------------------------------------------------------*/
+[check : adv(A) --> advantage(A) ]'advantages;
+[report_adv : advantage(A) --> (ppm_advantage(A))out ]'advantages;
+
+/* Final decision: the 12D identity is the brain's read-out of the input. */
+[decide : identity(X) --> decision(X) ]'skin;

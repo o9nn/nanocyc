@@ -1,42 +1,83 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric9_lattice.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.10
- * Functionality: Metric 9: lattice group of primes (twin, cousin, co-primes, Gaussian primes).
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.10 — Metric 9: lattice group of primes — twin primes,
+ *           cousin primes, co-primes and Gaussian primes (PPM-G / PPM-L,
+ *           Figure 3.10).
+ *
+ * Model (from the book):
+ *   Gaps between neighboring primes form GROUPS (tuples); a group of k
+ *   gaps repeats over the infinite integer space as a k-tuple, and every
+ *   occurrence of a k-tuple repeats a geometric feature of the PPM that
+ *   bonds the isolated shapes of its integers into one common shape. The
+ *   gap-frequency plot oscillates with peaks always at multiples of 6
+ *   (6 = 2x3), so the lattice is plotted only for multiples of 2 or 3 and
+ *   transforms into an infinite chain of circles/spheres — clocking is
+ *   embedded in the prime-gap frequency. Twin (gap 2), cousin (gap 4) and
+ *   sexy (gap 6) pairs, triplets like (5,11,17) and quadruplets like
+ *   (5,11,17,23) are all CLOCK GENERATORS. A prime expressible as
+ *   a^2 + b^2 = (a+ib)(a-ib) is GAUSSIAN (5, 13, 17, 29); its eight
+ *   divisors sit on a complex circle, and a tuple containing a Gaussian
+ *   prime activates the 4 = 1 clocking phase. Co-prime pairs (sharing no
+ *   divisor but 1) grow as the Stern-Brocot-like tree from the (2,1)
+ *   node, triplets of groups throughout; the Hasse energy flow of
+ *   Chapter 9 runs primarily on the Fibonacci primes.
+ *
+ * Membranes:
+ *   twin / cousin / coprime / gaussian : one classifier per lattice group
+ *   lattice : gap constellations repeat as k-tuples; a Gaussian member
+ *             activates the clocking phase of the whole tuple
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric9_PrimeLattice,
+ *               PrimeLatticeNode, are_coprime)
+ * Initial multiset: sample pairs (3,5), (3,7), (8,9) and the Gaussian
+ *                   prime 5; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'twin []'cousin []'coprime []'gaussian ]'skin;
+@mu = [ []'twin []'cousin []'coprime []'gaussian []'lattice ]'skin;
 
-@mskin = seed;
-@mtwin = unit(twin), fuel;
-@mcousin = unit(cousin), fuel;
-@mcoprime = unit(coprime), fuel;
-@mgaussian = unit(gaussian), fuel;
+/* Sample initial multiset. */
+@mskin = pair(3,5), pair(3,7), pair(8,9), prime_sq(5, 1, 2);
+@mtwin = fuel;
+@mcousin = fuel;
+@mcoprime = fuel;
+@mgaussian = fuel;
+@mlattice = tuple(5,11,17);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * Group classifiers (the gap tags stand in for the numeric guards the
+ * simulator applies with full pLinguaCore arithmetic).
+ * twin    : gap 2 — (3,5), (5,7), (11,13), ...
+ * cousin  : gap 4 — (3,7), (7,11), (13,17), ...
+ * coprime : gcd = 1 — pairs sharing no divisor but 1 build the co-prime
+ *           tree whose generations run in rainbow order from node (2,1)
+ * gaussian: p = a^2 + b^2 — the eight divisors sit on a complex circle
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_twin ]'skin;
-[seed_dispense : seed --> (work)in_cousin ]'skin;
-[seed_dispense : seed --> (work)in_coprime ]'skin;
-[seed_dispense : seed --> (work)in_gaussian ]'skin;
-[step : work * unit(twin) * fuel --> done(twin) ]'twin;
-[step : work * unit(cousin) * fuel --> done(cousin) ]'cousin;
-[step : work * unit(coprime) * fuel --> done(coprime) ]'coprime;
-[step : work * unit(gaussian) * fuel --> done(gaussian) ]'gaussian;
-[report : done(twin) --> (result(twin))out ]'twin;
-[report : done(cousin) --> (result(cousin))out ]'cousin;
-[report : done(coprime) --> (result(coprime))out ]'coprime;
-[report : done(gaussian) --> (result(gaussian))out ]'gaussian;
+[class_twin : pair(3,5) * fuel --> twin(3,5) ]'twin;
+[class_cousin : pair(3,7) * fuel --> cousin(3,7) ]'cousin;
+[class_coprime : pair(8,9) * fuel --> coprime(8,9) ]'coprime;
+[class_gauss : prime_sq(P, A, B) * fuel --> gaussian(P, A, B) ]'gaussian;
+
+[emit_twin : twin(P,Q) --> (kgroup(twin, P, Q))out ]'twin;
+[emit_cousin : cousin(P,Q) --> (kgroup(cousin, P, Q))out ]'cousin;
+[emit_coprime : coprime(P,Q) --> (kgroup(coprime, P, Q))out ]'coprime;
+[emit_gauss : gaussian(P,A,B) --> (kgroup(gaussian, P, A))out ]'gaussian;
+
+[route_k : kgroup(K, P, Q) --> (kgroup(K, P, Q))in_lattice ]'skin;
+
+/* --------------------------------------------------------------------------
+ * lattice : constellations repeat as k-tuples over the integer space; each
+ *           repetition re-bonds the shapes of its integers into one common
+ *           geometric shape, and a Gaussian member activates the 4 = 1
+ *           clocking phase of the tuple — the tuples are clock generators
+ * ------------------------------------------------------------------------*/
+[repeat : tuple(A,B,C) --> ktuple(A,B,C) ]'lattice;
+[bond : ktuple(A,B,C) * kgroup(K, P, Q) --> bonded(K, P, Q) ]'lattice;
+[clock4 : bonded(gaussian, P, Q) --> clocking(P, 4eq1) ]'lattice, 1;
+[report_lattice : clocking(P, K) --> (clock_generator(P))out ]'lattice;
