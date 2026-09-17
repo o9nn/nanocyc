@@ -1,34 +1,94 @@
 /* ============================================================================
  * psystems/ch06/ch06_neuron_tc_map.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.8
- * Functionality: Measurement of a complete time-crystal map of a neuron.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.8 (the measurement of a complete time crystal map of a neuron).
+ *
+ * Functionality: To capture a neuron's complete time-crystal map one cannot
+ *   READ every bit — at GHz a material emits 10^9 bits/s and at THz 10^12
+ *   bits/s. Instead, do what the brain does: do not read, MATCH the 15 basic
+ *   geometric shapes (the phase relationships locked between signals) at all
+ *   time scales simultaneously. An array of coaxial atom probes reads the
+ *   highly active time zones of a single firing from microseconds down to
+ *   picoseconds — 12 channels simultaneously, each channel reading a few parts
+ *   of the whole time crystal (ions resonate in milliseconds, large dipoles in
+ *   microseconds, small dipoles in nanoseconds, atomic bonds in picoseconds).
+ *   All probes are synchronized by a GLOBAL MASTER CLOCK, and the local time
+ *   crystals are stored until higher-level clocks integrate them into one
+ *   universal time crystal (the topology of time is a circle; every pixel on
+ *   its perimeter zooms into another circle). The search topology — not the
+ *   raw data — reveals the geometric information: corners of the 15 shapes
+ *   shift to expose the neuron's time architecture.
+ *
+ *   Membranes:
+ *     skin (holds the global master clock and the 15-shape GML matcher)
+ *       |- probe_array : the 12-channel simultaneous multi-timescale reader
+ *       |    '- channel : one probe channel = one time scale (us..ps)
+ *       |- matcher    : matches the streams against the 15 GML shapes
+ *       '- integrator : higher-level clocks fuse the local crystals into the
+ *                       complete neuron time-crystal map
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — master clock tick, nested clocks
+ *     common/gml_shapes.pli        — the 15 shapes of the topology search
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (NeuronTimeCrystalMapper,
+ *               NeuronTimeCrystalMap, NeuronSegment, scale_hierarchy,
+ *               create_neuron_crystal_hierarchy, update_crystal_states)
+ * Initial multiset: a master-clock tick and the 15 GML shapes in the skin; a
+ *                   firing event in the probe array; per-channel time-scale
+ *                   tokens; matcher and integrator fuel.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'probe []'map ]'skin;
+/* channel nests in probe_array; matcher and integrator are siblings. */
+@mu = [ [ []'channel ]'probe_array []'matcher []'integrator ]'skin;
 
-@mskin = seed;
-@mprobe = unit(probe), fuel;
-@mmap = unit(map), fuel;
+@mskin        = master_clock, shape(1), shape(2), shape(3), shape(4), shape(5),
+                shape(6), shape(7), shape(8), shape(9), shape(10), shape(11),
+                shape(12), shape(13), shape(14), shape(15);
+@mprobe_array = firing_event, fuel;
+@mchannel     = timescale(us), timescale(ns), timescale(ps), fuel;
+@mmatcher     = match, fuel;
+@mintegrator  = fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.8 — simultaneous multi-timescale read under a global master clock.
+ * sync     : the master clock synchronizes every probe channel at once
+ * fan      : the firing event is delivered to the probe array
+ * read     : each channel reads its own time scale (us / ns / ps) of the SAME
+ *            firing — many clocks read at once, one per channel
+ * stream   : each channel emits its local time-crystal stream
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_probe ]'skin;
-[seed_dispense : seed --> (work)in_map ]'skin;
-[step : work * unit(probe) * fuel --> done(probe) ]'probe;
-[step : work * unit(map) * fuel --> done(map) ]'map;
-[report : done(probe) --> (result(probe))out ]'probe;
-[report : done(map) --> (result(map))out ]'map;
+[sync : master_clock --> (master_clock)in_probe_array ]'skin;
+[distribute : master_clock * firing_event * fuel --> local_event ]'probe_array;
+[to_channel : local_event --> (local_event)in_channel ]'probe_array;
+[fan : local_event --> (tick)in_channel ]'probe_array;
+[read : local_event * tick * timescale(T) * fuel --> crystal_stream(T) ]'channel;
+[stream : crystal_stream(T) --> (crystal_stream(T))out ]'channel;
+[collect : crystal_stream(T) --> (crystal_stream(T))out ]'probe_array;
+
+/* --------------------------------------------------------------------------
+ * Do not read — match the 15 geometric shapes at all time scales.
+ * route_m  : the skin sends each stream to the shape matcher
+ * match    : a stream locks onto the GML shape whose phase relationship it
+ *            carries (the topology search, not a bit read)
+ * ------------------------------------------------------------------------*/
+[route_m : crystal_stream(T) --> (crystal_stream(T))in_matcher ]'skin;
+[match_shape : crystal_stream(T) * shape(S) * match * fuel
+             --> phase_lock(T,S) ]'matcher;
+[matched : phase_lock(T,S) --> (phase_lock(T,S))out ]'matcher;
+
+/* --------------------------------------------------------------------------
+ * Higher-level clocks integrate the matched streams into the complete map.
+ * route_i  : the skin forwards matched phase-locks to the integrator
+ * fuse     : the per-timescale phase-locks fuse across scales — local crystals
+ *            are stored until higher-level clocks integrate them
+ * ------------------------------------------------------------------------*/
+[route_i : phase_lock(T,S) --> (phase_lock(T,S))in_integrator ]'skin;
+[fuse : phase_lock(T,S) * phase_lock(U,R) * fuel --> crystal_pair(T,U) ]'integrator;
+[integrate : crystal_pair(T,U) --> (result(neuron_time_crystal_map))out ]'integrator;

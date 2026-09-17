@@ -1,34 +1,87 @@
 /* ============================================================================
  * psystems/ch06/ch06_molecule_clock.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.3
- * Functionality: A single molecule's thermal diffusion emerges into a natural clock.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.3 (a single molecule's thermal diffusion emerges into a natural
+ *               clock).
+ *
+ * Functionality: On an Au(111) surface, N Duroquinone (DRQ) molecules spaced
+ *   ~9 nm apart each occupy one of M=4 logic states (00, 01, 10, 11). Driven
+ *   purely by THERMAL energy, the molecules diffuse and exchange logic states
+ *   collectively; a pair of DRQ molecules at the edge settles into PERIODIC
+ *   oscillation — thermal diffusion emerges into a natural clock. Because one
+ *   molecule's state represents the other N-1, the Shannon registration limit
+ *   of ln(M^N) ~ 5.52 nats (N=4) is reduced to ~1.39 nats of distinct
+ *   information; the exchange is analyzed with Shannon entropy H(V) and the
+ *   molecular-electronics information entropy (MESE), where P_NDR is a
+ *   Gaussian at threshold bias and P_Neu a sigmoid Boltzmann neuron over the
+ *   weighted neighbor sum S. N coupled quantum Boltzmann machines (QBMs),
+ *   extrapolated to an N-input/N-output net, realize a parallel processor
+ *   whose temporal memory survives within a sphere of diameter ~ (number of
+ *   molecules x dimension of a molecule) — the diffusion never escapes its
+ *   natural boundary, so the spontaneous state exchange IS the clock.
+ *
+ *   Membranes:
+ *     skin (the Au(111) surface / thermal bath boundary)
+ *       |- diffuse : thermal diffusion and collective logic-state exchange
+ *       |    '- edge : the molecule pair whose periodic oscillation is the clock
+ *       '- entropy : Shannon / MESE accounting of the exchange (H(V), MESE)
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — tick/clock emergence from a singularity
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (natural-clock emergence feeds
+ *               the TimeCrystalQuantumState; CellularAutomatonState grid),
+ *               src/cpp/nanobrain_time_crystal.h
+ * Initial multiset: four DRQ molecules on the surface, one threshold-bias
+ *                   source, and entropy-accounting tokens.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'diffuse []'clock ]'skin;
+/* edge nests in diffuse (the clock emerges at the diffusion boundary). */
+@mu = [ [ []'edge ]'diffuse []'entropy ]'skin;
 
-@mskin = seed;
-@mdiffuse = unit(diffuse), fuel;
-@mclock = unit(clock), fuel;
+@mskin    = thermal_energy, threshold_bias(vth);
+@mdiffuse = drq(m1), drq(m2), drq(m3), drq(m4), fuel;
+@medge    = pair(m1,m2);
+@mentropy = count_states, fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.3 — thermal diffusion emerges into a natural clock.
+ * inject   : the thermal bath and threshold bias drive the molecular surface
+ * exchange : two DRQ molecules collide and collectively swap logic states
+ *            (00/01/10/11) — one molecule's state represents the others
+ * confine  : the diffusion is confined to a sphere of diameter ~ N x molecule
+ *            dimension, so the exchange is a closed, repeatable cycle
+ * admit    : a confined pair is admitted to the edge to oscillate
+ * oscillate: thermal energy drives the pair into periodic oscillation — the
+ *            natural clock born of diffusion
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_diffuse ]'skin;
-[seed_dispense : seed --> (work)in_clock ]'skin;
-[step : work * unit(diffuse) * fuel --> done(diffuse) ]'diffuse;
-[step : work * unit(clock) * fuel --> done(clock) ]'clock;
-[report : done(diffuse) --> (result(diffuse))out ]'diffuse;
-[report : done(clock) --> (result(clock))out ]'clock;
+[inject_t : thermal_energy --> (thermal_energy)in_diffuse ]'skin;
+[inject_b : threshold_bias(vth) --> (threshold_bias(vth))in_diffuse ]'skin;
+[exchange : drq(A) * drq(B) * thermal_energy * fuel --> logic(A,S) * logic(B,S) ]'diffuse;
+[confine : logic(A,S) * threshold_bias(vth) --> confined(A,S) ]'diffuse;
+[admit : confined(A,S) --> (confined(A,S))in_edge ]'diffuse;
+[oscillate : confined(A,S) * pair(A,B) --> tick ]'edge;
+[clock_out : tick --> (tick)out ]'edge;
+
+/* --------------------------------------------------------------------------
+ * Entropy accounting (Shannon + MESE).
+ * shannon  : H(V) = -sum p_i log2 p_i over the exchange matrix; one molecule
+ *            representing N-1 reduces ln(M^N) ~ 5.52 nats to ~1.39 nats
+ * mese     : the molecular-electronics entropy weights P_NDR (Gaussian at the
+ *            threshold bias) by P_Neu (sigmoid Boltzmann over neighbor sum S)
+ * clock_is : the entropy-regularized exchange is reported as the natural clock
+ * ------------------------------------------------------------------------*/
+[inject_c : count_states --> (count_states)in_entropy ]'skin;
+[shannon : count_states * fuel --> shannon_limit(1_39_nats) ]'entropy;
+[mese : shannon_limit(1_39_nats) --> mese(gaussian,sigmoid) ]'entropy;
+[report_entropy : mese(gaussian,sigmoid) --> (entropy_account)out ]'entropy;
+
+/* Skin integration: the emergent tick, bounded by the entropy account, is the
+ * molecule's natural clock. */
+[emerge : tick * entropy_account --> result(natural_clock) ]'skin;

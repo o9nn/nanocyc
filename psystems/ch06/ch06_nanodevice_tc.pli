@@ -1,34 +1,105 @@
 /* ============================================================================
  * psystems/ch06/ch06_nanodevice_tc.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.2, 6.2.2
- * Functionality: Experiment on a single nano-device to find its time crystal; triplet-of-triplet resonance band in microtubule.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.2 (experiment on a single microtubule / nano-device to find its
+ *               time crystal),
+ *           6.2.2 (triplet of triplet resonance band in microtubule).
+ *
+ * Functionality:
+ *   6.2   To read a time crystal the pump and the probe must be separated by
+ *         ~10^6 in frequency: if input and output are captured in the SAME
+ *         frequency domain the system only undergoes hysteresis and reflects
+ *         the measuring device's geometry. The sample is pumped at 1-178 GHz
+ *         and probed at 1-50 MHz. An assembly of clocks is confirmed a time
+ *         crystal only if a perturbation exposes a COMPOSITION OF PHASE
+ *         SINGULARITIES that a regular hysteresis cannot explain (nested
+ *         clocks: a 1D crystal shows >=2 singularities, 2D shows 3, ...).
+ *   6.2.2 The microtubule transmits ac only in three distinct regions — a
+ *         TRIPLET OF TRIPLET band:
+ *           kHz   (10-100 kHz): one peak resolves into three, Q~3-5, the
+ *                  longest-sustained oscillation (protofilament oscillation);
+ *           MHz   (8-240 MHz): sharp peaks, Q~100-300, 16 prime resonance
+ *                  peaks (8 originals + 8 first harmonics) selected by length,
+ *                  with quantized phase modulation n*pi/4 — a phase-locked
+ *                  loop (originates in the protein's elastic modes);
+ *           GHz   (7-13 GHz): two Gaussian-like resonant transmissions,
+ *                  Q~1.5-2 (the water-channel resonance).
+ *         Removing the core water kills the GHz band; isolating protofilaments
+ *         kills the kHz band; the MHz band survives — the three bands are the
+ *         triplet, each nesting three sub-bands.
+ *
+ *   Membranes:
+ *     skin (the measurement tube: function generator <-> spectrum analyzer)
+ *       |- device  : the single nano-device under pump/probe (6.2)
+ *       |    '- perturb : perturbation exposes the phase singularities
+ *       '- mt_band : the triplet-of-triplet resonance band (6.2.2)
+ *            '- subband : each of the three bands nests three sub-bands
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — tick/clock nesting, singularity_point
+ *     common/alphabet_primes.pli   — prime(P) resonance peaks
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (TripletResonance,
+ *               TripletResonanceCascade, TRIPLET_INNER_BANDS=3,
+ *               TRIPLET_NESTING_DEPTH=3)
+ * Initial multiset: a pump (GHz) and probe (MHz) token in the skin; the device
+ *                   holds a clock assembly; mt_band holds the three band seeds.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'device []'mt_band ]'skin;
+/* perturb nests in device (singularities are exposed inside); subband in mt_band. */
+@mu = [ [ []'perturb ]'device [ []'subband ]'mt_band ]'skin;
 
-@mskin = seed;
-@mdevice = unit(device), fuel;
-@mmt_band = unit(mt_band), fuel;
+@mskin     = pump(ghz), probe(mhz);
+@mdevice   = clock_assembly, fuel;
+@mperturb  = pulse;
+@mmt_band  = band(khz), band(mhz), band(ghz), fuel;
+@msubband  = nest;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.2 — experiment on a single nano-device to find its time crystal.
+ * separate : pump and probe are kept ~10^6 orders apart in frequency so the
+ *            response is read in a DIFFERENT domain than the excitation
+ * drive    : the GHz pump excites the device; the MHz probe reads it back
+ * expose   : a perturbation pulse exposes the device's phase singularities
+ * confirm  : a COMPOSITION of singularities (>=2 nested) that hysteresis
+ *            cannot explain confirms the clock assembly is a time crystal
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_device ]'skin;
-[seed_dispense : seed --> (work)in_mt_band ]'skin;
-[step : work * unit(device) * fuel --> done(device) ]'device;
-[step : work * unit(mt_band) * fuel --> done(mt_band) ]'mt_band;
-[report : done(device) --> (result(device))out ]'device;
-[report : done(mt_band) --> (result(mt_band))out ]'mt_band;
+[separate : pump(ghz) * probe(mhz) --> pump(ghz) * probe(mhz) * separation(1e6) ]'skin;
+[send_pump : pump(ghz) --> (pump(ghz))in_device ]'skin;
+[send_probe : probe(mhz) --> (probe(mhz))in_device ]'skin;
+[drive : pump(ghz) * probe(mhz) * clock_assembly * fuel --> clocks_active ]'device;
+[send_pulse : clocks_active --> (clocks_active)in_perturb ]'device;
+[expose : clocks_active * pulse --> singularity(s1) * singularity(s2) ]'perturb;
+[confirm : singularity(s1) * singularity(s2) --> (time_crystal)out ]'perturb;
+
+/* --------------------------------------------------------------------------
+ * 6.2.2 — triplet of triplet resonance band in microtubule.
+ * resolve  : each outer band is admitted to the nesting membrane
+ * triplet  : one band resolves into three sub-bands (the inner triplet)
+ * select   : the MHz band's 16 prime peaks are length-selected (8 originals
+ *            plus 8 first harmonics) with quantized n*pi/4 phase modulation
+ * pll      : the MHz band acts as a phase-locked-loop oscillator
+ * origin   : attribute each band — kHz=protofilament, MHz=protein elastic,
+ *            GHz=water channel (removing the core water kills GHz)
+ * ------------------------------------------------------------------------*/
+[resolve : band(B) * fuel --> (band(B))in_subband ]'mt_band;
+[triplet : band(B) * nest --> sub(B,1) * sub(B,2) * sub(B,3) ]'subband;
+[select : sub(mhz,2) --> prime_peaks(16) * phase_lock(n_pi_4) ]'subband;
+[band_out : sub(B,K) --> (sub(B,K))out ]'subband;
+[origin : sub(khz,K) --> origin(protofilament) ]'mt_band;
+[origin : sub(mhz,K) --> origin(protein_elastic) ]'mt_band;
+[origin : sub(ghz,K) --> origin(water_channel) ]'mt_band;
+
+/* --------------------------------------------------------------------------
+ * Skin integration: a confirmed time crystal carrying its triplet-of-triplet
+ * band is the measured resonance map of the single nano-device.
+ * ------------------------------------------------------------------------*/
+[integrate : time_crystal * origin(protofilament) * origin(protein_elastic)
+             * origin(water_channel)
+           --> result(microtubule_triplet_of_triplet) ]'skin;

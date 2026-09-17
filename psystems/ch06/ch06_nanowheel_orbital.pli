@@ -1,34 +1,87 @@
 /* ============================================================================
  * psystems/ch06/ch06_nanowheel_orbital.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.6
- * Functionality: One-to-many and many-to-one orbital computing in a nano wheel.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.6 (one-to-many and many-to-one orbital computing in a nano
+ *               wheel).
+ *
+ * Functionality: Sequentialization is challenged by geometry. Put 16 DRQ
+ *   molecules in a LINE and an instruction to the first yields ONE output;
+ *   put the same 16 in a CIRCLE around a central molecule and the center
+ *   becomes a SIMULTANEOUS controller of all 16 — one atomic-needle touch on
+ *   the center changes all 16 ring molecules at once (observed by STM). The
+ *   orbital coupling lets the 16 molecules exhibit ~4 MILLION solutions in the
+ *   circular geometry where the linear arrangement delivers only one. This is
+ *   one-to-many (center -> all) and many-to-one (all -> center) computing:
+ *   all 16 molecules reply to the central query simultaneously — no one needs
+ *   to be asked who rings the bell. The truth table has no limit (a fractal
+ *   logic gate whose small part expands forever). Distinct ring arrangements
+ *   of the DRQs — classic (CLSIC), alternate clap (ALCLP), propeller (PRPRP),
+ *   furled bracket (FRBRKT), furled-bracket clap (FRBKCLP), all-vertical
+ *   (E90FB) and more — hold and operate several molecular motors at once.
+ *
+ *   Membranes:
+ *     skin (the STM / needle environment, routes the query and the reply)
+ *       |- wheel : the nano wheel
+ *       |    |- center : the central controller molecule (one-to-many source)
+ *       |    '- ring   : the 16 orbitally-coupled DRQ molecules (many-to-one)
+ *       '- linear : the 16-in-a-line control arrangement (sequential, 1 output)
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (orbital one-to-many /
+ *               many-to-one computing feeds CellularAutomatonState patterns)
+ * Initial multiset: a query/instruction token in the skin; the center holds a
+ *                   controller state; the ring holds the 16 molecular states;
+ *                   the linear control holds the 16-in-line state.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'hub []'rim ]'skin;
+/* center and ring nest in wheel; linear is the sibling control experiment. */
+@mu = [ [ []'center []'ring ]'wheel []'linear ]'skin;
 
-@mskin = seed;
-@mhub = unit(hub), fuel;
-@mrim = unit(rim), fuel;
+@mskin    = instruction(i1);
+@mcenter  = controller, fuel;
+@mring    = state(1), state(2), state(3), state(4), state(5), state(6),
+            state(7), state(8), state(9), state(10), state(11), state(12),
+            state(13), state(14), state(15), state(16), fuel;
+@mwheel   = orbit, fuel;
+@mlinear  = queue(1..16), fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.6 — one-to-many: the center controls all 16 ring molecules at once.
+ * query_in : the instruction enters the wheel and reaches the center
+ * touch    : the atomic needle sets the central molecule's state
+ * broadcast: the center's state is sent OUT to the wheel (one-to-many)
+ * fan_out  : the wheel delivers the central state into the ring (orbitally)
+ * respond  : every ring molecule changes state simultaneously on the central
+ *            command — no sequential addressing
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_hub ]'skin;
-[seed_dispense : seed --> (work)in_rim ]'skin;
-[step : work * unit(hub) * fuel --> done(hub) ]'hub;
-[step : work * unit(rim) * fuel --> done(rim) ]'rim;
-[report : done(hub) --> (result(hub))out ]'hub;
-[report : done(rim) --> (result(rim))out ]'rim;
+[query_in : instruction(I) --> (instruction(I))in_wheel ]'skin;
+[to_center : instruction(I) --> (instruction(I))in_center ]'wheel;
+[touch : instruction(I) * controller * fuel --> command(I) ]'center;
+[broadcast : command(I) --> (command(I))out ]'center;
+[fan_out : command(I) * orbit --> (command(I))in_ring ]'wheel;
+[respond : command(I) * state(N) * fuel --> changed(N,I) ]'ring;
+
+/* --------------------------------------------------------------------------
+ * 6.6 — many-to-one: all 16 replies fuse back at the center simultaneously.
+ * reply    : each changed ring molecule replies at once (many-to-one)
+ * fuse     : the simultaneous replies are fused into the orbital solution —
+ *            ~4 million solutions in the ring vs one in the line
+ * ------------------------------------------------------------------------*/
+[reply : changed(N,I) --> (reply(N,I))out ]'ring;
+[fuse : reply(N,I) * orbit --> orbital_solution(I) ]'wheel;
+[solution_out : orbital_solution(I) --> (orbital_solution(I))out ]'wheel;
+
+/* Control: the linear arrangement answers sequentially — a single output. */
+[query_lin : instruction(I) --> (instruction(I))in_linear ]'skin;
+[sequential : instruction(I) * queue(1..16) * fuel --> single_output(I) ]'linear;
+[linear_out : single_output(I) --> (single_output(I))out ]'linear;
+
+/* Skin: the orbital (one-to-many/many-to-one) and linear (sequential) results
+ * are contrasted — geometry, not faster wiring, delivers the parallelism. */
+[contrast : orbital_solution(I) * single_output(I)
+          --> result(orbital_computing) ]'skin;

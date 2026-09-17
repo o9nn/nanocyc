@@ -1,42 +1,107 @@
 /* ============================================================================
  * psystems/ch06/ch06_cellular_automaton.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.5
- * Functionality: Massively parallel computing by cellular automaton as a grid of communicating membranes.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.5 (massively parallel computing by cellular automaton).
+ *
+ * Functionality: A monolayer of DDQ molecules that reversibly switch between
+ *   four states forms a hexagonal cellular automaton (DDQ-HCA) — a massively
+ *   parallel computer with NO central control: global coordination emerges
+ *   from decentralized communication between simple cells, so there is no
+ *   ~10 km/cm^2 wiring, the loss of any one cell does not jeopardize the
+ *   system, and resources are equally divided. The layer is modeled as a
+ *   GRID OF COMMUNICATING MEMBRANES (cells), each applying birth/survival/
+ *   death transition rules to its four (or six) neighbors at once. The same
+ *   hardware solves more than one problem: it SELECTS its CA rule as required
+ *   and tunes the space/time limits (charge decay of picoseconds can be
+ *   stretched to seconds; million-year events compressed likewise — time is
+ *   linked to space). Particular encodings: closed packed circles grow
+ *   EXPONENTIALLY (positive and negative), flower-shaped triangular circles
+ *   give SINUSOIDAL functions, concentric angular triangles give LOGARITHMIC
+ *   ones; concentric rings solve coupled differential equations (ring count =
+ *   number of coupled equations, separation = boundary conditions) and a pair
+ *   of straight lines encodes higher-order differentials. Additive coupling
+ *   places patterns side-by-side, multiplicative nesting one inside another.
+ *   A solution is generated collectively: even if some cells stop, the system
+ *   still reaches a solution (~10^14 devices/cm^2 dissipating ~1 W/cm^2).
+ *
+ *   Membranes:
+ *     skin (the boundary / rule selector, routes neighbor states)
+ *       |- rule    : selects the CA rule / function encoding for the problem
+ *       '- grid    : the DDQ-HCA cell array
+ *            |- cell_n, cell_e, cell_s, cell_w : four communicating cells
+ *
+ *   Common modules inlined by convention:
+ *     common/gml_shapes.pli — the encoding patterns (circle/triangle/ring)
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (CellularAutomatonEngine,
+ *               CellularAutomatonState, set_rule, apply_ppm_rules,
+ *               update_parallel, CA_DEFAULT_WIDTH/HEIGHT)
+ * Initial multiset: a problem token in the skin; rule templates in rule; an
+ *                   initial cell state in each of the four grid cells.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'cell_a []'cell_b []'cell_c []'cell_d ]'skin;
+/* Four neighbor cells communicate through their parent grid membrane; the grid
+ * sits under the skin which also holds the rule selector. */
+@mu = [ []'rule [ []'cell_n []'cell_e []'cell_s []'cell_w ]'grid ]'skin;
 
-@mskin = seed;
-@mcell_a = unit(cell_a), fuel;
-@mcell_b = unit(cell_b), fuel;
-@mcell_c = unit(cell_c), fuel;
-@mcell_d = unit(cell_d), fuel;
+@mskin   = problem(diffusion), problem(coupled_ode), fuel;
+@mrule   = encode(exponential), encode(sinusoidal), encode(logarithmic), fuel;
+@mgrid   = route, fuel;
+@mcell_n = state(1);
+@mcell_e = state(0);
+@mcell_s = state(0);
+@mcell_w = state(1);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.5 — rule selection: the surface picks the CA rule / encoding per problem.
+ * select   : a problem is admitted to the rule membrane
+ * encode   : each problem locks onto its function-encoding pattern —
+ *            exponential (packed circles), sinusoidal (flower triangles),
+ *            logarithmic (concentric angular triangles)
+ * install  : the chosen rule is sent into the grid
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cell_a ]'skin;
-[seed_dispense : seed --> (work)in_cell_b ]'skin;
-[seed_dispense : seed --> (work)in_cell_c ]'skin;
-[seed_dispense : seed --> (work)in_cell_d ]'skin;
-[step : work * unit(cell_a) * fuel --> done(cell_a) ]'cell_a;
-[step : work * unit(cell_b) * fuel --> done(cell_b) ]'cell_b;
-[step : work * unit(cell_c) * fuel --> done(cell_c) ]'cell_c;
-[step : work * unit(cell_d) * fuel --> done(cell_d) ]'cell_d;
-[report : done(cell_a) --> (result(cell_a))out ]'cell_a;
-[report : done(cell_b) --> (result(cell_b))out ]'cell_b;
-[report : done(cell_c) --> (result(cell_c))out ]'cell_c;
-[report : done(cell_d) --> (result(cell_d))out ]'cell_d;
+[select : problem(P) --> (problem(P))in_rule ]'skin;
+[encode : problem(P) * encode(F) * fuel --> rule(P,F) ]'rule;
+[install : rule(P,F) --> (rule(P,F))out ]'rule;
+[admit_rule : rule(P,F) --> (rule(P,F))in_grid ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 6.5 — the grid of communicating cells (massively parallel, decentralized).
+ * broadcast: the grid hands the installed rule to every cell at once
+ * gather   : each cell publishes its state to the parent grid (out)
+ * neighbor : the grid redistributes each cell's state to its neighbors (in) —
+ *            cell-like routing: a cell never writes into a sibling directly
+ * evolve   : a cell applies birth/survival/death to the states of its
+ *            neighbors under the installed rule — all cells update in the SAME
+ *            maximally parallel step
+ * ------------------------------------------------------------------------*/
+[broadcast_n : rule(P,F) --> (rule(P,F))in_cell_n ]'grid;
+[broadcast_e : rule(P,F) --> (rule(P,F))in_cell_e ]'grid;
+[broadcast_s : rule(P,F) --> (rule(P,F))in_cell_s ]'grid;
+[broadcast_w : rule(P,F) --> (rule(P,F))in_cell_w ]'grid;
+
+[gather_n : state(S) --> (state(n,S))out ]'cell_n;
+[gather_e : state(S) --> (state(e,S))out ]'cell_e;
+[gather_s : state(S) --> (state(s,S))out ]'cell_s;
+[gather_w : state(S) --> (state(w,S))out ]'cell_w;
+
+[neighbor_n : state(e,S) --> (state(e,S))in_cell_n ]'grid;
+[neighbor_e : state(n,S) --> (state(n,S))in_cell_e ]'grid;
+[neighbor_s : state(w,S) --> (state(w,S))in_cell_s ]'grid;
+[neighbor_w : state(s,S) --> (state(s,S))in_cell_w ]'grid;
+
+[evolve_n : rule(P,F) * state(S) * state(e,T) --> next(S) ]'cell_n;
+[evolve_e : rule(P,F) * state(S) * state(n,T) --> next(S) ]'cell_e;
+[evolve_s : rule(P,F) * state(S) * state(w,T) --> next(S) ]'cell_s;
+[evolve_w : rule(P,F) * state(S) * state(s,T) --> next(S) ]'cell_w;
+
+/* The collectively reached solution leaves the grid for the skin. */
+[solution_n : next(S) --> (solved(n,S))out ]'cell_n;
+[solution_e : next(S) --> (solved(e,S))out ]'cell_e;
+[collect : solved(n,S) * solved(e,T) --> (result(ca_solution))out ]'grid;
