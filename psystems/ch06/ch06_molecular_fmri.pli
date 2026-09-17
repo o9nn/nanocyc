@@ -1,30 +1,70 @@
 /* ============================================================================
  * psystems/ch06/ch06_molecular_fmri.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.4
- * Functionality: Brain fMRI images created on a molecular surface.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.4 (brain's fMRI images created on a molecular surface).
+ *
+ * Functionality: A 2D monolayer of DDQ molecules on an Au(111) surface is
+ *   driven as a cellular automaton. By encoding a set of STM patterns that
+ *   evolve in time, the surface patterns come to RESEMBLE the fMRI images of
+ *   a brain during different human activities — the molecular surface becomes
+ *   a synthetic brain-activity map. The monolayer is SELF-HEALING: if a
+ *   molecule is removed by a large STM pulse, molecules from elsewhere on the
+ *   monolayer migrate in and adjust their positions to recover, and the
+ *   computing never stops — the evolution of patterns does not care whether a
+ *   single cell is present (brain plasticity). Because the same 2D grid read
+ *   four different ways yields four different dynamics, the activity pattern
+ *   is a projection choice, not a fixed layout.
+ *
+ *   Membranes:
+ *     skin (routes the CA evolution and the read-out projection)
+ *       |- surface : the DDQ monolayer cellular automaton (6.4)
+ *       |    '- heal : self-healing / plasticity after molecule removal
+ *       '- fmri   : the evolving surface pattern is read as an fMRI image
+ *
+ *   Common modules inlined by convention:
+ *     common/gml_shapes.pli — shape(S) objects read the activity pattern
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (CellularAutomatonState,
+ *               CellularAutomatonEngine pattern evolution)
+ * Initial multiset: a DDQ grid seed and an STM pattern on the surface; an fMRI
+ *                   template and the GML shapes in the reader.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'surface ]'skin;
+/* heal nests in surface (recovery happens on the monolayer). */
+@mu = [ [ []'heal ]'surface []'fmri ]'skin;
 
-@mskin = seed;
-@msurface = unit(surface), fuel;
+@mskin    = evolve;
+@msurface = ddq_grid, stm_pattern(p0), fuel;
+@mheal    = vacancy;
+@mfmri    = fmri_template(activity), shape(1), shape(4), shape(8), shape(12), fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.4 — brain's fMRI images created on a molecular surface.
+ * inject   : the evolution driver enters the monolayer
+ * ca_step  : the DDQ grid advances its STM pattern one cellular-automaton
+ *            step (the pattern changes as a function of time)
+ * remove   : a large STM pulse removes one molecule, opening a vacancy
+ * migrate  : neighboring molecules migrate in and adjust positions — the
+ *            monolayer self-heals and the computation never stops
+ * read     : the evolving surface pattern is projected onto the fMRI template
+ *            (reading the same grid a chosen way selects the dynamics)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_surface ]'skin;
-[step : work * unit(surface) * fuel --> done(surface) ]'surface;
-[report : done(surface) --> (result(surface))out ]'surface;
+[inject : evolve --> (evolve)in_surface ]'skin;
+[ca_step : ddq_grid * stm_pattern(P) * evolve * fuel --> stm_pattern(next(P)) ]'surface;
+[remove : stm_pattern(P) * vacancy --> vacancy * stm_pattern(gap(P)) ]'heal;
+[migrate : stm_pattern(gap(P)) --> stm_pattern(P) * healed ]'heal;
+[heal_out : healed --> (healed)out ]'heal;
+[to_reader : stm_pattern(P) --> (surface_pattern(P))out ]'surface;
+
+/* Reader: match the activity pattern against the template via the GML shapes. */
+[admit : surface_pattern(P) --> (surface_pattern(P))in_fmri ]'skin;
+[project : surface_pattern(P) * fmri_template(activity) * shape(S) * fuel
+         --> fmri_image(P,S) ]'fmri;
+[plastic : healed --> (plasticity)in_fmri ]'skin;
+[report : fmri_image(P,S) --> (result(molecular_fmri))out ]'fmri;

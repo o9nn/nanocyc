@@ -1,38 +1,122 @@
 /* ============================================================================
  * psystems/ch06/ch06_filament_communication.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.7, 6.7.1-6.7.2
- * Functionality: Hidden communication in the filaments much before a nerve spike; triplet-of-triplet resonance band in the axon; scale-free bands across tubulin, microtubule and neuron.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.7 (hidden communication in the filaments well before a nerve
+ *               spike),
+ *           6.7.1 (triplet of triplet resonance band in the axon of a neuron),
+ *           6.7.2 (scale-free triplet of triplet band in tubulin, microtubule
+ *                  and neuron).
+ *
+ * Functionality:
+ *   6.7   The Hodgkin-Huxley "neuron skin is everything" model is incomplete:
+ *         200-400 microseconds BEFORE an ionic nerve spike takes shape there
+ *         are many simultaneous communications in the filament network. The
+ *         densely packed microtubule / neurofilament core and the periodic
+ *         actin-beta-spectrin lattice under the membrane resonate
+ *         electromagnetically (GHz-THz dipolar) and bridge the three-order
+ *         time gap between nanosecond protein oscillations and the
+ *         millisecond ionic spike. Even with ionic transmission blocked,
+ *         neurons still communicate (ephaptic / endogenous-field route). The
+ *         AIS filament architecture is modeled HeBHiZ: He (long-range
+ *         filaments), B (unidirectional polarity), Hi (equidistant ~50 nm
+ *         parallel lattice), Z (periodic actin-beta-spectrin lattice).
+ *   6.7.1 An ac signal parallel to the axon triggers the AIS only at three
+ *         frequency ranges; adding a perpendicular (transverse) ac signal
+ *         resolves each into three — NINE bands, a triplet of triplet. The 3D
+ *         resonance map of the neuron unravels three distinct time domains
+ *         (clocks) regulating the nerve impulse, and the axon core keeps the
+ *         same triplet-of-triplet with and without its membrane.
+ *   6.7.2 The triplet-of-triplet band is SCALE-FREE: tubulin, microtubule and
+ *         neuron share self-similar bands with a common frequency region — the
+ *         same spiral symmetry couples all clocks, and the resonance peaks
+ *         integrate as RATIOS OF PRIMES. An event is three layers of
+ *         sub-events: the slowest clock is the host/subject, the middle the
+ *         clause/condition, the fastest the verb/adjective — the linguistic
+ *         key event = [subject - clause - (verb - adjective)].
+ *
+ *   Membranes:
+ *     skin (routes the pre-spike signal and the scale-free bands)
+ *       |- filament : hidden pre-spike communication (6.7)
+ *       |    '- hebhiz : the HeBHiZ AIS filament architecture
+ *       |- axon    : triplet-of-triplet band in the axon (6.7.1)
+ *       '- scalefree : tubulin / microtubule / neuron share the band (6.7.2)
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — nested clocks, tick
+ *     common/alphabet_primes.pli   — prime(P) ratios
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (FilamentCommunicator,
+ *               FilamentSignal.is_pre_spike, NeuronSegment triplet_bands,
+ *               AXON_SCALE_LEVELS, TripletResonanceCascade)
+ * Initial multiset: a sub-threshold drive in the skin; a filament bundle and
+ *                   He/B/Hi/Z elements; the three axon band seeds; and the
+ *                   tubulin/microtubule/neuron scale seeds.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'tubulin []'microtubule []'neuron ]'skin;
+/* hebhiz nests in filament (the AIS architecture); axon and scalefree are
+ * siblings under the skin. */
+@mu = [ [ []'hebhiz ]'filament []'axon []'scalefree ]'skin;
 
-@mskin = seed;
-@mtubulin = unit(tubulin), fuel;
-@mmicrotubule = unit(microtubule), fuel;
-@mneuron = unit(neuron), fuel;
+@mskin      = subthreshold_drive, tick;
+@mfilament  = filament_bundle, ionic_block, fuel;
+@mhebhiz    = he, b, hi, z, fuel;
+@maxon      = band(b1), band(b2), band(b3), fuel;
+@mscalefree = tubulin, microtubule, neuron, prime(2), prime(3), fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.7 — hidden communication in the filaments well before a nerve spike.
+ * drive    : the sub-threshold drive enters the filament network
+ * prespike : the filament bundle resonates 200-400 us BEFORE the ionic spike —
+ *            this hidden electromagnetic signal precedes the nerve impulse
+ * ephaptic : even with ionic transmission blocked the filament signal passes
+ *            (the non-ionic / endogenous-field channel)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_tubulin ]'skin;
-[seed_dispense : seed --> (work)in_microtubule ]'skin;
-[seed_dispense : seed --> (work)in_neuron ]'skin;
-[step : work * unit(tubulin) * fuel --> done(tubulin) ]'tubulin;
-[step : work * unit(microtubule) * fuel --> done(microtubule) ]'microtubule;
-[step : work * unit(neuron) * fuel --> done(neuron) ]'neuron;
-[report : done(tubulin) --> (result(tubulin))out ]'tubulin;
-[report : done(microtubule) --> (result(microtubule))out ]'microtubule;
-[report : done(neuron) --> (result(neuron))out ]'neuron;
+[drive : subthreshold_drive --> (subthreshold_drive)in_filament ]'skin;
+[prespike : subthreshold_drive * filament_bundle * fuel
+          --> hidden_signal(pre_spike) ]'filament;
+[ephaptic : hidden_signal(pre_spike) * ionic_block --> hidden_signal(pre_spike) ]'filament;
+[admit_arch : hidden_signal(pre_spike) --> (hidden_signal(pre_spike))in_hebhiz ]'filament;
+
+/* The HeBHiZ architecture shapes the hidden signal into the AIS resonance. */
+[assemble : he * b * hi * z * fuel --> hebhiz_core ]'hebhiz;
+[shape : hidden_signal(pre_spike) * hebhiz_core --> ais_resonance ]'hebhiz;
+[arch_out : ais_resonance --> (ais_resonance)out ]'hebhiz;
+[filament_out : ais_resonance --> (ais_resonance)out ]'filament;
+
+/* --------------------------------------------------------------------------
+ * 6.7.1 — triplet of triplet resonance band in the axon.
+ * axial    : a signal parallel to the axon triggers three outer bands
+ * transverse : a perpendicular ac signal resolves each outer band into three
+ *              sub-bands — nine bands, the triplet of triplet
+ * ------------------------------------------------------------------------*/
+[axial : tick * band(B) * fuel --> outer(B) ]'axon;
+[transverse : outer(B) --> outer(B) * sub(B,1) * sub(B,2) * sub(B,3) ]'axon;
+[axon_band : outer(B) * sub(B,1) --> triplet_of_triplet(B) ]'axon;
+[axon_out : triplet_of_triplet(B) --> (triplet_of_triplet(B))out ]'axon;
+
+/* --------------------------------------------------------------------------
+ * 6.7.2 — scale-free triplet of triplet band in tubulin, microtubule, neuron.
+ * resonate : each scale's system resonates with its own triplet-of-triplet
+ * share    : the bands share a common frequency region — a prime ratio links
+ *            the same symmetry across scales (scale-free)
+ * linguistic: the shared band reads as event = [subject-clause-(verb-adjective)]
+ * ------------------------------------------------------------------------*/
+[resonate : tubulin * prime(P) * fuel --> band(tubulin,P) ]'scalefree;
+[resonate : microtubule * prime(P) * fuel --> band(microtubule,P) ]'scalefree;
+[resonate : neuron * prime(P) * fuel --> band(neuron,P) ]'scalefree;
+[share : band(tubulin,P) * band(microtubule,P) * band(neuron,P)
+       --> common_region(P) ]'scalefree;
+[linguistic : common_region(P) --> event(subject,clause,verb_adjective) ]'scalefree;
+[scalefree_out : event(subject,clause,verb_adjective)
+               --> (scale_free_band)out ]'scalefree;
+
+/* Skin integration: the pre-spike AIS resonance, the axonal triplet-of-triplet
+ * and the scale-free band together are the hidden filament communication. */
+[integrate : ais_resonance * triplet_of_triplet(B) * scale_free_band
+           --> result(hidden_filament_communication) ]'skin;

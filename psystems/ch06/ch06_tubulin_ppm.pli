@@ -1,42 +1,140 @@
 /* ============================================================================
  * psystems/ch06/ch06_tubulin_ppm.pli
  *
- * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the geometry of singularity
+ * NanoBrain CH06: Unprecedented technologies of nature led by harvesting the
+ * geometry of singularity.
  * Issue #11 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 6.1, 6.1.1-6.1.4
- * Functionality: PPM embedded in tubulin: alpha-helices form groups of rings; hyperspace of symmetries follows a mathematical identity; ordered factors of integers and coding in proteins; water channels in biomaterials.
- * Traceability: src/cpp/nanobrain_singularity.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 6.1 (PPM — the pattern of primes embedded in the tubulin protein),
+ *   6.1.1 (alpha-helices form groups of rings to complete a loop),
+ *   6.1.2 (hyperspace symmetries follow a mathematical identity),
+ *   6.1.3 (ordered factor of integers and the coding in proteins),
+ *   6.1.4 (biomaterials and the remarkable engineering of water channels).
+ *
+ * Functionality:
+ *   6.1   A tubulin protein is an assembly of spiral (alpha-helix) resonators
+ *         whose secondary structures group into CIRCUITS. Read with an STM at
+ *         a set ac frequency, the bright tunneling regions trace closed loops
+ *         of alpha-helix rings that count like a Phase Prime Metric.
+ *   6.1.1 A linear chain of oscillators resonates in an infinite series; folded
+ *         into a HELIX it gains a second boundary condition (diameter vs pitch)
+ *         and so builds a TRIPLET band per symmetry. Beta-sheets isolate groups
+ *         of spirals into rings; the ring counts repeat like a clock. The
+ *         experimentally observed loops are 2-3-3-2, 3-4-4-3 and 2-6-6-2:
+ *         alpha-helices form groups of rings to complete a loop.
+ *   6.1.2 The PPM (teardrop) generalises C2 symmetry to Cn by adding axes; the
+ *         drives of prime pairing relate e and phi orthogonally while pi forms
+ *         the coupled hyperbolic space, closing the identity e^2 + phi^2 = pi^2
+ *         (projected hyperspace phi^Jh + e^Jh = pi^Jh, Jh(min)=2). Biological
+ *         systems use this identity to fuse electrical, magnetic and mechanical
+ *         resonances (golden ratio / pi / e spacing of the three bands).
+ *   6.1.3 Coding in proteins is the ordered factor of integers: tubulin counts
+ *         rings 1..6 as if counting integers and cuts a SLICE of the metric up
+ *         to a prime — monomer uses compositions up to 5, dimer up to 7, and
+ *         the microtubule nanowire up to 13. All clocks compiled from the
+ *         loops fuse into one time crystal, a derivative of a triplet of
+ *         triplet clocks.
+ *   6.1.4 Water engineering: a hydration shell (2-3 molecular layers, ~3-4 Ang)
+ *         covers each biomolecule; bound functional groups (imidazole) build a
+ *         "spine of water" channel; artificial imidazole quartets (I-quartets)
+ *         form ~2.6 Ang proton-only wires transporting ~10^6 water/s; and the
+ *         microtubule's hollow 18 nm core holds an ordered water channel whose
+ *         symmetry-breaking phase transition sources the GHz resonance.
+ *
+ *   Membranes:
+ *     skin (routes prime ticks and intermediate objects between units)
+ *       |- helix    : alpha-helices -> rings -> loops (6.1, 6.1.1)
+ *       |    '- loop : the closed 2-3-3-2 / 3-4-4-3 / 2-6-6-2 circuits clock
+ *       |- hyperspace : the e^2 + phi^2 = pi^2 symmetry identity (6.1.2)
+ *       |- coding   : ordered factors slice the PPM at 5 / 7 / 13 (6.1.3)
+ *       '- water    : hydration shell -> spine -> I-quartet -> core channel
+ *                     (6.1.4)
+ *
+ *   Common modules inlined by convention (P-Lingua has no import):
+ *     common/alphabet_primes.pli  — prime(P)/ordered_factor(P) objects
+ *     common/time_crystal_core.pli — tick and clock nesting into a crystal
+ *
+ * Traceability: src/cpp/nanobrain_singularity.h (TubulinPPMModel, TubulinRing,
+ *               WaterChannel, TUBULIN_PROTOFILAMENTS=13, TUBULIN_HELIX_RINGS=8,
+ *               WATER_CHANNEL_DIAMETER_NM)
+ * Initial multiset: prime ticks in the skin; an oscillator chain and the three
+ *                   loop ring-counts in helix; e/phi/pi drivers in hyperspace;
+ *                   an integer to factor in coding; a bare biomolecule in water.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'helix []'symmetry []'of_coding []'water ]'skin;
+/* skin routes primes/ticks; loop nests inside helix (the rings close there). */
+@mu = [ [ []'loop ]'helix []'hyperspace []'coding []'water ]'skin;
 
-@mskin = seed;
-@mhelix = unit(helix), fuel;
-@msymmetry = unit(symmetry), fuel;
-@mof_coding = unit(of_coding), fuel;
-@mwater = unit(water), fuel;
+@mskin       = prime(2), prime(3), prime(5), tick;
+@mhelix      = oscillator_chain, rings(2,3,3,2), rings(3,4,4,3), rings(2,6,6,2), fuel;
+@mloop       = close;
+@mhyperspace = drive_e, drive_phi, drive_pi, fuel;
+@mcoding     = integer(30), prime(2), prime(3), prime(5), slice(monomer,5),
+               slice(dimer,7), slice(microtubule,13), fuel;
+@mwater      = biomolecule(tubulin), imidazole, fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 6.1 / 6.1.1 — alpha-helices form groups of rings to complete a loop.
+ * helix_fold : folding the linear oscillator chain into a helix adds the
+ *              diameter/pitch boundary condition and yields a triplet band
+ * rings_close: a ring-count pattern (2-3-3-2 etc.) is sent into the loop
+ *              membrane to be completed
+ * complete   : the four rings close into a clocking circuit (a loop)
+ * clock_out  : a completed loop is a clock; it leaves for the skin
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_helix ]'skin;
-[seed_dispense : seed --> (work)in_symmetry ]'skin;
-[seed_dispense : seed --> (work)in_of_coding ]'skin;
-[seed_dispense : seed --> (work)in_water ]'skin;
-[step : work * unit(helix) * fuel --> done(helix) ]'helix;
-[step : work * unit(symmetry) * fuel --> done(symmetry) ]'symmetry;
-[step : work * unit(of_coding) * fuel --> done(of_coding) ]'of_coding;
-[step : work * unit(water) * fuel --> done(water) ]'water;
-[report : done(helix) --> (result(helix))out ]'helix;
-[report : done(symmetry) --> (result(symmetry))out ]'symmetry;
-[report : done(of_coding) --> (result(of_coding))out ]'of_coding;
-[report : done(water) --> (result(water))out ]'water;
+[helix_fold : oscillator_chain * prime(P) * fuel
+            --> triplet_band(P) * helix(P) ]'helix;
+[helix_ring : helix(P) --> ring(P) ]'helix;
+[rings_close : rings(A,B,B,A) --> (circuit(A,B,B,A))in_loop ]'helix;
+[complete : circuit(A,B,B,A) * close --> clock(A,B,B,A) ]'loop;
+[clock_out : clock(A,B,B,A) --> (clock(A,B,B,A))out ]'loop;
+
+/* --------------------------------------------------------------------------
+ * 6.1.2 — hyperspace symmetries follow a mathematical identity.
+ * couple     : e and phi are orthogonally coupled drivers of the primes
+ * identity   : the orthogonal pair closes with pi — e^2 + phi^2 = pi^2 —
+ *              the identity biological systems use to fuse the three
+ *              electrical/magnetic/mechanical resonance kinds
+ * ------------------------------------------------------------------------*/
+[couple : drive_e * drive_phi * fuel --> orthogonal(e,phi) ]'hyperspace;
+[identity : orthogonal(e,phi) * drive_pi --> identity(e2_phi2_pi2) ]'hyperspace;
+[fuse : identity(e2_phi2_pi2) --> (fused_resonance)out ]'hyperspace;
+
+/* --------------------------------------------------------------------------
+ * 6.1.3 — ordered factor of integers and the coding in proteins.
+ * factor     : an integer is decomposed into its ordered factors (primes)
+ * slice_up_to: a protein complex cuts the metric at its prime limit — the
+ *              monomer at 5, the dimer at 7, the microtubule at 13
+ * compile    : the ordered factors compiled across the loops build the
+ *              protein's combined time crystal (triplet-of-triplet derivative)
+ * ------------------------------------------------------------------------*/
+[factor : integer(X) * prime(P) * fuel --> ordered_factor(P) * quotient(X) ]'coding;
+[slice_up_to : ordered_factor(P) * slice(S,L) --> coded(S,P) ]'coding;
+[compile : coded(S,P) --> (protein_crystal(S))out ]'coding;
+
+/* --------------------------------------------------------------------------
+ * 6.1.4 — water channels in biomaterials.
+ * hydrate    : a 2-3 layer hydration shell forms on the biomolecule
+ * spine      : bound imidazole groups organise the shell into a water spine
+ * iquartet   : imidazole quartets stack into a proton-only water wire
+ * core       : the microtubule core channel is the engineered water device
+ *              whose phase transition carries the GHz resonance
+ * ------------------------------------------------------------------------*/
+[hydrate : biomolecule(T) * fuel --> hydration_shell(T) ]'water;
+[spine : hydration_shell(T) * imidazole --> water_spine(T) ]'water;
+[iquartet : imidazole * imidazole --> i_quartet_wire ]'water;
+[core : water_spine(T) --> (core_channel(T))out ]'water;
+
+/* --------------------------------------------------------------------------
+ * Skin routing and integration (cell-like: children send out, skin sends in).
+ * route_tick : broadcast the shared prime tick into helix and coding
+ * fuse_clocks: the loops' clocks plus the fused resonance compile into the
+ *              tubulin PPM time crystal (a triplet-of-triplet derivative)
+ * ------------------------------------------------------------------------*/
+[route_tick_h : tick --> (tick)in_helix ]'skin;
+[route_tick_c : tick --> (tick)in_coding ]'skin;
+[fuse_clocks : clock(A,B,B,A) * fused_resonance
+             --> result(tubulin_ppm_crystal) ]'skin;
+[report_water : core_channel(T) --> result(water_channel(T)) ]'skin;
