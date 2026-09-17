@@ -1,30 +1,90 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric7_statistics.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.8
- * Functionality: Metric 7: statistical dominance of primes; silent and active primes.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.8 — Metric 7: statistical dominance of primes in the integer
+ *           space — silent and active primes (PL-PPM, Figure 3.8).
+ *
+ * Model (from the book):
+ *   Count how many times each prime appears in the factorizations of all
+ *   integers up to N. Naively prime 2 should dominate forever (50% of all
+ *   factors), but the count has a MODE that moves slowly upward,
+ *   approximating the cube root of N: the mode is 19 up to N = 10000,
+ *   73 up to N = 1000000, with a distinctive peak near P^3 = N (P = 47
+ *   around N = 174000). Until N = 30 prime 3 dominates, until N = 500
+ *   prime 7, and so on — a DOMINANCE RELAY of ACTIVE primes; primes that
+ *   never dominate anywhere are SILENT all around. Above the 12-15 active
+ *   primes the statistical fluctuation saturates — the whole story
+ *   completes within N = 170000. The deviation of the true prime density
+ *   from the smooth prediction pi(x) ~ x/ln(x) (equivalently Li(x)) marks
+ *   the structural phase transitions of the time crystals; below
+ *   N = 10^12 the distribution is non-linear, above it the density follows
+ *   the smooth function and primes bring no unpredictable change.
+ *   (Prime alphabet inlined from common/alphabet_primes.pli.)
+ *
+ * Membranes:
+ *   count    : factorization counts per prime over the integer domain
+ *   relay    : the dominance relay 3 -> 7 -> ... as N grows, and the
+ *              cube-root law of the mode
+ *   silence  : primes that never dominated are declared silent
+ *   density  : actual density vs the smooth pi(x) prediction; the residue
+ *              flags the non-linear (phase-transition) regions
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric7_PrimeStatistics,
+ *               PrimeStats)
+ * Initial multiset: sample factor counts, dominance boundaries and a
+ *                   density sample; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric7 ]'skin;
+@mu = [ []'count []'relay []'silence []'density ]'skin;
 
-@mskin = seed;
-@mmetric7 = unit(metric7), fuel;
+/* Sample initial multiset. */
+@mskin = idle;
+@mcount = usage(3, 900), usage(7, 1200), usage(19, 400), usage(53, 5);
+@mrelay = mode(19), n_range(10000), window(3, 30), window(7, 500);
+@msilence = usage_log(19), usage_log(53);
+@mdensity = actual(174000), predicted(174000);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * count : each prime's factor count is tallied; the tally feeds the relay
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric7 ]'skin;
-[step : work * unit(metric7) * fuel --> done(metric7) ]'metric7;
-[report : done(metric7) --> (result(metric7))out ]'metric7;
+[tally : usage(P, C) --> tally(P, C) ]'count;
+[emit_tally : tally(P, C) --> (counted(P, C))out ]'count;
+[route_count : counted(P, C) --> (counted(P, C))in_relay ]'skin;
+
+/* --------------------------------------------------------------------------
+ * relay : statistical dominance of ACTIVE primes
+ *   dominate : within its window a prime dominates the factor counts
+ *              (3 rules until N = 30, 7 until N = 500, ...)
+ *   handoff  : the next prime takes over as N crosses the window boundary
+ *   cube_law : the mode of the distribution sits near P with P^3 = N —
+ *              19 up to 10^4, 73 up to 10^6, 47 around N = 174000
+ * ------------------------------------------------------------------------*/
+[dominate : window(P, B) * counted(P, C) --> dominates(P, B) ]'relay;
+[handoff : dominates(P, B) * window(Q, B2) --> handoff(P, Q) ]'relay, 1;
+[cube_law : mode(M) * n_range(N) --> mode_at(M, N) ]'relay, 2;
+[report_relay : handoff(P, Q) --> (relay(P, Q))out ]'relay;
+
+/* --------------------------------------------------------------------------
+ * silence : a prime whose count never reaches the mode in ANY window is
+ *           silent all around — it never regulates events statistically
+ *           (above the 12-15 active primes the fluctuation saturates)
+ * ------------------------------------------------------------------------*/
+[classify : usage_log(P) --> probe(P) ]'silence;
+[mark_active : probe(19) --> active_prime(19) ]'silence, 1;
+[mark_silent : probe(53) --> silent_prime(53) ]'silence, 2;
+[report_silence : silent_prime(P) --> (silent(P))out ]'silence;
+[report_active : active_prime(P) --> (active(P))out ]'silence;
+
+/* --------------------------------------------------------------------------
+ * density : the non-linear residue between the true prime density and the
+ *           smooth estimate pi(x) ~ x/ln(x) flags where the time crystal
+ *           undergoes a structural phase transition (below N = 10^12)
+ * ------------------------------------------------------------------------*/
+[residue : actual(N) * predicted(N) --> delta(N) ]'density;
+[flag : delta(N) --> (nonlinear(N))out ]'density;

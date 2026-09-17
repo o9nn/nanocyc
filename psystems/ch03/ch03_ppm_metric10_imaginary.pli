@@ -1,34 +1,89 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric10_imaginary.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.11
- * Functionality: Metric 10: multilayer imaginary operations on real integers build a new pattern.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.11 — Metric 10: multilayer imaginary operation on the real
+ *           integers builds a new pattern (PPM-HD, Figure 3.11).
+ *
+ * Model (from the book):
+ *   Entering a singularity point means moving into a HIGHER dimension —
+ *   not by inflating every pixel (Kaluza) but by looking only into the
+ *   singularity points of the lower-dimensional entity. The real integer
+ *   line is written in layers of imaginary units: one imaginary phase i
+ *   (complex circle x^2+y^2 = 1), three for the quaternion (4D), seven on
+ *   the Fano plane for the octonion (8D, grouping decides the clocking
+ *   direction, e3 x e1 = e2 but e3 x (e1 x e2) = -e4), and twelve
+ *   generators for the dodecanion (12D) — a pixel of a circle is itself a
+ *   circle; zoom 8 times and the integers live in octonions, zoom 12
+ *   times in dodecanions. Decision elements of each tensor are PRIMES,
+ *   and their sums form MODULO groups: an octonion whose sub-groups each
+ *   sum to the same modulo (two book examples: modulo 90 and modulo 30);
+ *   the dodecanion matrix exists in three fundamentally different forms,
+ *   each able to acquire a quaternion logical architecture. Acquired
+ *   input is always lifted to 3D first (point -> sphere, line ->
+ *   cylinder, square -> cube) and C2, C5, C7 ... C47 symmetries
+ *   regenerate the missing parts, yielding an infinite series of 3D
+ *   dynamics per input. (Hypernumber objects inlined from
+ *   common/hypernumbers.pli.)
+ *
+ * Membranes:
+ *   real_layer : the real integers with their prime decision elements
+ *   imag_layer : the multilayer imaginary zoom — quaternion, octonion and
+ *                dodecanion groupings of the same primes
+ *   pattern    : the prime-sum modulo groups assemble the new pattern
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric10_ImaginaryLayers,
+ *               ImaginaryLayer), src/cpp/nanobrain_dodecanion.h
+ * Initial multiset: real integers with a prime sum, quaternion and
+ *                   octonion basis elements, modulo targets 30 and 90;
+ *                   runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'real_layer []'imag_layer ]'skin;
+@mu = [ []'real_layer []'imag_layer []'pattern ]'skin;
 
-@mskin = seed;
-@mreal_layer = unit(real_layer), fuel;
-@mimag_layer = unit(imag_layer), fuel;
+/* Sample initial multiset. */
+@mskin = idle;
+@mreal_layer = integer(30), primeset(2,3,5), sum_mod(30), sum_mod(90);
+@mimag_layer = q(1), q(i), q(j), q(k),
+               o(e1), o(e2), o(e3), o(e4), o(e5), o(e6), o(e7),
+               d(a1), d(a2), d(a3), d(a4), d(a5), d(a6),
+               d(a7), d(a8), d(a9), d(a10), d(a11);
+@mpattern = fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * real_layer : lift the real integer into its first imaginary wrapping and
+ *              hand the prime decision elements to the imaginary layer —
+ *              a point becomes a sphere, a line a cylinder, a square a cube
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_real_layer ]'skin;
-[seed_dispense : seed --> (work)in_imag_layer ]'skin;
-[step : work * unit(real_layer) * fuel --> done(real_layer) ]'real_layer;
-[step : work * unit(imag_layer) * fuel --> done(imag_layer) ]'imag_layer;
-[report : done(real_layer) --> (result(real_layer))out ]'real_layer;
-[report : done(imag_layer) --> (result(imag_layer))out ]'imag_layer;
+[lift : integer(N) * primeset(A,B,C) --> lifted(N, A,B,C) ]'real_layer;
+[emit_lift : lifted(N, A,B,C) --> (imag_seed(N, A,B,C))out ]'real_layer;
+[route_mod : sum_mod(M) --> (modulo(M))in_pattern ]'skin;
+[route_seed : imag_seed(N, A,B,C) --> (imag_seed(N, A,B,C))in_imag_layer ]'skin;
+
+/* --------------------------------------------------------------------------
+ * imag_layer : the multilayer zoom (common/hypernumbers.pli inlined)
+ *   quat : one imaginary layer — the four quaternion units hold the primes
+ *   oct  : zoom again — the seven Fano-plane units; grouping chooses the
+ *          clocking direction (octonion products are non-associative)
+ *   dodec: zoom to 12 generators — the dodecanion hosts the 11D manifold
+ *          algebra; the matrix exists in three fundamental forms, each
+ *          able to acquire a quaternion logical architecture
+ * ------------------------------------------------------------------------*/
+[quat : imag_seed(N, A,B,C) * q(i) * q(j) * q(k) --> qgroup(N, A,B,C) ]'imag_layer;
+[oct : qgroup(N, A,B,C) * o(e1) * o(e2) * o(e3) --> ogroup(N, A,B,C) ]'imag_layer;
+[dodec : ogroup(N, A,B,C) * d(a1) * d(a2) * d(a3) --> (hdgroup(N, A,B,C))out ]'imag_layer;
+[route_hd : hdgroup(N, A,B,C) --> (hdgroup(N, A,B,C))in_pattern ]'skin;
+
+/* --------------------------------------------------------------------------
+ * pattern : the prime sums are frozen into modulo groups — every sub-group
+ *           of the tensor sums to the same modulo (modulo 30, modulo 90) —
+ *           and the grouped hypernumber IS the new pattern that the
+ *           multilayer imaginary operation builds on the real integers
+ * ------------------------------------------------------------------------*/
+[freeze : hdgroup(N, A,B,C) * modulo(M) --> modgroup(N, M) ]'pattern;
+[report_pattern : modgroup(N, M) * fuel --> (new_pattern(N, M))out ]'pattern;

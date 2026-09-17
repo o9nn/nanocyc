@@ -1,30 +1,76 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric8_ripples.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.9
- * Functionality: Metric 8: normalized ripples on the metric plot show periodicity in events.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.9 — Metric 8: normalized ripples on the metric plot show
+ *           periodicity in events (PPM-N, prime operator PN, Figure 3.9).
+ *
+ * Model (from the book):
+ *   Normalize every metric value to a maximum of one and a new pattern
+ *   emerges from ALL the previous metrics at once. For the OF metric:
+ *   plotted raw, ripples are already there; plotted as +/-OF/2 (the C2
+ *   symmetry division, OF = C(H) in honor of Ray Tomes) the ripples are
+ *   expressed far more strongly. Normalized OF against N up to 10^18
+ *   shows SCALE-FREE ripples in the factors. Overlaying two integer
+ *   series (the 6n products of 2x3 against the 195n products of
+ *   3x5x13) reveals crossovers — each ripple period is the periodicity
+ *   of a class of events. The power distribution C(H)/H over harmonics
+ *   stays nearly constant across n, oscillating as a local
+ *   Gaussian-like function with period about 4.5 on the log scale as n
+ *   runs to 10^53 — a spontaneous rhythm born where a new prime (5,
+ *   then 3) enters the composition ladder 2^n 3^r 5^k ... .
+ *
+ * Membranes:
+ *   normalize : divides each OF value by the running maximum (max = 1)
+ *   halve     : applies the C2 symmetry, splitting the normalized value
+ *               into the +/- OF/2 arms
+ *   ripple    : detects the ripple crests and crossovers between two
+ *               normalized integer series — the periodicity read-out
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric8_PeriodicRipples,
+ *               PeriodicRipple)
+ * Initial multiset: two integer series (6n and 195n) with OF samples and
+ *                   a running maximum; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric8 ]'skin;
+@mu = [ []'normalize []'halve []'ripple ]'skin;
 
-@mskin = seed;
-@mmetric8 = unit(metric8), fuel;
+/* Sample initial multiset: the 6n and 195n series of Figure 3.9e. */
+@mskin = idle;
+@mnormalize = of_sample(6, 4), of_sample(12, 8), of_sample(195, 12), max_of(12);
+@mhalve = fuel;
+@mripple = series6n(crest), series195n(rising);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * normalize : every OF value is divided by the running maximum so that the
+ *             largest choice is exactly one — the step-by-step
+ *             normalization of the OF metric (OF = C(H))
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric8 ]'skin;
-[step : work * unit(metric8) * fuel --> done(metric8) ]'metric8;
-[report : done(metric8) --> (result(metric8))out ]'metric8;
+[normalize : of_sample(N, V) * max_of(M) --> norm(N, V) ]'normalize;
+[emit_norm : norm(N, V) --> (norm(N, V))out ]'normalize;
+[route_norm : norm(N, V) --> (norm(N, V))in_halve ]'skin;
+
+/* --------------------------------------------------------------------------
+ * halve : the C2 symmetry — the normalized value is split into its +OF/2
+ *         and -OF/2 arms; the ripple is expressed only once both arms of
+ *         the plot exist (Figure 3.9b vs 3.9a)
+ * ------------------------------------------------------------------------*/
+[split : norm(N, V) * fuel --> arm_pos(N, V) * arm_neg(N, V) ]'halve;
+[report_arm : arm_pos(N, V) * arm_neg(N, W) --> (c2_pair(N))out ]'halve;
+
+/* --------------------------------------------------------------------------
+ * ripple : scale-free ripples and crossovers
+ *   crest    : a normalized peak on one series is a ripple crest — the
+ *              periodicity signature of that class of events
+ *   crossover: where the 6n and the 195n normalized plots cross, the
+ *              dominant event periodicity changes hands (Figure 3.9e arrow)
+ * ------------------------------------------------------------------------*/
+[crest : series6n(K) --> ripple6n(K) ]'ripple;
+[crest : series195n(K) --> ripple195n(K) ]'ripple;
+[crossover : ripple6n(K) * ripple195n(J) --> crossover(K, J) ]'ripple, 1;
+[report_ripple : crossover(K, J) --> (periodicity(K, J))out ]'ripple;

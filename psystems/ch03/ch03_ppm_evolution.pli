@@ -1,34 +1,100 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_evolution.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.13-3.14
- * Functionality: Hidden physical significance of the 15 primes when the PPM evolves a time crystal; how to use a PPM (workflow membrane).
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.13 — Hidden physical significance of the 15 primes when the
+ *                  PPM evolves a time crystal (Figure 3.12b-c);
+ *           3.14 — How to use a PPM: the ten fundamental operations
+ *                  (Figure 3.13).
+ *
+ * Model (from the book):
+ *   primes membrane — every prime of the 15 is a worldview that acts on
+ *   the evolving time crystal (each prime is 6n +/- 1, hence hexagons and
+ *   triangle pairs): C2 mirror symmetry of truth/false; C3 space-time-
+ *   person identity (triplet of triplets); C5 five dynamics of a variable
+ *   (continuous, empty, diffusion, free-but-organized, random); C7 seven
+ *   steps of synchronization between two crystals; C13 hierarchical
+ *   geometries are born; C17 collapse of an event in a 16-step phase
+ *   transition; C19 the 19 isolation steps of a guest crystal; C23
+ *   branching in 23 symmetries (2x11+1); C29 the 29 dynamic features of
+ *   growth saturation (3x9+2); C31 the 31 learning routes (5x6+1); C37
+ *   the 37 filtering classes over 12 imaginary worlds (6x6+1); C41 the
+ *   41 vortex dynamics (3x13+1); C43 the 43 coexisting transformations
+ *   (6x7+1); C47 the 47 coexisting memory crystals (2x23+1).
+ *
+ *   workflow membrane — the ten steps of using a PPM (3.14): zoom 11
+ *   times into singularities for 12 layers; normalize each layer and
+ *   ACTIVATE the inactive integers to complete the metric shape (the
+ *   essential and sufficient computing step); read differential
+ *   symmetries between layers to reduce detection error; grow continued
+ *   fractions; fuse common geometries; find the dominating primes and the
+ *   metric of the database; apply projection from infinity; run OF + PC +
+ *   PG to lift 4D input dynamics to 12D; morphogenesis by repeated
+ *   geometric transformation; sense the non-linear prime distribution
+ *   that never repeats. (Time-crystal clocking inlined from
+ *   common/time_crystal_core.pli.)
+ *
+ * Membranes:
+ *   primes   : the 15 primes as worldviews applied to a growing crystal
+ *   workflow : the ten usage steps as a prioritized rule chain
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMEvolution, PPMCoherenceTable),
+ *               src/cpp/nanobrain_time_crystal.h (TimeCrystalQuantumState)
+ * Initial multiset: a seed crystal, the 15 primes and the workflow start
+ *                   token; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'evolve []'workflow ]'skin;
+@mu = [ []'primes []'workflow ]'skin;
 
-@mskin = seed;
-@mevolve = unit(evolve), fuel;
-@mworkflow = unit(workflow), fuel;
+/* Sample initial multiset. */
+@mskin = idle;
+@mprimes = crystal(seed),
+           prime(2), prime(3), prime(5), prime(7), prime(11),
+           prime(13), prime(17), prime(19), prime(23), prime(29),
+           prime(31), prime(37), prime(41), prime(43), prime(47);
+@mworkflow = start;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * primes : each prime stamps its physical significance onto the crystal
+ *          that the PPM evolves — the symmetry C_P is the worldview of P
+ *          (2 mirrors, 3 triples, 5 classifies dynamics, 7 synchronizes,
+ *          13 builds hierarchy, 17 collapses, 19 isolates, 23 branches,
+ *          29 saturates, 31 learns, 37 filters, 41 spirals, 43 transforms,
+ *          47 multiplexes memory)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_evolve ]'skin;
-[seed_dispense : seed --> (work)in_workflow ]'skin;
-[step : work * unit(evolve) * fuel --> done(evolve) ]'evolve;
-[step : work * unit(workflow) * fuel --> done(workflow) ]'workflow;
-[report : done(evolve) --> (result(evolve))out ]'evolve;
-[report : done(workflow) --> (result(workflow))out ]'workflow;
+[worldview : crystal(S) * prime(P) --> crystal(S) * symmetry(P) ]'primes;
+[evolve : crystal(seed) * symmetry(2) --> crystal(c2) ]'primes, 1;
+[grow : crystal(c2) * symmetry(3) --> crystal(c2c3) ]'primes, 1;
+[report_sig : crystal(K) --> (evolved_crystal(K))out ]'primes, 2;
+
+/* --------------------------------------------------------------------------
+ * workflow : the ten steps of using a PPM, as a prioritized chain (3.14)
+ *   s1 zoom        : 11 singularity zooms -> 12 layers, one PPM per layer
+ *   s2 activate    : normalize the layer; activate inactive integers to
+ *                    complete the metric shape (the computing step)
+ *   s3 differential: read differential symmetries between layers
+ *   s4 cfraction   : grow the symmetry into a continued fraction series
+ *   s5 fuse        : fuse common geometries of isolated time crystals
+ *   s6 dominate    : find the dominating primes -> the database metric
+ *   s7 project     : projection from infinity transforms the crystal
+ *   s8 lift        : OF + PC + PG lift the 4D input dynamics to 12D
+ *   s9 morph       : morphogenesis — repeated geometric transformation
+ *   s10 sense      : sense the non-linear prime distribution (the domain
+ *                    where every randomness of nature is born)
+ * ------------------------------------------------------------------------*/
+[s1 : start --> step(1) ]'workflow, 10;
+[s2 : step(1) --> step(2) ]'workflow, 9;
+[s3 : step(2) --> step(3) ]'workflow, 8;
+[s4 : step(3) --> step(4) ]'workflow, 7;
+[s5 : step(4) --> step(5) ]'workflow, 6;
+[s6 : step(5) --> step(6) ]'workflow, 5;
+[s7 : step(6) --> step(7) ]'workflow, 4;
+[s8 : step(7) --> step(8) ]'workflow, 3;
+[s9 : step(8) --> step(9) ]'workflow, 2;
+[s10 : step(9) --> step(10) ]'workflow, 1;
+[done : step(10) --> (solution(crystal))out ]'workflow;

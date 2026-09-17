@@ -1,34 +1,79 @@
 /* ============================================================================
  * psystems/ch03/ch03_ppm_metric3_phasepath.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.4
- * Functionality: Metric 3: integers limited to 360 phase build clockwise and anticlockwise paths.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.4 — Metric 3: integers limited to 360 deg phase build
+ *           clockwise and anticlockwise paths (PPM-LK, Figure 3.5).
+ *
+ * Model (from the book):
+ *   Selecting an integer N cuts a slice of length N out of the OF metric.
+ *   The slice is drawn as a polar plot: the N radial lines are spaced
+ *   360/N degrees apart (N = 12 -> 30 deg, N = 30 -> 12 deg), and the
+ *   distance from the center is the OF (or D or S) value of that integer.
+ *   Connecting consecutive value points draws a pair of clockwise- and
+ *   anticlockwise-rotating lines which globally form a LOTUS FLOWER: a
+ *   pair of limiting integers reaches an equilibrium and forms a petal.
+ *   The rotational preference of a local group of integers maps the
+ *   inherent dynamics (and the numerical origin of left-right asymmetry)
+ *   of the system under study; layers of petals moving radially outward
+ *   promote self-assembly within and above.
+ *
+ * Membranes:
+ *   polar  : distributes the 360 deg of phase over the N radial lines
+ *            and fixes each integer's radius to its OF value
+ *   cw     : follows the value points in the clockwise direction
+ *   ccw    : follows the value points in the anticlockwise direction
+ *   lotus  : where a cw and a ccw path meet between a pair of limiting
+ *            integers, a petal closes; petals assemble the lotus
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric3_PhasePath, PhasePath)
+ * Initial multiset: slice N = 12 (phase step 30 deg) with sample OF radii;
+ *                   runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'cw []'ccw ]'skin;
+@mu = [ []'polar []'cw []'ccw []'lotus ]'skin;
 
-@mskin = seed;
-@mcw = unit(cw), fuel;
-@mccw = unit(ccw), fuel;
+/* Sample initial multiset: the N = 12 slice and its phase quantum. */
+@mskin = idle;
+@mpolar = slice(12), phase_step(30), of_radius(12, 8);
+@mcw = start(12);
+@mccw = start(12);
+@mlotus = petal_count(0);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * polar plot construction (cymatics of the prime metric)
+ * radiate : the 360 deg phase is quantized into N radial lines of 360/N deg
+ * anchor  : each integer of the slice anchors its OF value as the radius on
+ *           its radial line
+ * emit    : the plotted point is broadcast to both path membranes
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cw ]'skin;
-[seed_dispense : seed --> (work)in_ccw ]'skin;
-[step : work * unit(cw) * fuel --> done(cw) ]'cw;
-[step : work * unit(ccw) * fuel --> done(ccw) ]'ccw;
-[report : done(cw) --> (result(cw))out ]'cw;
-[report : done(ccw) --> (result(ccw))out ]'ccw;
+[radiate : slice(N) * phase_step(D) --> radial(N, D) ]'polar;
+[anchor : radial(N,D) * of_radius(N, V) --> (polar_point(N, D, V))out ]'polar, 1;
+[inject_cw : polar_point(N, D, V) --> (polar_point(N, D, V))in_cw ]'skin;
+[inject_ccw : polar_point(N, D, V) --> (polar_point(N, D, V))in_ccw ]'skin;
+
+/* --------------------------------------------------------------------------
+ * cw / ccw walks
+ * step    : the walk advances to the next radial line in its direction —
+ *           each step fixes the rotational preference of this integer group
+ * emit    : the completed leg of the path is sent to the lotus membrane
+ * ------------------------------------------------------------------------*/
+[step_cw : start(N) * polar_point(N, D, V) --> (cw_leg(N, V))out ]'cw;
+[step_ccw : start(N) * polar_point(N, D, V) --> (ccw_leg(N, V))out ]'ccw;
+[route_cw_leg : cw_leg(N, V) --> (cw_leg(N, V))in_lotus ]'skin;
+[route_ccw_leg : ccw_leg(N, V) --> (ccw_leg(N, V))in_lotus ]'skin;
+
+/* --------------------------------------------------------------------------
+ * lotus : where a clockwise and an anticlockwise leg meet between a pair of
+ *         limiting integers they reach equilibrium and close a petal;
+ *         petals layer radially outward into the lotus flower — the global
+ *         form of the cw/ccw path pairs
+ * ------------------------------------------------------------------------*/
+[petal : cw_leg(N, V) * ccw_leg(N, W) --> petal(N) ]'lotus;
+[bloom : petal(N) * petal_count(K) --> petal_count(K+1) ]'lotus;
+[report : petal_count(K) --> (lotus(N, K))out ]'lotus;

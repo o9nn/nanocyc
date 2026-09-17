@@ -1,66 +1,98 @@
 /* ============================================================================
  * psystems/ch03/ch03_prime_operators.pli
  *
- * NanoBrain CH03: Phase prime metric (PPM) links all symmetries
+ * NanoBrain CH03: Phase prime metric (PPM) links all symmetries in our
+ * universe, governs nature's intelligence.
  * Issue #8 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 3.12
- * Functionality: Ten prime operators applied step by step as a prioritized rule chain.
- * Traceability: src/cpp/nanobrain_ppm.h, nanobrain_ppm.cpp
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 3.12 — Ten prime operators to be applied step by step
+ *           (Figure 3.12: the ten PPM operations transform the input; the
+ *           operators are selected by continued fraction geometric
+ *           algebra, CFGA).
+ *
+ * Model (from the book):
+ *   Each of the ten metric classes is an OPERATOR applied to the time
+ *   crystal generated from the input information. The operators MUST be
+ *   applied in a proper sequence — a typical feature of the output of
+ *   operator k is taken into account in the input of operator k+1 — so
+ *   the chain is wired as ten stage membranes, and the skin routes the
+ *   crystal from each stage to the next (cell-like P systems send only
+ *   to a parent, a child, or the local membrane: every hand-off goes
+ *   out to the skin and into the next stage). The priority on each
+ *   stage rule realizes "step-by-step": a stage only fires when the
+ *   crystal carrying the previous stage's mark arrives.
+ *
+ *   op_1  shape      : Metric 1  — integers become geometric shapes (S-N)
+ *   op_2  order      : Metric 2  — the unique ordered-factor value
+ *   op_3  phasepath  : Metric 3  — 360 deg cw/ccw phase paths
+ *   op_4  domain     : Metric 4  — the usable-prime domain limit
+ *   op_5  highof     : Metric 5  — the OF >> N annular metric
+ *   op_6  holes      : Metric 6  — silent points / constant circles
+ *   op_7  statistics : Metric 7  — silent and active primes
+ *   op_8  ripples    : Metric 8  — normalized ripple periodicity
+ *   op_9  lattice    : Metric 9  — the lattice groups of primes
+ *   op_10 imaginary  : Metric 10 — the multilayer imaginary pattern
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMOperatorChain, add_by_index,
+ *               execute, combined_value)
+ * Initial multiset: one input time crystal at the skin; each stage holds
+ *                   fuel for its operation; runs >= 1 evolution step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'op_1 []'op_2 []'op_3 []'op_4 []'op_5 []'op_6 []'op_7 []'op_8 []'op_9 []'op_10 ]'skin;
+@mu = [ []'op_1 []'op_2 []'op_3 []'op_4 []'op_5
+        []'op_6 []'op_7 []'op_8 []'op_9 []'op_10 ]'skin;
 
-@mskin = seed;
-@mop_1 = unit(op_1), fuel;
-@mop_2 = unit(op_2), fuel;
-@mop_3 = unit(op_3), fuel;
-@mop_4 = unit(op_4), fuel;
-@mop_5 = unit(op_5), fuel;
-@mop_6 = unit(op_6), fuel;
-@mop_7 = unit(op_7), fuel;
-@mop_8 = unit(op_8), fuel;
-@mop_9 = unit(op_9), fuel;
-@mop_10 = unit(op_10), fuel;
+/* Sample initial multiset: the input crystal plus per-stage fuel. */
+@mskin = crystal(input);
+@mop_1 = fuel;
+@mop_2 = fuel;
+@mop_3 = fuel;
+@mop_4 = fuel;
+@mop_5 = fuel;
+@mop_6 = fuel;
+@mop_7 = fuel;
+@mop_8 = fuel;
+@mop_9 = fuel;
+@mop_10 = fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * Step chain: crystal enters stage 1; each stage applies its metric and
+ * returns the marked crystal to the skin; the skin forwards it to the next
+ * stage. Priority 1 on the stage rules enforces the step-by-step order.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_op_1 ]'skin;
-[seed_dispense : seed --> (work)in_op_2 ]'skin;
-[seed_dispense : seed --> (work)in_op_3 ]'skin;
-[seed_dispense : seed --> (work)in_op_4 ]'skin;
-[seed_dispense : seed --> (work)in_op_5 ]'skin;
-[seed_dispense : seed --> (work)in_op_6 ]'skin;
-[seed_dispense : seed --> (work)in_op_7 ]'skin;
-[seed_dispense : seed --> (work)in_op_8 ]'skin;
-[seed_dispense : seed --> (work)in_op_9 ]'skin;
-[seed_dispense : seed --> (work)in_op_10 ]'skin;
-[step : work * unit(op_1) * fuel --> done(op_1) ]'op_1;
-[step : work * unit(op_2) * fuel --> done(op_2) ]'op_2;
-[step : work * unit(op_3) * fuel --> done(op_3) ]'op_3;
-[step : work * unit(op_4) * fuel --> done(op_4) ]'op_4;
-[step : work * unit(op_5) * fuel --> done(op_5) ]'op_5;
-[step : work * unit(op_6) * fuel --> done(op_6) ]'op_6;
-[step : work * unit(op_7) * fuel --> done(op_7) ]'op_7;
-[step : work * unit(op_8) * fuel --> done(op_8) ]'op_8;
-[step : work * unit(op_9) * fuel --> done(op_9) ]'op_9;
-[step : work * unit(op_10) * fuel --> done(op_10) ]'op_10;
-[report : done(op_1) --> (result(op_1))out ]'op_1;
-[report : done(op_2) --> (result(op_2))out ]'op_2;
-[report : done(op_3) --> (result(op_3))out ]'op_3;
-[report : done(op_4) --> (result(op_4))out ]'op_4;
-[report : done(op_5) --> (result(op_5))out ]'op_5;
-[report : done(op_6) --> (result(op_6))out ]'op_6;
-[report : done(op_7) --> (result(op_7))out ]'op_7;
-[report : done(op_8) --> (result(op_8))out ]'op_8;
-[report : done(op_9) --> (result(op_9))out ]'op_9;
-[report : done(op_10) --> (result(op_10))out ]'op_10;
+[enter : crystal(input) --> (crystal(input))in_op_1 ]'skin;
+
+[apply_1 : crystal(input) * fuel --> (crystal(m1))out ]'op_1, 1;
+[route_1 : crystal(m1) --> (crystal(m1))in_op_2 ]'skin;
+
+[apply_2 : crystal(m1) * fuel --> (crystal(m2))out ]'op_2, 1;
+[route_2 : crystal(m2) --> (crystal(m2))in_op_3 ]'skin;
+
+[apply_3 : crystal(m2) * fuel --> (crystal(m3))out ]'op_3, 1;
+[route_3 : crystal(m3) --> (crystal(m3))in_op_4 ]'skin;
+
+[apply_4 : crystal(m3) * fuel --> (crystal(m4))out ]'op_4, 1;
+[route_4 : crystal(m4) --> (crystal(m4))in_op_5 ]'skin;
+
+[apply_5 : crystal(m4) * fuel --> (crystal(m5))out ]'op_5, 1;
+[route_5 : crystal(m5) --> (crystal(m5))in_op_6 ]'skin;
+
+[apply_6 : crystal(m5) * fuel --> (crystal(m6))out ]'op_6, 1;
+[route_6 : crystal(m6) --> (crystal(m6))in_op_7 ]'skin;
+
+[apply_7 : crystal(m6) * fuel --> (crystal(m7))out ]'op_7, 1;
+[route_7 : crystal(m7) --> (crystal(m7))in_op_8 ]'skin;
+
+[apply_8 : crystal(m7) * fuel --> (crystal(m8))out ]'op_8, 1;
+[route_8 : crystal(m8) --> (crystal(m8))in_op_9 ]'skin;
+
+[apply_9 : crystal(m8) * fuel --> (crystal(m9))out ]'op_9, 1;
+[route_9 : crystal(m9) --> (crystal(m9))in_op_10 ]'skin;
+
+[apply_10 : crystal(m9) * fuel --> (crystal(m10))out ]'op_10, 1;
+
+/* The crystal that carries all ten marks is the transformed output — the
+ * input time crystal after the full step-by-step PPM operation. */
+[output : crystal(m10) --> transformed(m10) ]'skin;
