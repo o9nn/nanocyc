@@ -4,43 +4,90 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.2
- * Functionality: Primes in the five sensory systems.
+ * Sections: 7.2 (primes in the five sensory system)
+ *
+ * Functionality: Each of the five human senses locks onto its own PRIME
+ *   TRIPLET from the Phase Prime Metric — the sense IS the prime signature.
+ *   The exact assignments match SensoryModality in nanobrain_brain_model.h:
+ *
+ *     Visual    : 2, 7, 13     (fast on/off contrast; gml shape 1)
+ *     Auditory  : 3, 11, 17    (harmonic series in triples;    shape 3)
+ *     Tactile   : 5, 19, 29    (skin receptor triplet;         shape 5)
+ *     Olfactory : 23, 31, 37   (slow chemical resonance;       shape 8)
+ *     Gustatory : 41, 43, 47   (twin/near-twin taste triplet;  shape 12)
+ *
+ *   A sensory input is first stamped by its modality's prime triplet
+ *   (map_input in the C++), then the stamped tokens are lifted to the skin
+ *   where CROSS-MODAL INTEGRATION multiplies triplets from different senses
+ *   into a resonance-scored composite feature — the CrossModalResult of the
+ *   SensoryPrimeMapper.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli (the 15 PPM primes 2..47)
+ *     common/gml_shapes.pli      (each modality resonates with a GML shape)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (SensoryModality, SensoryPrimeMapping, SensoryPrimeMapper,
+ *                CrossModalResult, cross_modal_integrate,
+ *                calculate_cross_resonance)
+ * Initial multiset: one raw stimulus in each sense membrane plus its assigned
+ *                   prime triplet, and a resonance seed in the skin ready to
+ *                   perform cross-modal integration.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'vision []'hearing []'touch []'taste []'smell ]'skin;
+@mu = [ []'visual []'auditory []'tactile []'olfactory []'gustatory ]'skin;
 
-@mskin = seed;
-@mvision = unit(vision), fuel;
-@mhearing = unit(hearing), fuel;
-@mtouch = unit(touch), fuel;
-@mtaste = unit(taste), fuel;
-@msmell = unit(smell), fuel;
+@mskin      = resonance_seed;
+@mvisual    = stimulus(v), prime(2),  prime(7),  prime(13);
+@mauditory  = stimulus(a), prime(3),  prime(11), prime(17);
+@mtactile   = stimulus(t), prime(5),  prime(19), prime(29);
+@molfactory = stimulus(o), prime(23), prime(31), prime(37);
+@mgustatory = stimulus(g), prime(41), prime(43), prime(47);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.2  Per-sense prime encoding: the stimulus binds its modality triplet
+ *      into a stamped_feature token — this is exactly what
+ *      SensoryPrimeMapper::map_input does with apply_prime_encoding.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_vision ]'skin;
-[seed_dispense : seed --> (work)in_hearing ]'skin;
-[seed_dispense : seed --> (work)in_touch ]'skin;
-[seed_dispense : seed --> (work)in_taste ]'skin;
-[seed_dispense : seed --> (work)in_smell ]'skin;
-[step : work * unit(vision) * fuel --> done(vision) ]'vision;
-[step : work * unit(hearing) * fuel --> done(hearing) ]'hearing;
-[step : work * unit(touch) * fuel --> done(touch) ]'touch;
-[step : work * unit(taste) * fuel --> done(taste) ]'taste;
-[step : work * unit(smell) * fuel --> done(smell) ]'smell;
-[report : done(vision) --> (result(vision))out ]'vision;
-[report : done(hearing) --> (result(hearing))out ]'hearing;
-[report : done(touch) --> (result(touch))out ]'touch;
-[report : done(taste) --> (result(taste))out ]'taste;
-[report : done(smell) --> (result(smell))out ]'smell;
+[encode_v : stimulus(v) * prime(2)  * prime(7)  * prime(13)
+          --> stamped(v,2,7,13) ]'visual;
+[encode_a : stimulus(a) * prime(3)  * prime(11) * prime(17)
+          --> stamped(a,3,11,17) ]'auditory;
+[encode_t : stimulus(t) * prime(5)  * prime(19) * prime(29)
+          --> stamped(t,5,19,29) ]'tactile;
+[encode_o : stimulus(o) * prime(23) * prime(31) * prime(37)
+          --> stamped(o,23,31,37) ]'olfactory;
+[encode_g : stimulus(g) * prime(41) * prime(43) * prime(47)
+          --> stamped(g,41,43,47) ]'gustatory;
+
+/* --------------------------------------------------------------------------
+ * Lift stamped features to the skin for cross-modal integration.
+ * ------------------------------------------------------------------------*/
+[lift_v : stamped(v,P1,P2,P3) --> (feature(v,P1,P2,P3))out ]'visual;
+[lift_a : stamped(a,P1,P2,P3) --> (feature(a,P1,P2,P3))out ]'auditory;
+[lift_t : stamped(t,P1,P2,P3) --> (feature(t,P1,P2,P3))out ]'tactile;
+[lift_o : stamped(o,P1,P2,P3) --> (feature(o,P1,P2,P3))out ]'olfactory;
+[lift_g : stamped(g,P1,P2,P3) --> (feature(g,P1,P2,P3))out ]'gustatory;
+
+/* --------------------------------------------------------------------------
+ * Cross-modal integration in the skin: any two senses whose prime triplets
+ * share no common prime (they always do, because the 5 triplets are
+ * disjoint) resonate — the pair is scored by resonance_seed and fused into
+ * a cross_modal composite. Every pairwise fusion mirrors
+ * calculate_cross_resonance(a,b) in the C++.
+ * ------------------------------------------------------------------------*/
+[cross_va : feature(v,A,B,C) * feature(a,D,E,F) * resonance_seed
+          --> cross_modal(v,a) * resonance_seed ]'skin;
+[cross_vt : feature(v,A,B,C) * feature(t,D,E,F) * resonance_seed
+          --> cross_modal(v,t) * resonance_seed ]'skin;
+[cross_at : feature(a,A,B,C) * feature(t,D,E,F) * resonance_seed
+          --> cross_modal(a,t) * resonance_seed ]'skin;
+[cross_og : feature(o,A,B,C) * feature(g,D,E,F) * resonance_seed
+          --> cross_modal(o,g) * resonance_seed ]'skin;
+
+/* Final integration: any cross_modal token contributes to the coherence
+ * score reported to the outside as a CrossModalResult. */
+[coherence : cross_modal(M1,M2)
+           --> (integrated(M1,M2))out ]'skin;

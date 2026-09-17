@@ -5,26 +5,84 @@
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
  * Sections: 7.8, 7.8.1
- * Functionality: The basic device for decision making in the brain: the H3 device used everywhere.
+ *
+ * Functionality: The H3 device is the brain's basic decision-making unit
+ *   — the same circuit repeats everywhere in the cortex. Three stacked
+ *   layers L1, L2, L3 each produce their own candidate action; a
+ *   CONFIDENCE-WEIGHTED VOTING stage in the skin fuses the three votes
+ *   into one decision only when a CONSENSUS THRESHOLD is met.
+ *
+ *   This is exactly the H3DecisionDevice in nanobrain_brain_model.h:
+ *     - three DecisionLayer instances, each with its own threshold
+ *     - layer_forward turns an input into an activation
+ *     - vote() weights the three activations
+ *     - the final H3DecisionResult flags consensus_reached
+ *
+ *     7.8.1  H3 device brain uses EVERYWHERE: the model is scale-free —
+ *            the same three-layer confidence-vote pattern is used by
+ *            cortical columns, cerebellar Purkinje trees and hippocampal
+ *            CA3 circuits alike; this file specifies one instance.
+ *
+ *   Common modules inlined by convention:
+ *     common/pln_truth.pli (truth values feed the confidence thresholds)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (H3DecisionDevice, DecisionLayer, H3DecisionResult,
+ *                decide(), layer_forward(), vote(), set_thresholds(),
+ *                IntegratedBrainModel::make_decision)
+ * Initial multiset: an input situation in the skin, three layer weights
+ *                   with per-layer thresholds, and a voting_seed ready to
+ *                   fuse the layer activations.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'h3 ]'skin;
+@mu = [ []'l1 []'l2 []'l3 []'voter ]'skin;
 
-@mskin = seed;
-@mh3 = unit(h3), fuel;
+@mskin  = input(situation), voting_seed;
+@ml1    = weights(1), threshold(1,low),  bias(1);
+@ml2    = weights(2), threshold(2,med),  bias(2);
+@ml3    = weights(3), threshold(3,high), bias(3);
+@mvoter = confidence_seed;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.8  Dispatch the input to all three H3 layers in parallel — the
+ *      three-way fan-out of H3DecisionDevice::decide.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_h3 ]'skin;
-[step : work * unit(h3) * fuel --> done(h3) ]'h3;
-[report : done(h3) --> (result(h3))out ]'h3;
+[to_l1 : input(S) --> input(S) * (input(S))in_l1 ]'skin;
+[to_l2 : input(S) --> input(S) * (input(S))in_l2 ]'skin;
+[to_l3 : input(S) --> (input(S))in_l3 ]'skin;
+
+/* --------------------------------------------------------------------------
+ * layer_forward: each layer combines input, weights and bias to produce an
+ * activation tagged with its confidence tier.
+ * ------------------------------------------------------------------------*/
+[forward_l1 : input(S) * weights(1) * bias(1) * threshold(1,T)
+            --> activation(1,S,T) * weights(1) * bias(1) * threshold(1,T) ]'l1;
+[forward_l2 : input(S) * weights(2) * bias(2) * threshold(2,T)
+            --> activation(2,S,T) * weights(2) * bias(2) * threshold(2,T) ]'l2;
+[forward_l3 : input(S) * weights(3) * bias(3) * threshold(3,T)
+            --> activation(3,S,T) * weights(3) * bias(3) * threshold(3,T) ]'l3;
+
+/* --------------------------------------------------------------------------
+ * Route each activation to the voter. Siblings communicate through the
+ * skin — L1/L2/L3 emit outward, the skin injects into the voter.
+ * ------------------------------------------------------------------------*/
+[emit_l1 : activation(1,S,T) --> (activation(1,S,T))out ]'l1;
+[emit_l2 : activation(2,S,T) --> (activation(2,S,T))out ]'l2;
+[emit_l3 : activation(3,S,T) --> (activation(3,S,T))out ]'l3;
+[to_voter_1 : activation(N,S,T) --> (activation(N,S,T))in_voter ]'skin;
+
+/* --------------------------------------------------------------------------
+ * Confidence-weighted vote in the voter membrane. When all three
+ * activations arrive, the confidence seed produces a decision plus a
+ * consensus flag (consensus if two or more layers agreed on the tier).
+ * ------------------------------------------------------------------------*/
+[vote : confidence_seed
+      * activation(1,S,T1) * activation(2,S,T2) * activation(3,S,T3)
+      --> decision(S,T1,T2,T3) * confidence_seed ]'voter;
+
+[consensus_out : decision(S,T,T,T) --> (h3_result(S,T,consensus))out ]'voter;
+[majority_out  : decision(S,T,T,U) --> (h3_result(S,T,majority))out ]'voter;
+[emit_final    : h3_result(S,T,C) * voting_seed
+              --> (h3_final(S,T,C))out * voting_seed ]'skin;

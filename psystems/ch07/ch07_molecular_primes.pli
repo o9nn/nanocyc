@@ -4,47 +4,88 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.5
- * Functionality: Primes in the neuron, glia, dendro-astrocytes, microtubule, proteins and DNA.
+ * Sections: 7.5 (primes in the neuron, glia, dendro-astrocytes, microtubule,
+ *                proteins and DNA)
+ *
+ * Functionality: The molecular substrate of the brain is itself a nested
+ *   hierarchy of prime metrics. From the outside in:
+ *
+ *     neuron       (whole cell, ms rhythm)         : primes  2, 3
+ *       '- glia            (support field, s)      : primes  5, 7
+ *       '- astrocyte       (dendro-astro coupling) : primes 11, 13
+ *            '- microtubule (tubulin lattice, us)  : primes 17, 19
+ *                 '- protein   (fold, ns)          : primes 23, 29
+ *                      '- dna  (helix, ps)         : primes 31, 37
+ *
+ *   The membranes are nested (a protein sits INSIDE a microtubule, which
+ *   sits INSIDE an astrocyte, which sits INSIDE a glia envelope, which
+ *   sits INSIDE a neuron). A spike enters the neuron and descends through
+ *   the scales, each level stamping it with its prime pair. The DNA
+ *   emits a genetic_response that climbs back up as an ordered_factor
+ *   chain — the equivalent of the OrderedFactor object in PPMCoherenceTable.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli (the 15 primes)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (molecular substrate that BrainRegionSimulator subclasses
+ *               such as CerebellumSimulator, HippocampusSimulator and
+ *               HypothalamusSimulator run on — see also
+ *               src/cpp/nanobrain_ppm.h::OrderedFactor)
+ * Initial multiset: an incoming spike in the neuron plus the prime pair
+ *                   at every nested scale; a genetic_seed inside the DNA
+ *                   ready to be transcribed.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'neuron []'glia []'astrocyte []'microtubule []'protein []'dna ]'skin;
+/* Truly nested: the whole cell is one skin; below it, each smaller scale
+ * lives inside the next larger scale (protein inside microtubule, etc.). */
+@mu = [ [ [ [ [ [ []'dna ]'protein ]'microtubule ]'astrocyte ]'glia ]'neuron ]'skin;
 
-@mskin = seed;
-@mneuron = unit(neuron), fuel;
-@mglia = unit(glia), fuel;
-@mastrocyte = unit(astrocyte), fuel;
-@mmicrotubule = unit(microtubule), fuel;
-@mprotein = unit(protein), fuel;
-@mdna = unit(dna), fuel;
+@mskin        = tick;
+@mneuron      = spike, prime(2), prime(3);
+@mglia        = prime(5), prime(7);
+@mastrocyte   = prime(11), prime(13);
+@mmicrotubule = prime(17), prime(19);
+@mprotein     = prime(23), prime(29);
+@mdna         = genetic_seed, prime(31), prime(37);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.5  Descend the scale hierarchy: each level stamps the spike with its
+ *      prime pair and passes the enriched signal to the next-inner scale.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_neuron ]'skin;
-[seed_dispense : seed --> (work)in_glia ]'skin;
-[seed_dispense : seed --> (work)in_astrocyte ]'skin;
-[seed_dispense : seed --> (work)in_microtubule ]'skin;
-[seed_dispense : seed --> (work)in_protein ]'skin;
-[seed_dispense : seed --> (work)in_dna ]'skin;
-[step : work * unit(neuron) * fuel --> done(neuron) ]'neuron;
-[step : work * unit(glia) * fuel --> done(glia) ]'glia;
-[step : work * unit(astrocyte) * fuel --> done(astrocyte) ]'astrocyte;
-[step : work * unit(microtubule) * fuel --> done(microtubule) ]'microtubule;
-[step : work * unit(protein) * fuel --> done(protein) ]'protein;
-[step : work * unit(dna) * fuel --> done(dna) ]'dna;
-[report : done(neuron) --> (result(neuron))out ]'neuron;
-[report : done(glia) --> (result(glia))out ]'glia;
-[report : done(astrocyte) --> (result(astrocyte))out ]'astrocyte;
-[report : done(microtubule) --> (result(microtubule))out ]'microtubule;
-[report : done(protein) --> (result(protein))out ]'protein;
-[report : done(dna) --> (result(dna))out ]'dna;
+[drive        : tick --> (tick)in_neuron ]'skin;
+[at_neuron    : tick * spike * prime(2) * prime(3)
+              --> ordered(neuron,2,3) * (ordered(neuron,2,3))in_glia ]'neuron;
+[at_glia      : ordered(neuron,A,B) * prime(5) * prime(7)
+              --> ordered(glia,A,B,5,7) * (ordered(glia,A,B,5,7))in_astrocyte ]'glia;
+[at_astrocyte : ordered(glia,A,B,C,D) * prime(11) * prime(13)
+              --> ordered(astrocyte,A,B,C,D,11,13)
+                * (ordered(astrocyte,A,B,C,D,11,13))in_microtubule ]'astrocyte;
+[at_microtub  : ordered(astrocyte,A,B,C,D,E,F) * prime(17) * prime(19)
+              --> ordered(microtubule,A,B,C,D,E,F,17,19)
+                * (ordered(microtubule,A,B,C,D,E,F,17,19))in_protein ]'microtubule;
+[at_protein   : ordered(microtubule,A,B,C,D,E,F,G,H) * prime(23) * prime(29)
+              --> ordered(protein,A,B,C,D,E,F,G,H,23,29)
+                * (ordered(protein,A,B,C,D,E,F,G,H,23,29))in_dna ]'protein;
+
+/* --------------------------------------------------------------------------
+ * DNA transcription: the genetic_seed reads the fully ordered chain and
+ * emits a genetic_response that climbs back up the scale hierarchy.
+ * ------------------------------------------------------------------------*/
+[transcribe  : ordered(protein,A,B,C,D,E,F,G,H,I,J) * genetic_seed
+             * prime(31) * prime(37)
+             --> genetic_response(A,B,C,D,E,F,G,H,I,J,31,37) * genetic_seed ]'dna;
+[dna_up      : genetic_response(A,B,C,D,E,F,G,H,I,J,K,L)
+             --> (genetic_response(A,B,C,D,E,F,G,H,I,J,K,L))out ]'dna;
+[prot_up     : genetic_response(A,B,C,D,E,F,G,H,I,J,K,L)
+             --> (genetic_response(A,B,C,D,E,F,G,H,I,J,K,L))out ]'protein;
+[micro_up    : genetic_response(A,B,C,D,E,F,G,H,I,J,K,L)
+             --> (genetic_response(A,B,C,D,E,F,G,H,I,J,K,L))out ]'microtubule;
+[astro_up    : genetic_response(A,B,C,D,E,F,G,H,I,J,K,L)
+             --> (genetic_response(A,B,C,D,E,F,G,H,I,J,K,L))out ]'astrocyte;
+[glia_up     : genetic_response(A,B,C,D,E,F,G,H,I,J,K,L)
+             --> (genetic_response(A,B,C,D,E,F,G,H,I,J,K,L))out ]'glia;
+[neuron_up   : genetic_response(A,B,C,D,E,F,G,H,I,J,K,L)
+             --> (molecular_state(A,B,C,D,E,F,G,H,I,J,K,L))out ]'neuron;

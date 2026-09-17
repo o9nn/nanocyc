@@ -4,39 +4,109 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.7, 7.7.1-7.7.2
- * Functionality: The brain's wheel of primes: eight sensors holding the cross-over magic of the octonion; eight mathematical operators running two orthogonal math engines.
+ * Sections: 7.7, 7.7.1, 7.7.2
+ *
+ * Functionality: The brain's WHEEL OF PRIMES. Sensory prime triplets meet
+ *   mathematical prime operators on a shared rotating wheel:
+ *
+ *     7.7.1  EIGHT SENSORS hold the CROSS-OVER MAGIC OF THE OCTONION.
+ *            The octonion is the last normed division algebra; its Fano-
+ *            plane cross-over rule is what lets eight independent sensor
+ *            channels multiply into a single coherent signal without
+ *            collision.  Eight sensor membranes s1..s8 sit around the
+ *            wheel; a cross-over rule fuses adjacent pairs.
+ *
+ *     7.7.2  EIGHT MATHEMATICAL OPERATORS run TWO ORTHOGONAL MATH ENGINES.
+ *            Engine A holds the four "linear" operators (+ - * /) and
+ *            engine B holds the four "phase" operators (rot, refl, integ,
+ *            diff). The two engines are ORTHOGONAL — they never share a
+ *            token; the wheel routes octonion products alternately into
+ *            each engine, producing a paired (linear, phase) result.
+ *
+ *   The wheel itself is a hub in the skin that steps the cross-over
+ *   product from sensor pairs through both engines and reports the fused
+ *   wheel_state at the end of every rotation.
+ *
+ *   Common modules inlined by convention:
+ *     common/hypernumbers.pli    (octonion multiplication table)
+ *     common/alphabet_primes.pli (primes on the sensor triplets)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (SensoryPrimeMapper::cross_modal_integrate — the eight
+ *               sensor channels feed the same integration path,
+ *               ConsciousnessExpressionEngine — orthogonal engines
+ *               correspond to the dodecanion / octonion dual axes)
+ * Initial multiset: eight sensor tokens s(1)..s(8); one octonion basis in
+ *                   each engine seed; a rotation token on the wheel.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'wheel []'sensors_8 []'engine_a []'engine_b ]'skin;
+@mu = [ []'wheel []'s1 []'s2 []'s3 []'s4 []'s5 []'s6 []'s7 []'s8
+        []'engine_a []'engine_b ]'skin;
 
-@mskin = seed;
-@mwheel = unit(wheel), fuel;
-@msensors_8 = unit(sensors_8), fuel;
-@mengine_a = unit(engine_a), fuel;
-@mengine_b = unit(engine_b), fuel;
+@mskin      = rotation;
+@mwheel     = hub;
+
+/* Eight sensor channels — each carries a distinct prime and a sensor tag. */
+@ms1 = sensor(1), prime(2);
+@ms2 = sensor(2), prime(3);
+@ms3 = sensor(3), prime(5);
+@ms4 = sensor(4), prime(7);
+@ms5 = sensor(5), prime(11);
+@ms6 = sensor(6), prime(13);
+@ms7 = sensor(7), prime(17);
+@ms8 = sensor(8), prime(19);
+
+/* Engine A: linear operators. Engine B: orthogonal phase operators. */
+@mengine_a = op(add), op(sub), op(mul), op(div);
+@mengine_b = op(rot), op(refl), op(integ), op(diff);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.7.1  Each sensor emits its (sensor,prime) pair to the skin; the wheel
+ *        receives them and applies the octonion CROSS-OVER on adjacent
+ *        pairs (1x2, 3x4, 5x6, 7x8) — four cross-over products per turn.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_wheel ]'skin;
-[seed_dispense : seed --> (work)in_sensors_8 ]'skin;
-[seed_dispense : seed --> (work)in_engine_a ]'skin;
-[seed_dispense : seed --> (work)in_engine_b ]'skin;
-[step : work * unit(wheel) * fuel --> done(wheel) ]'wheel;
-[step : work * unit(sensors_8) * fuel --> done(sensors_8) ]'sensors_8;
-[step : work * unit(engine_a) * fuel --> done(engine_a) ]'engine_a;
-[step : work * unit(engine_b) * fuel --> done(engine_b) ]'engine_b;
-[report : done(wheel) --> (result(wheel))out ]'wheel;
-[report : done(sensors_8) --> (result(sensors_8))out ]'sensors_8;
-[report : done(engine_a) --> (result(engine_a))out ]'engine_a;
-[report : done(engine_b) --> (result(engine_b))out ]'engine_b;
+[emit_1 : sensor(1) * prime(P) --> (channel(1,P))out ]'s1;
+[emit_2 : sensor(2) * prime(P) --> (channel(2,P))out ]'s2;
+[emit_3 : sensor(3) * prime(P) --> (channel(3,P))out ]'s3;
+[emit_4 : sensor(4) * prime(P) --> (channel(4,P))out ]'s4;
+[emit_5 : sensor(5) * prime(P) --> (channel(5,P))out ]'s5;
+[emit_6 : sensor(6) * prime(P) --> (channel(6,P))out ]'s6;
+[emit_7 : sensor(7) * prime(P) --> (channel(7,P))out ]'s7;
+[emit_8 : sensor(8) * prime(P) --> (channel(8,P))out ]'s8;
+
+[to_wheel_1 : channel(N,P) --> (channel(N,P))in_wheel ]'skin;
+
+[crossover_12 : hub * channel(1,X) * channel(2,Y) --> hub * pair(a,X,Y) ]'wheel;
+[crossover_34 : hub * channel(3,X) * channel(4,Y) --> hub * pair(a,X,Y) ]'wheel;
+[crossover_56 : hub * channel(5,X) * channel(6,Y) --> hub * pair(b,X,Y) ]'wheel;
+[crossover_78 : hub * channel(7,X) * channel(8,Y) --> hub * pair(b,X,Y) ]'wheel;
+
+/* --------------------------------------------------------------------------
+ * 7.7.2  Two orthogonal math engines. Pairs tagged 'a' go to engine_a
+ *        (linear ops); pairs tagged 'b' go to engine_b (phase ops). The
+ *        rotation token in the skin sequences one turn of the wheel.
+ * ------------------------------------------------------------------------*/
+[to_a : pair(a,X,Y) --> (pair(a,X,Y))out ]'wheel;
+[to_b : pair(b,X,Y) --> (pair(b,X,Y))out ]'wheel;
+
+[dispatch_a : rotation * pair(a,X,Y)
+            --> rotation * (pair(a,X,Y))in_engine_a ]'skin;
+[dispatch_b : rotation * pair(b,X,Y)
+            --> rotation * (pair(b,X,Y))in_engine_b ]'skin;
+
+[apply_a : pair(a,X,Y) * op(OP)
+         --> result_a(OP,X,Y) * op(OP) ]'engine_a;
+[apply_b : pair(b,X,Y) * op(OP)
+         --> result_b(OP,X,Y) * op(OP) ]'engine_b;
+
+[emit_a : result_a(OP,X,Y) --> (result_a(OP,X,Y))out ]'engine_a;
+[emit_b : result_b(OP,X,Y) --> (result_b(OP,X,Y))out ]'engine_b;
+
+/* --------------------------------------------------------------------------
+ * Wheel closes: the two orthogonal results fuse into a single wheel_state,
+ * which is what SensoryPrimeMapper::cross_modal_integrate reports upstream.
+ * ------------------------------------------------------------------------*/
+[fuse : result_a(A,X1,Y1) * result_b(B,X2,Y2)
+      --> (wheel_state(A,B,X1,Y1,X2,Y2))out ]'skin;

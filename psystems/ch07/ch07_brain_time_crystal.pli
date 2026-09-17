@@ -4,27 +4,105 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.10
- * Functionality: Time-crystal model of the human brain (integrates common/time_crystal_core.pli).
+ * Sections: 7.10 (time crystal model of the human brain)
+ *
+ * Functionality: The complete brain time-crystal integrates the shared
+ *   11-dimensional nested clock (common/time_crystal_core.pli) with the
+ *   four core brain subsystems from IntegratedBrainModel:
+ *
+ *     sensory      -> SensoryPrimeMapper           (input skin of the crystal)
+ *     memory       -> MemoryCarrierSystem          (persistence sublayer)
+ *     decision     -> H3DecisionDevice             (action selector)
+ *     expression   -> ConsciousnessExpressionEngine (output surface)
+ *
+ *   A master tick descends from the skin through the 11 nested phase
+ *   membranes phase_1..phase_11 (the 11D time-crystal manifold), and at
+ *   each pass it also fans out to the four subsystem membranes. Every
+ *   subsystem returns a lit(subsystem) token to the skin; when all four
+ *   return, the skin emits ONE brain_state — the tick of the whole
+ *   integrated brain time crystal. The tick then wraps back from phase_11
+ *   to the skin, closing the crystal loop.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the 11 nested phase membranes and
+ *                                    tick_in / tick_wrap rules
+ *     common/hypernumbers.pli      — quaternion / octonion / dodecanion
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (IntegratedBrainModel, IntegratedBrainConfig,
+ *                IntegratedBrainMetrics, process_cycle — this file is the
+ *                P-system spec of that top-level cycle),
+ *               src/cpp/nanobrain_time_crystal.h (11D manifold).
+ * Initial multiset: one master tick in the skin, four subsystem membranes
+ *                   loaded with their entry token, and the empty phase
+ *                   stack ready to receive the tick.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'brain_tc ]'skin;
+/* Skin holds the four subsystems as siblings alongside the phase stack.
+ * The 11 phase membranes are strictly nested (11D time-crystal manifold). */
+@mu = [ []'sensory []'memory []'decision []'expression
+        [ [ [ [ [ [ [ [ [ [ []'phase_11 ]'phase_10 ]'phase_9 ]'phase_8
+        ]'phase_7 ]'phase_6 ]'phase_5 ]'phase_4 ]'phase_3 ]'phase_2 ]'phase_1
+        ]'skin;
 
-@mskin = seed;
-@mbrain_tc = unit(brain_tc), fuel;
+@mskin       = master_tick, cycle_seed;
+@msensory    = sensory_ready;
+@mmemory     = memory_ready;
+@mdecision   = decision_ready;
+@mexpression = expression_ready;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.10  Descend the tick through the 11D phase manifold; one dimension
+ *       per step. This is exactly the tick_in cascade from
+ *       time_crystal_core.pli, specialised for the brain crystal.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_brain_tc ]'skin;
-[step : work * unit(brain_tc) * fuel --> done(brain_tc) ]'brain_tc;
-[report : done(brain_tc) --> (result(brain_tc))out ]'brain_tc;
+[tick_p1  : master_tick --> (tick)in_phase_1 ]'skin;
+[tick_p2  : tick --> (tick)in_phase_2  ]'phase_1;
+[tick_p3  : tick --> (tick)in_phase_3  ]'phase_2;
+[tick_p4  : tick --> (tick)in_phase_4  ]'phase_3;
+[tick_p5  : tick --> (tick)in_phase_5  ]'phase_4;
+[tick_p6  : tick --> (tick)in_phase_6  ]'phase_5;
+[tick_p7  : tick --> (tick)in_phase_7  ]'phase_6;
+[tick_p8  : tick --> (tick)in_phase_8  ]'phase_7;
+[tick_p9  : tick --> (tick)in_phase_9  ]'phase_8;
+[tick_p10 : tick --> (tick)in_phase_10 ]'phase_9;
+[tick_p11 : tick --> (tick)in_phase_11 ]'phase_10;
+
+/* Innermost phase wraps back to the skin — closed time-crystal loop. */
+[wrap : tick --> (returning_tick)out ]'phase_11;
+[echo_p10 : returning_tick --> (returning_tick)out ]'phase_10;
+[echo_p9  : returning_tick --> (returning_tick)out ]'phase_9;
+[echo_p8  : returning_tick --> (returning_tick)out ]'phase_8;
+[echo_p7  : returning_tick --> (returning_tick)out ]'phase_7;
+[echo_p6  : returning_tick --> (returning_tick)out ]'phase_6;
+[echo_p5  : returning_tick --> (returning_tick)out ]'phase_5;
+[echo_p4  : returning_tick --> (returning_tick)out ]'phase_4;
+[echo_p3  : returning_tick --> (returning_tick)out ]'phase_3;
+[echo_p2  : returning_tick --> (returning_tick)out ]'phase_2;
+[echo_p1  : returning_tick --> (returning_tick)out ]'phase_1;
+
+/* --------------------------------------------------------------------------
+ * Fan-out the same tick to the four subsystems and collect their lit()
+ * confirmations — the process_cycle() step of IntegratedBrainModel.
+ * ------------------------------------------------------------------------*/
+[fan_sens : master_tick --> master_tick * (tick)in_sensory ]'skin;
+[fan_mem  : master_tick --> master_tick * (tick)in_memory ]'skin;
+[fan_dec  : master_tick --> master_tick * (tick)in_decision ]'skin;
+[fan_exp  : master_tick --> master_tick * (tick)in_expression ]'skin;
+
+[light_sens : tick * sensory_ready    --> (lit(sensory))out ]'sensory;
+[light_mem  : tick * memory_ready     --> (lit(memory))out ]'memory;
+[light_dec  : tick * decision_ready   --> (lit(decision))out ]'decision;
+[light_exp  : tick * expression_ready --> (lit(expression))out ]'expression;
+
+/* --------------------------------------------------------------------------
+ * The skin closes the cycle: four lit() tokens plus a returning tick
+ * from phase_11 assemble one full brain_state — the IntegratedBrainMetrics
+ * snapshot of a single brain time-crystal tick.
+ * ------------------------------------------------------------------------*/
+[close_cycle : cycle_seed * returning_tick
+             * lit(sensory) * lit(memory) * lit(decision) * lit(expression)
+             --> (brain_state(sensory,memory,decision,expression))out
+               * cycle_seed ]'skin;

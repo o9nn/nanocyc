@@ -4,39 +4,88 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.4
- * Functionality: Primes in the connectome, spinal cord, amygdala nucleus and cortical column.
+ * Sections: 7.4 (primes in the connectome, spinal cord, amygdala nucleus and
+ *                cortical column)
+ *
+ * Functionality: The macroscopic wiring of the brain — CONNECTOME (global
+ *   graph), SPINAL CORD (reflex column), AMYGDALA NUCLEUS (fear/valence
+ *   modulator) and CORTICAL COLUMN (six-layer minicolumn) — each carries
+ *   its own prime metric. The four regions are wired as siblings inside
+ *   the skin; the connectome is the router that fans signals between them.
+ *
+ *     Connectome     : primes 2, 3, 5      (global graph frequencies)
+ *     Spinal cord    : primes 7, 11        (reflex loop rhythm)
+ *     Amygdala       : primes 13, 17       (fast salience gain)
+ *     Cortical column: primes 19, 23, 29, 31 (one prime per layer L2..L5)
+ *
+ *   A sensory afferent is picked up by the spinal cord, boosted through
+ *   the amygdala's salience gate, integrated into the cortical column's
+ *   layered stack, and finally announced back on the connectome as a
+ *   global broadcast — exactly the flow implemented in the
+ *   IntegratedBrainModel::process_brain_regions() cycle.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli (2..31)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BrainRegionSimulator, BrainRegionState, IntegratedBrainModel::
+ *                process_brain_regions — the connectome routing role of the
+ *                skin here corresponds to the AtomSpace hypergraph that
+ *                connects BrainRegionState instances)
+ * Initial multiset: an afferent signal in the spinal cord, a broadcast slot
+ *                   in the connectome, and the region-specific primes seeded
+ *                   in every functional membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
 @mu = [ []'connectome []'spinal []'amygdala []'column ]'skin;
 
-@mskin = seed;
-@mconnectome = unit(connectome), fuel;
-@mspinal = unit(spinal), fuel;
-@mamygdala = unit(amygdala), fuel;
-@mcolumn = unit(column), fuel;
+@mskin       = broadcast_bus;
+@mconnectome = router, prime(2), prime(3), prime(5);
+@mspinal     = afferent, prime(7), prime(11);
+@mamygdala   = salience_gate, prime(13), prime(17);
+@mcolumn     = layer(L2), layer(L3), layer(L4), layer(L5),
+               prime(19), prime(23), prime(29), prime(31);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.4  Spinal cord: raw afferent enters the reflex loop and is stamped by
+ *      the spinal prime pair (7, 11) into a reflex signal.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_connectome ]'skin;
-[seed_dispense : seed --> (work)in_spinal ]'skin;
-[seed_dispense : seed --> (work)in_amygdala ]'skin;
-[seed_dispense : seed --> (work)in_column ]'skin;
-[step : work * unit(connectome) * fuel --> done(connectome) ]'connectome;
-[step : work * unit(spinal) * fuel --> done(spinal) ]'spinal;
-[step : work * unit(amygdala) * fuel --> done(amygdala) ]'amygdala;
-[step : work * unit(column) * fuel --> done(column) ]'column;
-[report : done(connectome) --> (result(connectome))out ]'connectome;
-[report : done(spinal) --> (result(spinal))out ]'spinal;
-[report : done(amygdala) --> (result(amygdala))out ]'amygdala;
-[report : done(column) --> (result(column))out ]'column;
+[reflex : afferent * prime(7) * prime(11) --> reflex_signal(7,11) ]'spinal;
+[send_up : reflex_signal(A,B) --> (reflex_signal(A,B))out ]'spinal;
+
+/* --------------------------------------------------------------------------
+ * Amygdala: fast salience gate stamps the reflex signal with the amygdala's
+ * (13, 17) primes — the emotional / valence modulator.
+ * ------------------------------------------------------------------------*/
+[route_amyg : reflex_signal(A,B) --> (reflex_signal(A,B))in_amygdala ]'skin;
+[gate       : reflex_signal(A,B) * salience_gate * prime(13) * prime(17)
+            --> salient_signal(A,B,13,17) * salience_gate ]'amygdala;
+[to_column  : salient_signal(A,B,C,D) --> (salient_signal(A,B,C,D))out ]'amygdala;
+
+/* --------------------------------------------------------------------------
+ * Cortical column: six-layer minicolumn. The salient signal climbs L2->L5,
+ * one prime stamping each layer transition (19, 23, 29, 31). The final
+ * column output represents the column's decision.
+ * ------------------------------------------------------------------------*/
+[route_col  : salient_signal(A,B,C,D) --> (salient_signal(A,B,C,D))in_column ]'skin;
+[layer2 : salient_signal(A,B,C,D) * layer(L2) * prime(19)
+        --> col_state(L2,19) ]'column;
+[layer3 : col_state(L2,19) * layer(L3) * prime(23)
+        --> col_state(L3,23) ]'column;
+[layer4 : col_state(L3,23) * layer(L4) * prime(29)
+        --> col_state(L4,29) ]'column;
+[layer5 : col_state(L4,29) * layer(L5) * prime(31)
+        --> col_out(L5,31) ]'column;
+[column_up : col_out(L,P) --> (col_out(L,P))out ]'column;
+
+/* --------------------------------------------------------------------------
+ * Connectome: the router in the skin publishes the column output as a
+ * global brain broadcast, stamped with the connectome triplet (2, 3, 5).
+ * ------------------------------------------------------------------------*/
+[route_conn : col_out(L,P) --> (col_out(L,P))in_connectome ]'skin;
+[broadcast  : col_out(L,P) * router * prime(2) * prime(3) * prime(5)
+            --> (global_state(L,P,2,3,5))out * router ]'connectome;
+[publish    : broadcast_bus * global_state(L,P,X,Y,Z)
+            --> (connectome_broadcast(L,P,X,Y,Z))out * broadcast_bus ]'skin;
