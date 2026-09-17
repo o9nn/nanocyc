@@ -1,0 +1,79 @@
+/* ============================================================================
+ * psystems/ch05/ch05_future_prediction.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.10 (could prime-based computing predict the future without
+ *                 prior knowledge?) — Figure 5.13.
+ *
+ * Functionality: The Turing paradigm processes FACTS gathered earlier; the
+ *   prime-based paradigm starts from CONFUSIONS (non-facts) and journeys
+ *   through them by repeatedly asking "how many confusions built this
+ *   higher-level confusion?", descending until a known fact is reached. The
+ *   architecture of confusion is the map of the unknown. Four factors let the
+ *   machine predict the future with NO prior knowledge (Figure 5.13):
+ *     1. Events geometricized => classified by SYMMETRY, and the number of
+ *        symmetries is FINITE even though events are infinite. GML's 15
+ *        shapes fuse all sensory signals into one architecture.
+ *     2. Linking events in all possible ways is mapped by the 15 primes; the
+ *        prime metric enumerates all possible discrete combinations, so a NEW
+ *        prime composition signals a FUTURE possibility.
+ *     3. The geometric seeds of higher-level event integrations are the
+ *        integrators AND the projectors of future possibilities (fractal
+ *        extrapolation = prime-symmetry extrapolation).
+ *     4. The hierarchical manifold maps (quaternion/octonion/dodecanion/
+ *        icosanion tensors over 12 layers) project the future properly.
+ *   "An event repeats until it encounters a new prime"; each product
+ *   P1, P1xP2, P1xP2xP3, ... seeds a new fractal — the seeds of new symmetry.
+ *
+ *   Membranes: skin -> confusion (journey through non-facts), primes (the
+ *   extrapolator), manifold (the 12-layer future projector).
+ *
+ * Traceability: src/cpp/nanobrain_spontaneous.h (confusion architecture),
+ *               src/cpp/nanobrain_ppm.h (prime extrapolation),
+ *               src/cpp/nanobrain_dodecanion.h (manifold projection)
+ * Initial multiset: a confusion (not a fact) to journey through; the 15
+ *                   primes; a manifold seed for the 12-layer projection.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+@mu = [ []'confusion []'primes []'manifold ]'skin;
+
+@mskin      = govern;
+@mconfusion = confusion(c_top), fuel;
+@mprimes    = prime(2), prime(3), prime(5), prime(7), prime(11),
+              prime(13), prime(17), prime(19), prime(23), prime(29),
+              prime(31), prime(37), prime(41), prime(43), prime(47), fuel;
+@mmanifold  = tensor(q), tensor(o), tensor(d), layer(12), fuel;
+
+/* --------------------------------------------------------------------------
+ * Start from confusion, not facts: descend the architecture of confusion by
+ * repeatedly asking how many sub-confusions built this one, until a known
+ * fact is reached (then do NOT enter).
+ * ------------------------------------------------------------------------*/
+[ask : confusion(C) * fuel --> subconfusions(C) ]'confusion;
+[descend : subconfusions(C) --> confusion(C) ]'confusion;
+[hit_fact : confusion(C) --> fact(C) ]'confusion, 1;
+[map_unknown : fact(C) --> (map(C))out ]'confusion;
+
+/* --------------------------------------------------------------------------
+ * Prime-symmetry extrapolation: each product P1, P1xP2, P1xP2xP3, ... seeds a
+ * new fractal. A NEW composition of primes signals a future possibility —
+ * the symmetry set is finite, so all futures are enumerable by the metric.
+ * ------------------------------------------------------------------------*/
+[receive_map : map(C) --> (map(C))in_primes ]'skin;
+[seed_fractal : prime(P) * prime(Q) * fuel --> product(P,Q) ]'primes;
+[extrapolate : map(C) * product(P,Q) --> future(C,P,Q) ]'primes;
+[new_symmetry : future(C,P,Q) --> (future_seed(C))out ]'primes;
+
+/* --------------------------------------------------------------------------
+ * Hierarchical manifold projection: the 12-layer tensor map (q/o/d/icosanion)
+ * projects the future possibility onto the reality sphere in proper form.
+ * ------------------------------------------------------------------------*/
+[receive_future : future_seed(C) --> (future_seed(C))in_manifold ]'skin;
+[project : future_seed(C) * tensor(q) * tensor(o) * tensor(d) * layer(12)
+         * fuel --> projected(C) ]'manifold;
+[report : projected(C) --> (result(future_predicted))out ]'manifold;

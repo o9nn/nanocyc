@@ -67,7 +67,8 @@
  * reply     : the resonant reply returns spontaneously to the skin
  * ignore    : non-matching crystals stay silent (clever rejection of choices)
  * ------------------------------------------------------------------------*/
-[broadcast : query(Q) * fuel --> (query(Q))in_crystal_store ]'query_bus;
+[broadcast : query(Q) * fuel --> (query(Q))out ]'query_bus;
+[relay : query(Q) --> (query(Q))in_crystal_store ]'skin;
 [resonate : query(clique) * crystal(clique) * fuel
           --> reply(clique) ]'crystal_store, 1;
 [ignore : crystal(X) --> crystal(X) ]'crystal_store, 2;

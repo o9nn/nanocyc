@@ -1,0 +1,90 @@
+/* ============================================================================
+ * psystems/ch05/ch05_creativity_primes.pli
+ *
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
+ * Issue #10 — P-Lingua specification (see psystems/README.md).
+ *
+ * Sections: 5.8 (how geometric similarity builds creativity in the computing
+ *               of primes) — Figure 5.10 panels (a)–(j).
+ *
+ * Functionality: Creativity in a prime-based machine is NOT algorithmic logic
+ *   but GEOMETRIC SIMILARITY between fundamentally unrelated patterns. Ten
+ *   mechanisms (Figure 5.10) let the machine create what was never encoded:
+ *     (a) cross-modal resemblance — a tree resembles a dancing girl, a balloon
+ *         an ice-cream: geometric self-similarity with no contextual relation;
+ *     (b) unrelated events (relativity theory, painting tricks) whose time
+ *         crystals look similar undergo morphogenesis and fuse;
+ *     (c) uncorrelated data with locally matching distributions build a
+ *         fractal geometric seed together;
+ *     (d) fractal resolution — 12 primes in 12 layers perfect a noisy datum;
+ *     (e) a PPM's unique 360-degree projection feeds back, changing the
+ *         singularity-built geometries;
+ *     (f) one crystal projects different temporal patterns at different solid
+ *         angles;
+ *     (g) three-tier PPM control (OF, PC, PG metrics) — symmetry of
+ *         symmetries of symmetries, beyond logical prediction;
+ *     (h) nested time-crystal elements (icosanion>dodecanion>octonion>
+ *         quaternion) open topological paths to a NEW imaginary world;
+ *     (i) two facing feedback networks act as mirrors, building architecture
+ *         by infinite reflection;
+ *     (j) primes oscillate between silent and dominant as the integer space
+ *         grows — the pairing of primes regulates output.
+ *   Each mechanism is a rule that FUSES geometrically similar objects into a
+ *   novel composite — the operational form of creativity.
+ *
+ *   Membranes: skin -> similarity (the geometric matcher) -> create (the
+ *   novelty composer); a primes membrane supplies the oscillating prime ranks.
+ *
+ * Traceability: src/cpp/nanobrain_gog.h (GardenOfGardens morphogenesis),
+ *               src/cpp/nanobrain_ppm.h (OF/PC/PG three-tier metric),
+ *               src/cpp/nanobrain_time_crystal.h (360-degree projection)
+ * Initial multiset: two unrelated events with similar geometry; a noisy datum;
+ *                   the three metric tiers; the 15 primes.
+ * ==========================================================================*/
+
+@model<psystems_basic>
+
+@mu = [ []'similarity []'create []'primes ]'skin;
+
+@mskin       = govern;
+@msimilarity = event(tree), event(dancing_girl), geom(shape_x),
+               event(relativity), event(painting), geom(shape_y), fuel;
+@mcreate     = noisy_datum, tier(of), tier(pc), tier(pg), fuel;
+@mprimes     = prime(2), prime(3), prime(5), prime(7), prime(11),
+               prime(13), prime(17), prime(19), prime(23), prime(29),
+               prime(31), prime(37), prime(41), prime(43), prime(47);
+
+/* --------------------------------------------------------------------------
+ * (a)(b)(c) Cross-modal / cross-domain geometric similarity fuses unrelated
+ * events into a creative composite — no contextual/logical relation required.
+ * ------------------------------------------------------------------------*/
+[resemble : event(tree) * geom(shape_x) --> match(tree,shape_x) ]'similarity;
+[resemble2 : event(dancing_girl) * geom(shape_x) * fuel
+           --> creative_fusion(tree,dancing_girl) ]'similarity, 1;
+[cross_domain : event(relativity) * event(painting) * geom(shape_y)
+              --> morph(relativity,painting) ]'similarity;
+[send_create : creative_fusion(A,B) --> (fusion(A,B))out ]'similarity;
+[send_create2 : morph(A,B) --> (fusion(A,B))out ]'similarity;
+
+/* --------------------------------------------------------------------------
+ * (g) Three-tier PPM control perfects a noisy datum (d) and composes novelty.
+ * fractal_resolution : the OF/PC/PG tiers correct the datum across 12 layers
+ * compose_novelty    : two fused similarities + the metric tiers birth a NEW
+ *                      creative structure that was never encoded
+ * ------------------------------------------------------------------------*/
+[receive : fusion(A,B) --> (fusion(A,B))in_create ]'skin;
+[fractal_resolution : noisy_datum * tier(of) * tier(pc) * tier(pg) * fuel
+                    --> perfected(datum) ]'create;
+[compose_novelty : fusion(A,B) * perfected(datum) --> novel(A,B) ]'create;
+[report : novel(A,B) --> (result(creativity))out ]'create;
+
+/* --------------------------------------------------------------------------
+ * (j) Primes oscillate between silent and dominant as the integer space grows;
+ * the pairing of primes regulates which composite dominates the output.
+ * ------------------------------------------------------------------------*/
+[rank : prime(P) --> rank(P) ]'primes;
+[oscillate : rank(P) * prime(Q) --> paired(P,Q) ]'primes;
+[dominant : paired(P,Q) --> (dominant(P))out ]'primes;
+[feed_create : dominant(P) --> (dominant(P))in_create ]'skin;
+[modulate : dominant(P) * novel(A,B) --> novel(A,B) ]'create;
