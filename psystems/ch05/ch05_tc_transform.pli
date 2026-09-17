@@ -1,38 +1,90 @@
 /* ============================================================================
  * psystems/ch05/ch05_tc_transform.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.3, 5.3.1
- * Functionality: Replacing the Fourier transform by the time-crystal transform; image processing and sound analysis using time crystals.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.3 (replacing the Fast Fourier Transform by the time-crystal
+ *               transform),
+ *           5.3.1 (image processing and sound analysis using a time crystal).
+ *
+ * Functionality: The Fourier transform reads a signal as a set of UNRELATED
+ *   frequency peaks. The TIME-CRYSTAL TRANSFORM instead reads the RELATIVE
+ *   PHASE DIFFERENCES between simultaneously propagating waves: the pattern
+ *   of phase relations reveals the projected topology of a time crystal.
+ *   Three clocks can be nested three ways — IN (one inside another), ON (one
+ *   atop another), OUT (one connected to the outer boundary of another) — and
+ *   the same triplet yields a different crystal per nesting (Figure 5.5a-b).
+ *   A decision IS a geometric shape change of the crystal.
+ *
+ *   5.3.1 For sound, the spoken phrase "flowers are beautiful" said three
+ *   ways still yields IDENTICAL time crystals (inherent universality of the
+ *   time-crystal language). For images, a picture is converted into a set of
+ *   clocks; the fused image (the "elerat" = elephant+rat) is spontaneously
+ *   split into its component crystals — perception without segmentation
+ *   algorithms. Fusion/fission of frequency-fractal seeds (Type I/II/III)
+ *   replace convolution.
+ *
+ *   Membranes:
+ *     skin
+ *       |- tct    : the time-crystal transform engine (phase-difference read)
+ *       |    '- nest : the in/on/out triplet nesting of clocks
+ *       |- image  : image -> set of clocks -> spontaneous split (5.3.1)
+ *       '- sound  : sound -> identical crystal across utterances (5.3.1)
+ *
+ * Traceability: src/cpp/nanobrain_tc_transform.h (TCTransformMode, Signal1D/
+ *               Image2D/Sound, TCBasisType::Prime, TCSpectralComponent)
+ * Initial multiset: a raw waveform into the transform; an image and a sound
+ *                   stream to be crystallised.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'tct []'image []'sound ]'skin;
+@mu = [ [ []'nest ]'tct []'image []'sound ]'skin;
 
-@mskin = seed;
-@mtct = unit(tct), fuel;
-@mimage = unit(image), fuel;
-@msound = unit(sound), fuel;
+@mskin  = route;
+@mtct   = waveform(w1), clock(a), clock(b), clock(c), fuel;
+@mnest  = mode(in), mode(on), mode(out);
+@mimage = pixel_stream(elerat), fuel;
+@msound = utterance(flowers_are_beautiful, 1), utterance(flowers_are_beautiful, 2),
+          utterance(flowers_are_beautiful, 3), fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 5.3 — Time-crystal transform replaces FFT.
+ * decompose  : instead of frequency peaks, read each wave's phase relative
+ *              to the reference clocks (phase difference is the coordinate)
+ * triplet    : the three clocks are assembled in the three nesting modes
+ * phase_read : the pattern of relative phase differences reveals the crystal
+ *              topology — this IS the transform output
+ * report_tct : the crystal spectrum (phase topology) is the result
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_tct ]'skin;
-[seed_dispense : seed --> (work)in_image ]'skin;
-[seed_dispense : seed --> (work)in_sound ]'skin;
-[step : work * unit(tct) * fuel --> done(tct) ]'tct;
-[step : work * unit(image) * fuel --> done(image) ]'image;
-[step : work * unit(sound) * fuel --> done(sound) ]'sound;
-[report : done(tct) --> (result(tct))out ]'tct;
-[report : done(image) --> (result(image))out ]'image;
-[report : done(sound) --> (result(sound))out ]'sound;
+[decompose : waveform(W) * clock(A) * fuel --> phase_rel(W,A) ]'tct;
+[send_mode : mode(M) --> (mode(M))in_nest ]'tct;
+[triplet : phase_rel(W,A) --> (phase_rel(W,A))in_nest ]'tct;
+[nest_in  : phase_rel(W,A) * mode(in)  --> crystal(W,in) ]'nest;
+[nest_on  : crystal(W,in) * mode(on)  --> crystal(W,in_on) ]'nest;
+[nest_out : crystal(W,in_on) * mode(out) --> crystal(W,in_on_out) ]'nest;
+[phase_read : crystal(W,M) --> (spectrum(W,M))out ]'nest;
+[report_tct : spectrum(W,M) --> (result(tc_transform))out ]'tct;
+
+/* --------------------------------------------------------------------------
+ * 5.3.1 — Image processing: an image becomes a set of clocks and is
+ * spontaneously split into component crystals (elerat -> elephant + rat).
+ * to_clocks : the pixel stream is converted into a clock set (not segments)
+ * split     : the fused crystal separates into its geometric components
+ * ------------------------------------------------------------------------*/
+[to_clocks : pixel_stream(I) * fuel --> clock_set(I) ]'image;
+[split : clock_set(elerat) --> crystal(elephant) * crystal(rat) ]'image;
+[report_img : crystal(elephant) * crystal(rat)
+            --> (result(image_split))out ]'image;
+
+/* --------------------------------------------------------------------------
+ * 5.3.1 — Sound analysis: the same phrase spoken three ways yields the SAME
+ * time crystal — the universality of the time-crystal language.
+ * utter   : each utterance crystallises independently of how it was said
+ * unify   : the three crystals coincide (identical) — universal information
+ * ------------------------------------------------------------------------*/
+[utter : utterance(W,N) * fuel --> crystal(W) ]'sound;
+[unify : crystal(W) * crystal(W) * crystal(W) --> universal(W) ]'sound;
+[report_snd : universal(W) --> (result(sound_crystal))out ]'sound;
