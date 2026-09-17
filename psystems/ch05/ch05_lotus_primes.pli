@@ -1,34 +1,78 @@
 /* ============================================================================
  * psystems/ch05/ch05_lotus_primes.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.7
- * Functionality: Lotus lotus in the primes: revisiting the thermodynamics of geometry.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.7 (lotus in the primes — revisiting the thermodynamics of
+ *               geometry).
+ *
+ * Functionality: Replacing binary switches (0,1) by k-level molecular
+ *   switches (0..k-1) generates a family of entropy-symmetry relations; as
+ *   k -> infinity the surface converges to an analog multi-logic system that
+ *   thermodynamically connects von Neumann's computer (N) to the central
+ *   nervous system (CNS). The 2D entropy-symmetry line, when its triangular
+ *   plot is rotated 360 degrees about the fixed zero point, sweeps a CONE /
+ *   flower of meander petals — the entropy-symmetry plot becomes a LOTUS.
+ *   The blooming lotus reproduces the E8 symmetry of Lie algebra (248, 3875,
+ *   ... representations; golden-ratio 1.618 magnetic-resonance ratios), and
+ *   the PPM holds the SUPERPOSITION of all possible symmetry groups — the
+ *   lotus is "in the primes". The system point (marble) on the conical
+ *   surface selects the intelligence layer; thermodynamic entropy (TE) and
+ *   information entropy (IE) are reconciled: IE = -(repulsion) = -(TE).
+ *
+ *   Membranes:
+ *     skin
+ *       |- switches : k-level molecular switches (0..k-1) — the entropy source
+ *       |- thermo   : reconcile TE and IE via similarity/repulsion
+ *       '- lotus    : rotate the entropy-symmetry line 360 deg into a lotus
+ *                     (E8 superposition over the 15 primes)
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPM superposition of symmetries),
+ *               src/cpp/nanobrain_time_crystal.h (meander flower -> lotus),
+ *               src/cpp/nanobrain_gog.h
+ * Initial multiset: k-level switches; a similarity/energy pair for TE/IE; a
+ *                   seed entropy-symmetry line and the 15 primes for the lotus.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'lotus []'thermo ]'skin;
+@mu = [ []'switches []'thermo []'lotus ]'skin;
 
-@mskin = seed;
-@mlotus = unit(lotus), fuel;
-@mthermo = unit(thermo), fuel;
+@mskin     = govern;
+@mswitches = switch(k2), switch(k3), switch(k4), switch(kinf), fuel;
+@mthermo   = similarity(s), energy_exchange(e), fuel;
+@mlotus    = entropy_line, zero_point,
+             prime(2), prime(3), prime(5), prime(7), prime(11),
+             prime(13), prime(17), prime(19), prime(23), prime(29),
+             prime(31), prime(37), prime(41), prime(43), prime(47);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * k-level switches: each switch level yields a distinct entropy-symmetry
+ * relation; as k grows the relation surface blooms toward the CNS limit.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_lotus ]'skin;
-[seed_dispense : seed --> (work)in_thermo ]'skin;
-[step : work * unit(lotus) * fuel --> done(lotus) ]'lotus;
-[step : work * unit(thermo) * fuel --> done(thermo) ]'thermo;
-[report : done(lotus) --> (result(lotus))out ]'lotus;
-[report : done(thermo) --> (result(thermo))out ]'thermo;
+[level : switch(K) * fuel --> relation(K) ]'switches;
+[bloom_switch : relation(K) --> (es_surface(K))out ]'switches;
+
+/* --------------------------------------------------------------------------
+ * Thermodynamics of geometry: information entropy (IE) is the negative of
+ * thermodynamic entropy (TE) through similarity/repulsion. More similar
+ * elements below the critical distance -> more repulsion -> higher TE, hence
+ * lower IE. This dissolves the Gibbs paradox: the two entropies are one
+ * relation read 90 degrees out of phase.
+ * ------------------------------------------------------------------------*/
+[te_ie : similarity(S) * energy_exchange(E) * fuel
+       --> pair(TE, IE) ]'thermo;
+[reconcile : pair(TE, IE) --> (resolved_entropy)out ]'thermo;
+
+/* --------------------------------------------------------------------------
+ * Lotus in the primes: rotate the entropy-symmetry line about the fixed zero
+ * point to sweep a meander flower / cone; each prime adds a petal; the bloom
+ * is the E8 superposition over all 15 primes.
+ * ------------------------------------------------------------------------*/
+[rotate : entropy_line * zero_point * fuel --> petal_base ]'lotus;
+[petal : petal_base * prime(P) --> petal(P) ]'lotus;
+[bloom : petal(P) * prime(Q) --> lotus(P,Q) ]'lotus;
+[e8 : lotus(P,Q) --> e8_symmetry(248) ]'lotus;
+[report : e8_symmetry(R) --> (result(lotus_in_primes))out ]'lotus;

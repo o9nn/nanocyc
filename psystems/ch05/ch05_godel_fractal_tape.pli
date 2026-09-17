@@ -1,34 +1,91 @@
 /* ============================================================================
  * psystems/ch05/ch05_godel_fractal_tape.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.1
- * Functionality: Godel's incompleteness and the fractal tape: incompleteness handling as undecidable-object rules.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.1 (Goedel's incompleteness theorem and the fractal tape)
+ *
+ * Functionality: A formal system that is rich enough to do arithmetic is
+ *   INCOMPLETE: from a fixed bag of arguments no genuinely new axiom can be
+ *   derived without importing an argument from OUTSIDE the bag (Goedel's
+ *   first theorem); and an axiom that already contains such an imported
+ *   argument cannot prove its own consistency (second theorem). The Turing
+ *   tape is that fixed bag: a linear tape that reads one bit at a time and
+ *   must serialize simultaneity. The FRACTAL TAPE escapes the dilemma by
+ *   letting every cell contain a whole tape inside it (FIT: "there is a
+ *   Turing tape inside every cell of a Turing tape"), so an argument that is
+ *   undecidable at one level is pushed INTO the cell one level down, where a
+ *   fresh sub-tape decides it. Incompleteness is therefore modelled as
+ *   UNDECIDABLE-OBJECT rules: when a statement cannot be resolved in a frame
+ *   it is wrapped as undecidable(...) and sent INWARD to a deeper tape cell
+ *   rather than blocking the machine.
+ *
+ *   Membranes:
+ *     skin (the outermost tape / formal system)
+ *       |- frame_0  : the top-level axiom bag (arguments, candidate axioms)
+ *       |    '- cell : a tape cell that CONTAINS a deeper tape (fractal tape)
+ *       |         '- subframe : the inner bag that decides what frame_0 could not
+ *       '- garden   : the phase-prime garden that supplies NEW arguments from
+ *                     "outside the bag" (the escape route from incompleteness)
+ *
+ * Traceability: src/cpp/nanobrain_gog.h (GardenOfGardens),
+ *               src/cpp/nanobrain_fractal_tape.h (FractalTape, nested cells),
+ *               src/cpp/nanobrain_ppm.h (prime supply of new arguments)
+ * Initial multiset: frame_0 holds an axiom bag and an undecidable statement;
+ *                   garden holds the 15 primes as a source of fresh arguments.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'godel []'tape ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure (5.1): tape-inside-a-tape, plus an external argument
+ * source (the garden of primes). sibling->sibling transfer routes via skin.
+ * ------------------------------------------------------------------------*/
+@mu = [ [ [ []'subframe ]'cell ]'frame_0 []'garden ]'skin;
 
-@mskin = seed;
-@mgodel = unit(godel), fuel;
-@mtape = unit(tape), fuel;
+/* Sample initial multisets (each membrane receives objects, >= 1 step). */
+@mskin    = govern;
+@mframe_0 = argument(a), argument(b), statement(g), fuel;
+@mcell    = seed_cell;
+@msubframe = base_axiom, fuel;
+@mgarden  = prime(2), prime(3), prime(5), prime(7), prime(11),
+            prime(13), prime(17), prime(19), prime(23), prime(29),
+            prime(31), prime(37), prime(41), prime(43), prime(47);
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * combine      : two arguments in the bag combine into a candidate axiom
+ *                (nothing new is created — it is already implied by the bag)
+ * derive_old   : a candidate built only from bag arguments is recognised as
+ *                NOT new (Goedel 1: the starting set is always incomplete)
+ * undecide     : a statement the frame cannot resolve is wrapped as an
+ *                UNDECIDABLE OBJECT (the core of this model)
+ * enter_cell   : the undecidable object is sent INTO the cell's inner tape
+ *                (fractal tape: escape the frame by going one level deeper)
+ * decide_inner : the inner subframe, with its own base axiom, resolves the
+ *                statement that was undecidable one level up
+ * lift_result  : the inner decision is lifted back out to the parent frame
+ * request_new  : the frame asks the garden for an argument from OUTSIDE
+ * supply_prime : the garden emits a fresh prime argument (new axiom seed)
+ * graft_new    : a prime argument grafted into the bag yields a genuinely NEW
+ *                axiom — the only way to extend an incomplete system
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_godel ]'skin;
-[seed_dispense : seed --> (work)in_tape ]'skin;
-[step : work * unit(godel) * fuel --> done(godel) ]'godel;
-[step : work * unit(tape) * fuel --> done(tape) ]'tape;
-[report : done(godel) --> (result(godel))out ]'godel;
-[report : done(tape) --> (result(tape))out ]'tape;
+[combine : argument(X) * argument(Y) --> candidate(X,Y) ]'frame_0;
+[derive_old : candidate(X,Y) * fuel --> old(X,Y) ]'frame_0;
+
+[undecide : statement(G) --> undecidable(G) ]'frame_0;
+[enter_cell : undecidable(G) --> (undecidable(G))in_cell ]'frame_0;
+[descend : undecidable(G) --> (undecidable(G))in_subframe ]'cell;
+[resolve : undecidable(G) * base_axiom * fuel --> resolved(G) ]'subframe;
+[lift_inner : resolved(G) --> (resolved(G))out ]'subframe;
+[lift_result : resolved(G) --> (resolved(G))out ]'cell;
+
+[request_new : old(X,Y) --> (need(X,Y))out ]'frame_0;
+[route_need : need(X,Y) --> (need(X,Y))in_garden ]'skin;
+[supply_prime : need(X,Y) * prime(P) --> (fresh(P))out ]'garden;
+[admit_fresh : fresh(P) --> (fresh(P))in_frame_0 ]'skin;
+[graft_new : fresh(P) * old(X,Y) --> new_axiom(X,Y,P) ]'frame_0;
+[report : new_axiom(X,Y,P) --> (result(new_axiom))out ]'frame_0;

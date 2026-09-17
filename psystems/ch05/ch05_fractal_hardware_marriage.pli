@@ -1,34 +1,83 @@
 /* ============================================================================
  * psystems/ch05/ch05_fractal_hardware_marriage.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.1.1
- * Functionality: Marriage between frequency-fractal hardware and the time crystal.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.1.1 (a marriage between frequency-fractal hardware and the
+ *                  time crystal)
+ *
+ * Functionality: The marriage between the fourth-circuit element Hinductor
+ *   (H) and the Phase Prime Metric is "analogous to the marriage between a
+ *   Turing tape and a transistor". The Hinductor is a helix of insulators
+ *   that stores charge and tweaks the interference of a reflected
+ *   electromagnetic signal into a DYNAMIC GEOMETRIC SHAPE made of the null
+ *   (E = 0) signal — "knots of darkness" behaving as free magnetic particles.
+ *   H does not follow current-voltage but flux-charge characteristics, so no
+ *   real electron flows; what flows is a virtual particle. Using GML to map
+ *   the active/inactive regions of the interference pattern retrieves a TIME
+ *   CRYSTAL; two extra helical layers (below and above) perturb it into
+ *   NESTED CLOCKS following event = [subject - clause - (verb - adjective)].
+ *   The hardware's resonance band is a fractal (self-similar), and it feeds
+ *   and is fed by the time-crystal architecture.
+ *
+ *   Membranes:
+ *     skin
+ *       |- hinductor : the flux-charge element; builds knots of darkness
+ *       |    '- helix : the three helical layers that nest the clocks
+ *       '- gml       : maps active/inactive interference regions to a
+ *                      time crystal (frequency-fractal <-> time crystal)
+ *
+ * Traceability: src/cpp/nanobrain_hinductor.h (fourth-circuit element H,
+ *               flux-charge), src/cpp/nanobrain_time_crystal.h
+ *               (TimeCrystalQuantumState, nested clocks), src/cpp/nanobrain_gog.h
+ * Initial multiset: a pump ac-signal into the Hinductor; GML holds the 15
+ *                   shapes as the geometric alphabet that reads the pattern.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'hw []'tc ]'skin;
+/* skin : routes the signal between the Hinductor and the GML reader. */
+@mu = [ [ []'helix ]'hinductor []'gml ]'skin;
 
-@mskin = seed;
-@mhw = unit(hw), fuel;
-@mtc = unit(tc), fuel;
+@mskin      = couple;
+@mhinductor = pump(ac), charge(q0), flux(phi0), fuel;
+@mhelix     = layer(lower), layer(core), layer(upper);
+@mgml       = shape(1), shape(2), shape(3), shape(4), shape(5),
+              shape(6), shape(7), shape(8), shape(9), shape(10),
+              shape(11), shape(12), shape(13), shape(14), shape(15);
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * interfere    : pump + stored charge + flux interfere into a null-signal
+ *                knot (E = 0) — a "knot of darkness" (free magnetic particle)
+ * emit_knot    : the knot is sent up to the skin to be read
+ * helix_nest   : a helical layer perturbs the knot into one nested clock;
+ *                three layers (lower/core/upper) nest subject/clause/verb
+ * read_shape   : GML maps an active region of the interference pattern onto
+ *                one of the 15 geometric shapes
+ * to_crystal   : the mapped shapes assemble a time crystal (the marriage:
+ *                frequency-fractal hardware <-> time crystal)
+ * feed_back    : the crystal feeds back into the Hinductor, closing the
+ *                self-referential PPM-GML-H loop (the band feeds the crystal,
+ *                the crystal feeds the band)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_hw ]'skin;
-[seed_dispense : seed --> (work)in_tc ]'skin;
-[step : work * unit(hw) * fuel --> done(hw) ]'hw;
-[step : work * unit(tc) * fuel --> done(tc) ]'tc;
-[report : done(hw) --> (result(hw))out ]'hw;
-[report : done(tc) --> (result(tc))out ]'tc;
+[interfere : pump(ac) * charge(Q) * flux(P) * fuel --> knot(Q,P) ]'hinductor;
+[emit_knot : knot(Q,P) --> (knot(Q,P))out ]'hinductor;
+[admit_knot : knot(Q,P) --> (knot(Q,P))in_gml ]'skin;
+
+[nest : knot(Q,P) * layer(core) --> clock(Q,P) ]'helix;
+[nest_lower : clock(Q,P) * layer(lower) --> clock(Q,P) * clock(lower) ]'helix;
+[nest_upper : clock(Q,P) * layer(upper) --> clock(Q,P) * clock(upper) ]'helix;
+[crystal_up : clock(Q,P) --> (crystal_seed(Q,P))out ]'helix;
+[seed_out : crystal_seed(Q,P) --> (crystal_seed(Q,P))out ]'hinductor;
+[seed_to_gml : crystal_seed(Q,P) --> (crystal_seed(Q,P))in_gml ]'skin;
+
+[read_shape : knot(Q,P) * shape(S) --> region(Q,P,S) ]'gml;
+[to_crystal : crystal_seed(Q,P) * region(Q,P,S) --> time_crystal(Q,P,S) ]'gml;
+[feed_back : time_crystal(Q,P,S) --> (time_crystal(Q,P,S))out ]'gml;
+[couple_back : time_crystal(Q,P,S) --> (resonance(S))in_hinductor ]'skin;
+[marry : resonance(S) * fuel --> married(S) ]'hinductor;
+[report : married(S) --> (result(married))out ]'hinductor;

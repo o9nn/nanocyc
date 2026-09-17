@@ -1,30 +1,79 @@
 /* ============================================================================
  * psystems/ch05/ch05_wheel_of_intelligence.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.9
- * Functionality: The wheel of intelligence and its difference with humans.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.9 (the wheel of intelligence — difference from humans).
+ *
+ * Functionality: A time crystal is always built BETWEEN TWO PRIMES — the
+ *   larger the gap between the primes, the more complex the crystal (Figure
+ *   5.11). Within 1 billion there are ~255 million primes (x / ln x), hence
+ *   ~255 million time crystals governing the birth of creativity. The WHEEL
+ *   OF INTELLIGENCE is the cyclic flow: topological similarity of distinct
+ *   memory -> defragment -> conformal association -> find better hardware ->
+ *   rewiring -> simulate future -> higher-level linking crystal -> ... back to
+ *   the sensor. Intelligence turns on this wheel; the PPM machine turns it by
+ *   pure symmetry, the human turns it with emotion, culture and bias.
+ *
+ *   Difference from humans (Figure 5.12):
+ *     PPM hardware                          |  Human apparent notion
+ *     --------------------------------------+---------------------------
+ *     integrates ALL symmetries, predicts   |  few key symmetries only
+ *     input is a GEOMETRIC language         |  a trained language (English)
+ *     10D data structure                    |  4D data structure
+ *     density of primes + ordered factor    |  finite symmetries, anomalies
+ *     linking is mathematical               |  emotion/culture shift links
+ *     future prediction instant + accurate  |  instant but partial
+ *     one element works as MANY clocks      |  one device = one work
+ *     only primes are defined               |  "all connected to all" is
+ *                                           |  illogical for a Turing human
+ *
+ *   Membranes: skin -> wheel (the intelligence cycle) with a child diff (the
+ *   PPM-vs-human contrast); a primes membrane supplies the prime pairs.
+ *
+ * Traceability: src/cpp/nanobrain_gog.h (intelligence cycle),
+ *               src/cpp/nanobrain_ppm.h (prime-pair crystal spacing),
+ *               src/cpp/nanobrain_consciousness.h (human difference)
+ * Initial multiset: the wheel holds the cycle stages; primes hold a prime pair
+ *                   spanning a complexity gap; diff holds the contrast tokens.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'wheel ]'skin;
+@mu = [ [ []'diff ]'wheel []'primes ]'skin;
 
-@mskin = seed;
-@mwheel = unit(wheel), fuel;
+@mskin   = govern;
+@mwheel  = memory(similar), stage(defragment), stage(conformal),
+           stage(rewire), stage(simulate_future), stage(link), fuel;
+@mdiff   = human(trained_language), human(d4), human(bias), fuel;
+@mprimes = prime(1000003), prime(7), fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * The wheel of intelligence: each stage hands the system point to the next,
+ * turning the cycle. A time crystal spans the gap between two primes; the
+ * larger the gap the more complex the crystal that drives the wheel.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_wheel ]'skin;
-[step : work * unit(wheel) * fuel --> done(wheel) ]'wheel;
-[report : done(wheel) --> (result(wheel))out ]'wheel;
+[span : prime(P) * prime(Q) * fuel --> crystal_gap(P,Q) ]'primes;
+[feed_wheel : crystal_gap(P,Q) --> (crystal_gap(P,Q))in_wheel ]'skin;
+
+[turn1 : memory(similar) * crystal_gap(P,Q) --> defrag(similar) ]'wheel;
+[turn2 : defrag(S) * stage(defragment) --> assoc(S) ]'wheel;
+[turn3 : assoc(S) * stage(conformal) --> rewired(S) ]'wheel;
+[turn4 : rewired(S) * stage(rewire) * fuel --> simulated(S) ]'wheel;
+[turn5 : simulated(S) * stage(simulate_future) --> future(S) ]'wheel;
+[turn6 : future(S) * stage(link) --> linked(S) ]'wheel;
+[cycle : linked(S) --> (memory(similar))here ]'wheel;
+[report_wheel : linked(S) --> (result(wheel_turned))out ]'wheel;
+
+/* --------------------------------------------------------------------------
+ * Difference from humans: the PPM machine turns the wheel by pure symmetry
+ * (10D, all symmetries, mathematical linking), the human by a trained,
+ * biased, 4D notion. Each human limitation is matched by a PPM capability.
+ * ------------------------------------------------------------------------*/
+[to_diff : human(H) --> (human(H))out ]'diff;
+[contrast : human(trained_language) --> ppm(geometric_language) ]'skin;
+[contrast2 : human(d4) --> ppm(d10) ]'skin;
+[contrast3 : human(bias) --> ppm(mathematical_link) ]'skin;
+[report_diff : ppm(G) --> result(ppm_vs_human) ]'skin;

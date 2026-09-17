@@ -1,42 +1,96 @@
 /* ============================================================================
  * psystems/ch05/ch05_artificial_brain_hw.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.5
- * Functionality: Hardware architecture of an artificial brain as communicating hardware membranes.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.5 (the hardware architecture of an artificial brain).
+ *
+ * Functionality: Figure 5.7 — the artificial brain's architecture drawn in
+ *   the pattern of a time crystal: instead of an algorithm, the system runs
+ *   by nested clocks. The hardware is a ring of COMMUNICATING MEMBRANES,
+ *   each a functional block that passes time crystals to its neighbours:
+ *     SENSOR  : input FFT spectrum -> build a time crystal (top-down /
+ *               bottom-up); finds hierarchy, symmetry and path; pin the
+ *               missing crystal; conformal association.
+ *     INTEL   : intelligence core — evolve wiring by editing the time
+ *               crystal, simulate the future, build grammar, cover the
+ *               missing link to fuse crystals, personalised PPM.
+ *     METRIC  : expand/shrink the crystal (shrink to a fractal seed while
+ *               preserving the purity of all factors), transform, and match
+ *               the emergency crystal.
+ *     OUTPUT  : demand output and emergency solution output.
+ *   These sit on a closed loop (a time crystal), so communication is by
+ *   resonance, not by a wired bus — the "associative matrix" of a quantum
+ *   computer is replaced by locally matched time crystals in a globally
+ *   time-crystal network, and "spontaneous reply back" supersedes the
+ *   log2 n quantum speedup.
+ *
+ *   Membranes: skin -> sensor -> intel -> metric -> output (a pipeline ring).
+ *
+ * Traceability: src/cpp/nanobrain_hardware_sim.h (HardwareSim, communicating
+ *               blocks), src/cpp/nanobrain_gog.h (GardenOfGardens),
+ *               src/cpp/nanobrain_tc_transform.h (input FFT spectrum -> crystal)
+ * Initial multiset: an input FFT spectrum enters the sensor membrane; each
+ *                   block holds fuel for one transformation step.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'sense []'compute []'store []'act ]'skin;
+/* Pipeline ring of hardware blocks; crystals flow sensor->intel->metric->out. */
+@mu = [ []'sensor []'intel []'metric []'output ]'skin;
 
-@mskin = seed;
-@msense = unit(sense), fuel;
-@mcompute = unit(compute), fuel;
-@mstore = unit(store), fuel;
-@mact = unit(act), fuel;
+@mskin   = govern;
+@msensor = fft_spectrum(input), fuel;
+@mintel  = grammar_seed, personalized_ppm, fuel;
+@mmetric = fractal_seed, fuel;
+@moutput = demand, fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * SENSOR: decompose the sensory input into primes and build a time crystal.
+ * build_crystal : the input FFT spectrum is crystallised (top-down+bottom-up)
+ * find_hierarchy: locate the symmetry path / hierarchy in the crystal
+ * pin_missing   : detect and pin the missing crystal link
+ * pass_intel    : hand the sensor crystal to the intelligence core
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_sense ]'skin;
-[seed_dispense : seed --> (work)in_compute ]'skin;
-[seed_dispense : seed --> (work)in_store ]'skin;
-[seed_dispense : seed --> (work)in_act ]'skin;
-[step : work * unit(sense) * fuel --> done(sense) ]'sense;
-[step : work * unit(compute) * fuel --> done(compute) ]'compute;
-[step : work * unit(store) * fuel --> done(store) ]'store;
-[step : work * unit(act) * fuel --> done(act) ]'act;
-[report : done(sense) --> (result(sense))out ]'sense;
-[report : done(compute) --> (result(compute))out ]'compute;
-[report : done(store) --> (result(store))out ]'store;
-[report : done(act) --> (result(act))out ]'act;
+[build_crystal : fft_spectrum(I) * fuel --> crystal(I) ]'sensor;
+[find_hierarchy : crystal(I) --> crystal(I) * hierarchy(I) ]'sensor;
+[pin_missing : hierarchy(I) --> pinned(I) ]'sensor;
+[pass_intel : pinned(I) --> (crystal(I))out ]'sensor;
+
+/* --------------------------------------------------------------------------
+ * INTEL: edit the crystal to evolve wiring; simulate the future; fuse.
+ * receive      : the skin routes the sensor crystal into the intel core
+ * build_grammar: derive the grammar that manages sensor interaction
+ * simulate     : simulate the future from the current crystal
+ * fuse_link    : cover the missing link to fuse two crystals into one
+ * pass_metric  : hand the fused crystal to the metric block
+ * ------------------------------------------------------------------------*/
+[receive : crystal(I) --> (crystal(I))in_intel ]'skin;
+[build_grammar : crystal(I) * grammar_seed * fuel --> grammar(I) ]'intel;
+[simulate : crystal(I) * personalized_ppm --> future(I) ]'intel;
+[fuse_link : grammar(I) * future(I) --> fused(I) ]'intel;
+[pass_metric : fused(I) --> (fused(I))out ]'intel;
+
+/* --------------------------------------------------------------------------
+ * METRIC: expand/shrink the crystal, preserving factor purity; emergency match.
+ * receive2 : the skin routes the fused crystal into the metric block
+ * shrink   : shrink the crystal to a fractal seed (preserve purity of factors)
+ * expand   : re-expand the seed to the full pattern on demand
+ * match    : emergency crystal match for the personalised PPM
+ * pass_out : hand the result to the output block
+ * ------------------------------------------------------------------------*/
+[receive2 : fused(I) --> (fused(I))in_metric ]'skin;
+[shrink : fused(I) * fractal_seed * fuel --> seed(I) ]'metric;
+[expand : seed(I) --> expanded(I) ]'metric;
+[match : expanded(I) --> matched(I) ]'metric;
+[pass_out : matched(I) --> (solution(I))out ]'metric;
+
+/* --------------------------------------------------------------------------
+ * OUTPUT: deliver the demand output and the emergency solution.
+ * receive3 : the skin routes the solution to the output block
+ * deliver  : the output membrane emits the brain's decision
+ * ------------------------------------------------------------------------*/
+[receive3 : solution(I) --> (solution(I))in_output ]'skin;
+[deliver : solution(I) * demand * fuel --> (result(brain_output))out ]'output;

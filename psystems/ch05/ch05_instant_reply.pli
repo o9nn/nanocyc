@@ -1,42 +1,113 @@
 /* ============================================================================
  * psystems/ch05/ch05_instant_reply.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.2, 5.2.1-5.2.4
- * Functionality: Origin of fractal resolution and instant reply: spontaneous reply (search without searching), automated error correction by time-crystal learning, synchronization of time crystals on incomplete problems, umbrella of perception (harvesting infinity).
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.2 (the origin of fractal resolution and instant reply),
+ *           5.2.1 (spontaneous reply — search without searching),
+ *           5.2.2 (automated error correction through time-crystal learning),
+ *           5.2.3 (synchronization of time crystals and incomplete problems),
+ *           5.2.4 (umbrella of perception — harvesting infinity, projecting
+ *                  from infinity).
+ *
+ * Functionality:
+ *   5.2.1 A query is broadcast to all stored time crystals at once; the
+ *         crystal whose prime pattern RESONATES with the query replies
+ *         spontaneously — "search without searching", like a magnet finding a
+ *         pin in a haystack. No addressing, no sequential scan.
+ *   5.2.2 Singularity is not a point but an UNDEFINED REGION; when two clocks
+ *         with similar embedded time crystals sync, their corner (singularity)
+ *         points match over a common domain and the OVERLAP AREA corrects the
+ *         error automatically — time-crystal learning finds the missing
+ *         geometry of clocks.
+ *   5.2.3 P vs NP is undecidable in the Turing framing; a fractal machine
+ *         synchronises the nested clock network of the problem and lets the
+ *         geometric relationship resolve it in the hierarchy of layers —
+ *         incomplete problems are solved by sync, not by search.
+ *   5.2.4 The UMBRELLA OF PERCEPTION: a nested time-cycle sphere HARVESTS
+ *         infinity (a single sphere holds infinitely many time cycles) and
+ *         PROJECTS from infinity — a feedback that takes the pure geometric
+ *         composition of the present to the future and back (resonance chain).
+ *
+ *   Membranes:
+ *     skin (the resonance chain linking all domains)
+ *       |- query_bus     : the broadcast medium (5.2.1 spontaneous reply)
+ *       |- crystal_store : pre-stored solution crystals that reply by resonance
+ *       |- learner       : 5.2.2 error correction by singularity-overlap
+ *       |- syncer        : 5.2.3 nested-clock sync for incomplete problems
+ *       '- umbrella      : 5.2.4 harvest/project infinity (reality sphere)
+ *
+ * Traceability: src/cpp/nanobrain_spontaneous.h (SpontaneousReply,
+ *               SyncLookupResult), src/cpp/nanobrain_gog.h,
+ *               src/cpp/nanobrain_time_crystal.h
+ * Initial multiset: a query on the bus; stored crystals with prime patterns;
+ *                   a noisy clock pair to correct; an incomplete (NP) problem;
+ *                   a seed sphere for the umbrella.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'reply []'error_correct []'sync []'umbrella ]'skin;
+@mu = [ []'query_bus []'crystal_store []'learner []'syncer []'umbrella ]'skin;
 
-@mskin = seed;
-@mreply = unit(reply), fuel;
-@merror_correct = unit(error_correct), fuel;
-@msync = unit(sync), fuel;
-@mumbrella = unit(umbrella), fuel;
+@mskin          = govern;
+@mquery_bus     = query(clique), fuel;
+@mcrystal_store = crystal(tsp), crystal(clique), crystal(binpack),
+                  crystal(sat), crystal(knapsack), fuel;
+@mlearner       = clock(c1), clock(c2), noise(n1), fuel;
+@msyncer        = problem(np), layer(l1), layer(l2), layer(l3), fuel;
+@mumbrella      = seed_sphere, prime(2), prime(3), prime(5), fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 5.2.1 Spontaneous reply — search without searching.
+ * broadcast : the query is sent to the crystal store (asked "out loud")
+ * resonate  : a stored crystal whose pattern matches the query RESONATES —
+ *             it absorbs the query and emits a reply with NO search step
+ * reply     : the resonant reply returns spontaneously to the skin
+ * ignore    : non-matching crystals stay silent (clever rejection of choices)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_reply ]'skin;
-[seed_dispense : seed --> (work)in_error_correct ]'skin;
-[seed_dispense : seed --> (work)in_sync ]'skin;
-[seed_dispense : seed --> (work)in_umbrella ]'skin;
-[step : work * unit(reply) * fuel --> done(reply) ]'reply;
-[step : work * unit(error_correct) * fuel --> done(error_correct) ]'error_correct;
-[step : work * unit(sync) * fuel --> done(sync) ]'sync;
-[step : work * unit(umbrella) * fuel --> done(umbrella) ]'umbrella;
-[report : done(reply) --> (result(reply))out ]'reply;
-[report : done(error_correct) --> (result(error_correct))out ]'error_correct;
-[report : done(sync) --> (result(sync))out ]'sync;
-[report : done(umbrella) --> (result(umbrella))out ]'umbrella;
+[broadcast : query(Q) * fuel --> (query(Q))out ]'query_bus;
+[relay : query(Q) --> (query(Q))in_crystal_store ]'skin;
+[resonate : query(clique) * crystal(clique) * fuel
+          --> reply(clique) ]'crystal_store, 1;
+[ignore : crystal(X) --> crystal(X) ]'crystal_store, 2;
+[reply : reply(Q) --> (answer(Q))out ]'crystal_store;
+[deliver : answer(Q) --> result(spontaneous(Q)) ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 5.2.2 Automated error correction by time-crystal learning.
+ * inject_noise : a noisy perturbation distorts a clock's geometry
+ * overlap     : two similar clocks sync; their singularity domains OVERLAP
+ *               and the common area is the correction
+ * correct     : the overlap restores the true clock geometry (self-healing)
+ * ------------------------------------------------------------------------*/
+[inject_noise : clock(C) * noise(N) --> distorted(C,N) ]'learner;
+[overlap : distorted(c1,N) * clock(c2) * fuel --> common(c1,c2) ]'learner, 1;
+[correct : common(c1,c2) --> healed(c1) * healed(c2) ]'learner;
+[report_heal : healed(C) --> (result(healed))out ]'learner;
+
+/* --------------------------------------------------------------------------
+ * 5.2.3 Synchronization of time crystals on incomplete problems.
+ * encode    : an incomplete (NP) problem is encoded onto the clock hierarchy
+ * descend   : the problem is sent into nested layers (clock inside a clock)
+ * geo_solve : the geometric relationship across layers resolves it by sync
+ * ascend    : the solved path returns to the top time domain
+ * ------------------------------------------------------------------------*/
+[encode : problem(np) * layer(l1) --> encoded(np,l1) ]'syncer;
+[descend : encoded(P,l1) * layer(l2) --> encoded(P,l2) ]'syncer;
+[descend2 : encoded(P,l2) * layer(l3) * fuel --> synced(P) ]'syncer;
+[geo_solve : synced(P) --> (result(solved_by_sync))out ]'syncer;
+
+/* --------------------------------------------------------------------------
+ * 5.2.4 Umbrella of perception — harvest infinity, project from infinity.
+ * harvest   : the seed sphere absorbs primes, holding infinitely many cycles
+ *             in ONE sphere (harvesting infinity)
+ * grow      : each prime adds a nested time cycle to the sphere
+ * project   : the sphere projects a reality sphere — feedback from the
+ *             geometric present to the future and back (resonance chain)
+ * ------------------------------------------------------------------------*/
+[harvest : seed_sphere * prime(P) --> sphere(P) ]'umbrella;
+[grow : sphere(P) * prime(Q) * fuel --> sphere(P,Q) ]'umbrella;
+[project : sphere(P,Q) --> (reality_sphere(P,Q))out ]'umbrella;
+[crown : reality_sphere(P,Q) --> result(umbrella) ]'skin;

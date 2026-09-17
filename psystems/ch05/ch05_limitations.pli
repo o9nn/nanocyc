@@ -1,30 +1,115 @@
 /* ============================================================================
  * psystems/ch05/ch05_limitations.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.12
- * Functionality: Limitations of prime-based computing as guard membranes blocking unsafe evolutions.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.12 (the limitations and incredible features of prime-based
+ *                 computing) — Figure 5.15.
+ *
+ * Functionality: The very features that make the fractal machine more
+ *   powerful than the Turing machine are also its weaknesses. The limitations
+ *   are modelled as GUARD MEMBRANES that BLOCK unsafe evolutions: an
+ *   evolution that would run outside the machine's competence is caught by
+ *   the matching guard and diverted to a safe sink instead of being allowed
+ *   to proceed unchecked. The known limitations / critical challenges
+ *   (Figure 5.15 and text):
+ *     (i)   imprecision — a non-computer gives a global perspective, not an
+ *           exact answer; it is good only at the problems it solves most
+ *           (guard: block demands for bit-exact output);
+ *     (ii)  fixed time — decision-making never halts; the observer captures a
+ *           solution at its own time resolution (guard: block forced halting);
+ *     (iii) blind trust in the PPM — the 15 primes encode all dynamics, but
+ *           the dynamics of the millions of larger primes are LEFT OUT (guard:
+ *           block out-of-alphabet dynamics);
+ *     (iv)  abstractness — all ten deliverables are abstract, not factual,
+ *           during processing (guard: block premature fact-reading);
+ *     (v)   silence-not-signal — information lives in the phase/silence
+ *           between signals, so a single switch alone FAILS (guard: block
+ *           lone-switch reading);
+ *     (vi)  no wiring — one-to-many/many-to-one communication is required;
+ *           a hard-wired circuit cannot route it (guard: block wiring);
+ *     (vii) never stops — there is no static output; the answer depends on
+ *           when/how the observer asks (guard: block static-output capture);
+ *     plus irreproducibility — the self-editing network may not recover if
+ *     learning goes wrong (guard: block unrecoverable self-edit).
+ *
+ *   Membranes: skin -> safe (allowed evolutions) and a ring of guard
+ *   membranes guard_precision .. guard_edit that intercept unsafe requests.
+ *
+ * Traceability: src/cpp/nanobrain_gog.h (guard/constrain hooks),
+ *               src/cpp/nanobrain_ppm.h (15-prime alphabet bound),
+ *               src/cpp/nanobrain_consciousness.h (non-halting)
+ * Initial multiset: the skin holds a set of evolution requests, some safe and
+ *                   some that trip the guards.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'guard ]'skin;
+/* skin routes each request; guards intercept the unsafe ones. */
+@mu = [ []'safe []'guard_precision []'guard_halt []'guard_alphabet
+        []'guard_abstract []'guard_switch []'guard_wiring []'guard_static
+        []'guard_edit ]'skin;
 
-@mskin = seed;
-@mguard = unit(guard), fuel;
+@mskin = evolve(compute), evolve(exact_answer), evolve(force_halt),
+         evolve(big_prime), evolve(read_fact), evolve(lone_switch),
+         evolve(hard_wire), evolve(static_out), evolve(unrecoverable_edit),
+         fuel;
+@msafe = allow;
+@mguard_precision = watch;
+@mguard_halt      = watch;
+@mguard_alphabet  = watch;
+@mguard_abstract  = watch;
+@mguard_switch    = watch;
+@mguard_wiring    = watch;
+@mguard_static    = watch;
+@mguard_edit      = watch;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * SAFE path: an ordinary prime-based evolution is admitted to the safe
+ * membrane and allowed to proceed.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_guard ]'skin;
-[step : work * unit(guard) * fuel --> done(guard) ]'guard;
-[report : done(guard) --> (result(guard))out ]'guard;
+[admit : evolve(compute) --> (evolve(compute))in_safe ]'skin;
+[proceed : evolve(compute) * allow * fuel --> done(compute) ]'safe;
+[report_safe : done(compute) --> (result(safe))out ]'safe;
+
+/* --------------------------------------------------------------------------
+ * GUARDS: each unsafe evolution is routed to its guard membrane and BLOCKED
+ * (diverted to a sink). The guard never lets the request reach the safe core.
+ * ------------------------------------------------------------------------*/
+/* (i) imprecision: bit-exact answers are outside competence -> blocked. */
+[g1 : evolve(exact_answer) --> (blocked(imprecision))in_guard_precision ]'skin;
+[trap1 : blocked(imprecision) * watch --> sink(imprecision) ]'guard_precision;
+
+/* (ii) never halts: forcing a halt is blocked. */
+[g2 : evolve(force_halt) --> (blocked(no_halt))in_guard_halt ]'skin;
+[trap2 : blocked(no_halt) * watch --> sink(no_halt) ]'guard_halt;
+
+/* (iii) blind PPM trust: dynamics beyond the 15 primes are blocked. */
+[g3 : evolve(big_prime) --> (blocked(out_of_alphabet))in_guard_alphabet ]'skin;
+[trap3 : blocked(out_of_alphabet) * watch --> sink(out_of_alphabet) ]'guard_alphabet;
+
+/* (iv) abstractness: premature fact-reading is blocked. */
+[g4 : evolve(read_fact) --> (blocked(abstract))in_guard_abstract ]'skin;
+[trap4 : blocked(abstract) * watch --> sink(abstract) ]'guard_abstract;
+
+/* (v) silence-not-signal: a lone switch carries no information -> blocked. */
+[g5 : evolve(lone_switch) --> (blocked(single_switch))in_guard_switch ]'skin;
+[trap5 : blocked(single_switch) * watch --> sink(single_switch) ]'guard_switch;
+
+/* (vi) no wiring: hard-wired routing of one-to-many traffic is blocked. */
+[g6 : evolve(hard_wire) --> (blocked(no_wiring))in_guard_wiring ]'skin;
+[trap6 : blocked(no_wiring) * watch --> sink(no_wiring) ]'guard_wiring;
+
+/* (vii) no static output: capturing a fixed final answer is blocked. */
+[g7 : evolve(static_out) --> (blocked(no_static))in_guard_static ]'skin;
+[trap7 : blocked(no_static) * watch --> sink(no_static) ]'guard_static;
+
+/* irreproducibility: an unrecoverable self-edit is blocked before it sticks. */
+[g8 : evolve(unrecoverable_edit) --> (blocked(self_edit))in_guard_edit ]'skin;
+[trap8 : blocked(self_edit) * watch --> sink(self_edit) ]'guard_edit;
+
+/* The guards collectively report that all unsafe evolutions were contained. */
+[contained : sink(imprecision) --> (contained)out ]'guard_precision;
+[note : contained * fuel --> result(limitations_guarded) ]'skin;

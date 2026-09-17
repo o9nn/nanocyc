@@ -1,34 +1,72 @@
 /* ============================================================================
  * psystems/ch05/ch05_ppm_sync.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.1.2
- * Functionality: The PPM allows two systems to sync without communication: twin membranes evolving in lockstep.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.1.2 (PPM allows two systems to sync without communication)
+ *
+ * Functionality: Two systems that share the SAME Phase Prime Metric need no
+ *   wiring and no message-passing to synchronise. In brain-jelly computing
+ *   "the question is asked out loud for all to hear and the person with the
+ *   right answer replies back" — there is no addressing of switches one by
+ *   one. Because BOTH systems encode the world with the same 15 primes, they
+ *   are governed by the same universal clock; each evolves in LOCKSTEP driven
+ *   by the common tick, and they fall into synchrony purely by virtue of
+ *   sharing the metric — not by exchanging data. This is the PPM analogue of
+ *   two clocks on the same wall synchronising through the wall (Huygens),
+ *   except here the shared medium is the prime lattice itself.
+ *
+ *   Membranes:
+ *     skin (the shared PPM clock / prime lattice — the only "medium")
+ *       |- sys_a : twin system A (an ordered-factor time crystal)
+ *       '- sys_b : twin system B (an identical, independent crystal)
+ *
+ *   The skin broadcasts ONE prime tick to both twins; each advances its own
+ *   ordered-factor phase on receipt of the tick. They never send objects to
+ *   each other — synchrony emerges from the shared metric.
+ *
+ * Traceability: src/cpp/nanobrain_ppm.h (PPMMetric, OrderedFactor,
+ *               PPMCoherenceTable), src/cpp/nanobrain_gog.h
+ * Initial multiset: one shared clock tick in the skin; each twin holds the
+ *                   same prime phase signature to be advanced in lockstep.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
+/* skin : the shared prime lattice. sys_a and sys_b are independent twins. */
 @mu = [ []'sys_a []'sys_b ]'skin;
 
-@mskin = seed;
-@msys_a = unit(sys_a), fuel;
-@msys_b = unit(sys_b), fuel;
+@mskin  = tick(2), tick(3);
+@msys_a = phase(2), phase(3), phase(5), fuel;
+@msys_b = phase(2), phase(3), phase(5), fuel;
 
 /* --------------------------------------------------------------------------
  * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ *
+ * broadcast_a / broadcast_b : the skin delivers the SAME prime tick to BOTH
+ *                twins simultaneously — one source, no point-to-point wiring
+ * advance_a / advance_b : on receiving the shared tick each twin advances the
+ *                matching prime phase. The rule is identical in both twins
+ *                (same metric), so their phases march in lockstep
+ * align_a / align_b : each twin locally folds its phases into a common
+ *                ordered-factor signature (its internal sync)
+ * synced_a / synced_b : when the signature matches the shared prime the twin
+ *                reports synchrony — WITHOUT ever having received an object
+ *                from the other twin
+ * confirm      : the skin observes both reports and declares lockstep sync
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_sys_a ]'skin;
-[seed_dispense : seed --> (work)in_sys_b ]'skin;
-[step : work * unit(sys_a) * fuel --> done(sys_a) ]'sys_a;
-[step : work * unit(sys_b) * fuel --> done(sys_b) ]'sys_b;
-[report : done(sys_a) --> (result(sys_a))out ]'sys_a;
-[report : done(sys_b) --> (result(sys_b))out ]'sys_b;
+[broadcast_a : tick(P) --> (tick(P))in_sys_a ]'skin;
+[broadcast_b : tick(P) --> (tick(P))in_sys_b ]'skin;
+
+[advance_a : tick(P) * phase(P) * fuel --> of(P) ]'sys_a;
+[advance_b : tick(P) * phase(P) * fuel --> of(P) ]'sys_b;
+
+[align_a : of(2) * of(3) --> sig_a(2,3) ]'sys_a;
+[align_b : of(2) * of(3) --> sig_b(2,3) ]'sys_b;
+
+[synced_a : sig_a(2,3) --> (report(a))out ]'sys_a;
+[synced_b : sig_b(2,3) --> (report(b))out ]'sys_b;
+
+[confirm : report(a) * report(b) --> result(lockstep_sync) ]'skin;

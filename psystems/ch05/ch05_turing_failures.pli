@@ -1,66 +1,126 @@
 /* ============================================================================
  * psystems/ch05/ch05_turing_failures.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.4
- * Functionality: Ten situations where the Turing machine fails and fractal machines hold on: ten counter-example membranes.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.4 (ten situations when the Turing machine fails but fractal
+ *               machines hold on) — Figure 5.6 panels (a)–(j).
+ *
+ * Functionality: Ghosh et al.'s fractal tape can never be emulated by a
+ *   Turing tape, classical or quantum. Each of the ten counter-examples is a
+ *   membrane that runs a task a sequential, single-bit, one-pair-at-a-time
+ *   Turing tape cannot express, while the fractal/PPM machine holds on:
+ *     (1) a symmetry fed to the PPM repeats forever but its corner geometry
+ *         is never the same twice — no algorithm, only PERCEPTION (5.6a);
+ *     (2) e–pi–phi dynamics binds self-similar geometries into spirals that
+ *         are never encoded — bonding confusions is itself intractable (5.6b);
+ *     (3) 12 imaginary worlds interact via a dodecanion manifold; knots are
+ *         written as signatures that morph without touching the real (5.6c);
+ *     (4) a special PPM where the ordered factor EXCEEDS its integer — the
+ *         surface pattern never repeats and cannot be fractally reduced (5.6d);
+ *     (5) clocking directions never stabilise — the 3D clock architecture is
+ *         only temporarily stable (5.6e);
+ *     (6) meander-flower morphogenesis: silent clocks change a flower's form
+ *         under phase-space constraints (5.6f);
+ *     (7) fusion of distinct PPM metrics births a NEW metric that then drives
+ *         decision-making (5.6g);
+ *     (8) multiple observers = multiple diagonal drivers = multiple realities
+ *         in the tensor diagonals (5.6h);
+ *     (9) a singularity is an undefined REGION whose boundary has a 3D
+ *         topology projecting information 360 degrees (5.6i);
+ *     (10) two tensor chains exchange energy/information only if they share a
+ *         common geometric element — impossible to force on a tape (5.6j).
+ *   Each membrane FAILS for the Turing tape (turing_fail) yet HOLDS for the
+ *   fractal machine (fractal_holds).
+ *
+ *   Membranes: skin with ten child membranes case_1 .. case_10.
+ *
+ * Traceability: src/cpp/nanobrain_fractal_tape.h (FractalTape),
+ *               src/cpp/nanobrain_dodecanion.h (dodecanion manifold),
+ *               src/cpp/nanobrain_ppm.h (OrderedFactor > N), src/cpp/nanobrain_gog.h
+ * Initial multiset: each case membrane holds its task token and fuel; the
+ *                   skin governs and collects the ten verdicts.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'case_1 []'case_2 []'case_3 []'case_4 []'case_5 []'case_6 []'case_7 []'case_8 []'case_9 []'case_10 ]'skin;
+@mu = [ []'case_1 []'case_2 []'case_3 []'case_4 []'case_5
+        []'case_6 []'case_7 []'case_8 []'case_9 []'case_10 ]'skin;
 
-@mskin = seed;
-@mcase_1 = unit(case_1), fuel;
-@mcase_2 = unit(case_2), fuel;
-@mcase_3 = unit(case_3), fuel;
-@mcase_4 = unit(case_4), fuel;
-@mcase_5 = unit(case_5), fuel;
-@mcase_6 = unit(case_6), fuel;
-@mcase_7 = unit(case_7), fuel;
-@mcase_8 = unit(case_8), fuel;
-@mcase_9 = unit(case_9), fuel;
-@mcase_10 = unit(case_10), fuel;
+@mskin    = govern;
+@mcase_1  = symmetry(triangle), ppm, fuel;
+@mcase_2  = geom(e), geom(pi), geom(phi), fuel;
+@mcase_3  = world(q), world(o), world(d), manifold, fuel;
+@mcase_4  = integer(500), ordered_factor(big), fuel;
+@mcase_5  = clock(cw), clock(ccw), fuel;
+@mcase_6  = flower(f1), silent_clock, fuel;
+@mcase_7  = metric(m1), metric(m2), fuel;
+@mcase_8  = observer(o1), observer(o2), observer(o3), tensor, fuel;
+@mcase_9  = singularity, boundary3d, fuel;
+@mcase_10 = chain(t1), chain(t2), common_element, fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * Each case: the Turing tape fails (sequential, one-bit, pairwise), the
+ * fractal machine holds on. Verdicts are reported to the skin.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_case_1 ]'skin;
-[seed_dispense : seed --> (work)in_case_2 ]'skin;
-[seed_dispense : seed --> (work)in_case_3 ]'skin;
-[seed_dispense : seed --> (work)in_case_4 ]'skin;
-[seed_dispense : seed --> (work)in_case_5 ]'skin;
-[seed_dispense : seed --> (work)in_case_6 ]'skin;
-[seed_dispense : seed --> (work)in_case_7 ]'skin;
-[seed_dispense : seed --> (work)in_case_8 ]'skin;
-[seed_dispense : seed --> (work)in_case_9 ]'skin;
-[seed_dispense : seed --> (work)in_case_10 ]'skin;
-[step : work * unit(case_1) * fuel --> done(case_1) ]'case_1;
-[step : work * unit(case_2) * fuel --> done(case_2) ]'case_2;
-[step : work * unit(case_3) * fuel --> done(case_3) ]'case_3;
-[step : work * unit(case_4) * fuel --> done(case_4) ]'case_4;
-[step : work * unit(case_5) * fuel --> done(case_5) ]'case_5;
-[step : work * unit(case_6) * fuel --> done(case_6) ]'case_6;
-[step : work * unit(case_7) * fuel --> done(case_7) ]'case_7;
-[step : work * unit(case_8) * fuel --> done(case_8) ]'case_8;
-[step : work * unit(case_9) * fuel --> done(case_9) ]'case_9;
-[step : work * unit(case_10) * fuel --> done(case_10) ]'case_10;
-[report : done(case_1) --> (result(case_1))out ]'case_1;
-[report : done(case_2) --> (result(case_2))out ]'case_2;
-[report : done(case_3) --> (result(case_3))out ]'case_3;
-[report : done(case_4) --> (result(case_4))out ]'case_4;
-[report : done(case_5) --> (result(case_5))out ]'case_5;
-[report : done(case_6) --> (result(case_6))out ]'case_6;
-[report : done(case_7) --> (result(case_7))out ]'case_7;
-[report : done(case_8) --> (result(case_8))out ]'case_8;
-[report : done(case_9) --> (result(case_9))out ]'case_9;
-[report : done(case_10) --> (result(case_10))out ]'case_10;
+
+/* (1) perception: same symmetry, never the same corner geometry -> no rule. */
+[repeat : symmetry(S) * ppm * fuel --> pattern(S) ]'case_1;
+[perceive : pattern(S) --> perception(S) ]'case_1;
+[fail1 : symmetry(S) --> turing_fail(no_algorithm) ]'case_1;
+[hold1 : perception(S) --> (verdict(1))out ]'case_1;
+
+/* (2) e-pi-phi spiral bonds confusions; bonding is itself intractable. */
+[bond : geom(e) * geom(pi) * geom(phi) * fuel --> spiral(e_pi_phi) ]'case_2;
+[fail2 : geom(e) --> turing_fail(unencoded_spiral) ]'case_2;
+[hold2 : spiral(e_pi_phi) --> (verdict(2))out ]'case_2;
+
+/* (3) dodecanion manifold morphs via knot signatures, real world untouched. */
+[weave : world(q) * world(o) * world(d) * manifold * fuel --> knots(D) ]'case_3;
+[morph : knots(D) --> morphed(D) ]'case_3;
+[fail3 : manifold --> turing_fail(imaginary_worlds) ]'case_3;
+[hold3 : morphed(D) --> (verdict(3))out ]'case_3;
+
+/* (4) ordered factor greater than its integer -> pattern never repeats. */
+[exceed : integer(N) * ordered_factor(big) * fuel --> of_greater(N) ]'case_4;
+[evolve : of_greater(N) --> nonrepeating(N) ]'case_4;
+[fail4 : integer(N) --> turing_fail(irreducible_surface) ]'case_4;
+[hold4 : nonrepeating(N) --> (verdict(4))out ]'case_4;
+
+/* (5) clocking directions never stabilise. */
+[counter : clock(cw) * clock(ccw) * fuel --> unstable_spin ]'case_5;
+[fail5 : clock(cw) --> turing_fail(no_stable_clock) ]'case_5;
+[hold5 : unstable_spin --> (verdict(5))out ]'case_5;
+
+/* (6) meander-flower morphogenesis under phase-space constraint. */
+[silence : flower(F) * silent_clock * fuel --> changed_flower(F) ]'case_6;
+[fail6 : flower(F) --> turing_fail(phase_space_morph) ]'case_6;
+[hold6 : changed_flower(F) --> (verdict(6))out ]'case_6;
+
+/* (7) fusion of two PPM metrics births a new metric that drives decisions. */
+[fuse : metric(m1) * metric(m2) * fuel --> new_metric(m1,m2) ]'case_7;
+[fail7 : metric(m1) --> turing_fail(metric_fusion) ]'case_7;
+[hold7 : new_metric(m1,m2) --> (verdict(7))out ]'case_7;
+
+/* (8) multiple observers redefine reality via diagonal drivers. */
+[observe : observer(O) * tensor * fuel --> reality(O) ]'case_8;
+[fail8 : tensor --> turing_fail(single_reality) ]'case_8;
+[hold8 : reality(o1) * reality(o2) * reality(o3) --> (verdict(8))out ]'case_8;
+
+/* (9) singularity is a region whose boundary topology projects 360 degrees. */
+[project : singularity * boundary3d * fuel --> projection(360) ]'case_9;
+[fail9 : singularity --> turing_fail(undefined_point) ]'case_9;
+[hold9 : projection(360) --> (verdict(9))out ]'case_9;
+
+/* (10) two tensor chains exchange only via a shared geometric element. */
+[exchange : chain(t1) * chain(t2) * common_element * fuel
+          --> linked(t1,t2) ]'case_10;
+[fail10 : chain(t1) --> turing_fail(no_common_element) ]'case_10;
+[hold10 : linked(t1,t2) --> (verdict(10))out ]'case_10;
+
+/* Collect: all ten verdicts confirm the fractal machine holds on. */
+[tally : verdict(1) * verdict(2) * verdict(3) * verdict(4) * verdict(5)
+        * verdict(6) * verdict(7) * verdict(8) * verdict(9) * verdict(10)
+        --> result(fractal_holds_10) ]'skin;

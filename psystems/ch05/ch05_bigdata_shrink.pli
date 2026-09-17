@@ -1,34 +1,86 @@
 /* ============================================================================
  * psystems/ch05/ch05_bigdata_shrink.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.11
- * Functionality: How a prime-based artificial brain shrinks big data: compression rules into prime skeletons.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.11 (how the prime-based artificial brain shrinks big data)
+ *                 — Figure 5.14 (ten points).
+ *
+ * Functionality: FIT shrinks big data not by deleting redundancy in the
+ *   physical appearance but by converting information into a GEOMETRY OF
+ *   CLOCKS and compressing that to a PRIME SKELETON / fractal seed. Ten
+ *   reasons (Figure 5.14):
+ *     1. Information is squeezed into a fractal SEED that repeats to
+ *        regenerate the original — a drastically reduced 3D clock geometry;
+ *     2. The maximal change in physical space is less than the minimum
+ *        wavelength — nesting 10 states linearizes 8^8... into 11+10+...+1;
+ *        power is added, not multiplied (10^66 states for ~nothing);
+ *     3. ONE parameter — phase — represents all information; adding a phase
+ *        needs no physical space, no compilation/transform/storage hardware;
+ *     4. Total information stays constant while an infinite series runs in
+ *        finite hardware — harvesting infinity by projection;
+ *     5. The pattern of lights and darkness (knots) holds the dynamics — no
+ *        wiring, no electronic devices, flux-charge not current-voltage;
+ *     6. New memory is written ON old memory — no exclusive new space;
+ *     7. Singular one-to-all connection at the top — the umbrella protocol,
+ *        superposition of many circuits in a single hardware;
+ *     8. A fractal net of clocks gives the instantaneous solution — the task
+ *        is solved in the fastest clock domain and returned to the slow one;
+ *     9. A unitary drive in the reality sphere perpetually reduces arguments
+ *        to the 15 geometric shapes, finding shorter routes;
+ *    10. Exclusively topological processing (symmetry breaking, phase
+ *        transition) via the fusion fractal tape.
+ *   Modelled as compression rules: a data stream is folded into nested clock
+ *   seeds, and the seeds collapse to a prime skeleton that regenerates the
+ *   original on expansion.
+ *
+ *   Membranes: skin -> ingest (raw big data), shrink (fold to fractal seed),
+ *   skeleton (prime skeleton that regenerates the original).
+ *
+ * Traceability: src/cpp/nanobrain_gog.h (fractal seed), src/cpp/nanobrain_ppm.h
+ *               (prime skeleton / 15-prime coverage), src/cpp/nanobrain_tc_transform.h
+ * Initial multiset: a multi-part data stream to ingest; the shrink membrane
+ *                   holds the 15 primes and a seed; the skeleton holds fuel.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'ingest []'shrink ]'skin;
+@mu = [ []'ingest []'shrink []'skeleton ]'skin;
 
-@mskin = seed;
-@mingest = unit(ingest), fuel;
-@mshrink = unit(shrink), fuel;
+@mskin     = govern;
+@mingest   = data(part1), data(part2), data(part3), data(part4), fuel;
+@mshrink   = fractal_seed,
+             prime(2), prime(3), prime(5), prime(7), prime(11),
+             prime(13), prime(17), prime(19), prime(23), prime(29),
+             prime(31), prime(37), prime(41), prime(43), prime(47), fuel;
+@mskeleton = regenerate, fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * INGEST: the big-data stream is folded part by part into a clock geometry.
+ * Points 1-3: squeeze into a seed; nest to add power; one phase holds it all.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_ingest ]'skin;
-[seed_dispense : seed --> (work)in_shrink ]'skin;
-[step : work * unit(ingest) * fuel --> done(ingest) ]'ingest;
-[step : work * unit(shrink) * fuel --> done(shrink) ]'shrink;
-[report : done(ingest) --> (result(ingest))out ]'ingest;
-[report : done(shrink) --> (result(shrink))out ]'shrink;
+[fold : data(P) * fuel --> clock_geom(P) ]'ingest;
+[merge : clock_geom(P) * clock_geom(Q) --> nested(P,Q) ]'ingest;
+[to_shrink : nested(P,Q) --> (nested(P,Q))out ]'ingest;
+
+/* --------------------------------------------------------------------------
+ * SHRINK: the nested clock geometry collapses onto its prime skeleton.
+ * Points 4-7: infinite series in finite hardware; knots hold the dynamics;
+ * new memory on old; umbrella one-to-all. The fractal seed absorbs the
+ * nested geometry into a single prime-indexed seed.
+ * ------------------------------------------------------------------------*/
+[receive : nested(P,Q) --> (nested(P,Q))in_shrink ]'skin;
+[to_seed : nested(P,Q) * fractal_seed * fuel --> seed(P,Q) ]'shrink;
+[prime_index : seed(P,Q) * prime(R) --> skeleton(R) ]'shrink;
+[to_skeleton : skeleton(R) --> (skeleton(R))out ]'shrink;
+
+/* --------------------------------------------------------------------------
+ * SKELETON: the prime skeleton regenerates the original on demand.
+ * Points 8-10: fastest-clock instant solution; unitary drive to the 15
+ * shapes; topological processing. The shrunk skeleton expands back losslessly.
+ * ------------------------------------------------------------------------*/
+[receive2 : skeleton(R) --> (skeleton(R))in_skeleton ]'skin;
+[expand : skeleton(R) * regenerate * fuel --> original(R) ]'skeleton;
+[report : original(R) --> (result(bigdata_shrunk))out ]'skeleton;

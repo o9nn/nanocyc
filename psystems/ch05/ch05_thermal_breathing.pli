@@ -1,30 +1,79 @@
 /* ============================================================================
  * psystems/ch05/ch05_thermal_breathing.pli
  *
- * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower: universal time crystal
+ * NanoBrain CH05: Big data in the garden of gardens (GOG) of meander flower:
+ * universal time crystal.
  * Issue #10 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 5.6
- * Functionality: Thermal breathing by microtubule and artificial brain: expansion/contraction oscillation rules.
- * Traceability: src/cpp/nanobrain_gog.h, nanobrain_tc_transform.h, nanobrain_spontaneous.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 5.6 (thermal breathing by microtubule and artificial brain).
+ *
+ * Functionality: The artificial brain computes in the ultra-low-energy domain,
+ *   harvesting the available thermal energy kT (Brownian motion) rather than
+ *   dissipating power in a current-voltage circuit. Energy is transferred by a
+ *   NON-RADIATIVE process, so there is no transport loss; storage and
+ *   processing happen in the same place, so there is no retrieval cost. The
+ *   "thermal breathing" pathway (Figure 5.8): defects in the ordered lattice
+ *   propagate as SOLITONS, and solitons of like kind CONDENSE. Two engines run
+ *   simultaneously — electronic solitons (ES) and mechanical/phonon solitons
+ *   (PS) — over two distinct transport routes with feedback. The microtubule's
+ *   conductance shows QUANTIZED JUMPS yet holds a written state during
+ *   temperature variation: expansion (heating) and contraction (cooling)
+ *   oscillate while the encoded state is preserved.
+ *
+ *   Modelled as expansion/contraction oscillation rules: a breath cycle is an
+ *   expand (inhale, kT in) followed by a contract (exhale, soliton condenses),
+ *   and the encoded conducting state SURVIVES the oscillation.
+ *
+ *   Membranes:
+ *     skin
+ *       |- lattice   : the ordered microtubule lattice; defects -> solitons
+ *       |    '- es    : electronic-soliton route (one engine)
+ *       |    '- ps    : phonon/mechanical-soliton route (the other engine)
+ *       '- reservoir : the thermal reservoir supplying kT (expansion source)
+ *
+ * Traceability: src/cpp/nanobrain_hardware_sim.h (thermal/soliton model),
+ *               src/cpp/nanobrain_time_crystal.h (conducting-state rhythm),
+ *               src/cpp/nanobrain_gog.h
+ * Initial multiset: the reservoir holds kT quanta; the lattice holds a defect
+ *                   and an encoded conducting state to be preserved.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'breath ]'skin;
+/* skin routes kT from the reservoir into the lattice's two soliton routes. */
+@mu = [ [ []'es []'ps ]'lattice []'reservoir ]'skin;
 
-@mskin = seed;
-@mbreath = unit(breath), fuel;
+@mskin      = govern;
+@mlattice   = defect(d1), state(conducting), fuel;
+@mes        = route(es), fuel;
+@mps        = route(ps), fuel;
+@mreservoir = kt(1), kt(2), kt(3);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * EXPANSION (inhale): the reservoir emits a kT quantum; the lattice absorbs
+ * it and swells — Brownian energy is harvested, not wasted.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_breath ]'skin;
-[step : work * unit(breath) * fuel --> done(breath) ]'breath;
-[report : done(breath) --> (result(breath))out ]'breath;
+[supply : kt(N) --> (kt(N))out ]'reservoir;
+[absorb : kt(N) --> (kt(N))in_lattice ]'skin;
+[expand : kt(N) * defect(D) * fuel --> soliton(D) * swollen ]'lattice;
+
+/* --------------------------------------------------------------------------
+ * SOLITON ROUTING: the defect-soliton travels down BOTH engines. PS gates
+ * operate first when a signal enters; the electronic ES gates follow (five
+ * channels in series with a feedback network, Figure 5.8c).
+ * ------------------------------------------------------------------------*/
+[to_ps : soliton(D) --> (soliton(D))in_ps ]'lattice;
+[ps_gate : soliton(D) * route(ps) * fuel --> phonon(D) ]'ps;
+[ps_feedback : phonon(D) --> (phonon(D))out ]'ps;
+[to_es : phonon(D) --> (phonon(D))in_es ]'lattice;
+[es_gate : phonon(D) * route(es) * fuel --> quasiparticle(D) ]'es;
+
+/* --------------------------------------------------------------------------
+ * CONTRACTION (exhale): like solitons condense; the lattice contracts back.
+ * Crucially the written conducting STATE is preserved across the breath —
+ * the microtubule holds its encoded state during temperature variation.
+ * ------------------------------------------------------------------------*/
+[condense : quasiparticle(D) --> (condensate(D))out ]'es;
+[contract : condensate(D) * swollen --> contracted(D) ]'lattice;
+[preserve : contracted(D) * state(conducting) --> state(conducting) * breath_done ]'lattice;
+[report : breath_done --> (result(thermal_breath))out ]'lattice;
