@@ -1,38 +1,176 @@
 /* ============================================================================
  * psystems/ch08/ch08_hinductor_core.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.4, 8.4.1-8.4.3
- * Functionality: Linear variation of magnetic flux and stored charge in H; flow of thermal wave; wireless communication between two H devices; Tomasch oscillations and harvesting noise.
+ * Sections: 8.4 (linear variation of magnetic flux and stored charge in H),
+ *           8.4.1 (flow of thermal wave, friend or foe?), 8.4.2 (wireless
+ *           communication between two H devices), 8.4.3 (Tomasch
+ *           oscillations and harvesting noise)
+ *
+ * Functionality: The constitutive law of the fourth-circuit element is the
+ *   LINEAR link between magnetic flux and stored charge, Psi = Q x H
+ *   (eq. 8.10): every unit of immobile stored charge yields one flux
+ *   quantum through the constant hinductance H, while conductance is
+ *   redefined as dQ/dPsi — no current, no voltage, an insulator of
+ *   R ~ 10^9 ohm (8.4). Classical sum and quantum product of the lattice
+ *   phases integrate at the critical ratio 1 : 1.0205 where a singularity
+ *   is born. The thermal wave is a FRIEND: solitons ride the alpha-helix,
+ *   the lattice shows negative specific heat (an ideal heat sink), and
+ *   when entropy slips noise is poured in, when it returns noise is pumped
+ *   out — entropy stays constant from 5 to 320 K (8.4.1). Two H devices
+ *   talk wirelessly: the sender's magnon condenses the receiver lattice
+ *   beyond the critical radius, phase-gain synchronization locks sender and
+ *   receiver, and transmission works only when noise exceeds twice the
+ *   signal (8.4.2). Inside each device, carriers reflect like a pendulum
+ *   between two vibrating cavity boundaries — Tomasch oscillations whose
+ *   ripples are harvested and whose periodicity yields the Fermi velocity
+ *   (8.4.3).
+ *
+ *   Common modules inlined by convention:
+ *     common/ecan_attention.pli — the entropy in/out token economy of 8.4.1
+ *                                 mirrors the STI/LTI wage-rent cycle
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (HinductorState.magnetic_flux/vortex_charge/flux_history —
+ *                the linear Psi-Q ramp; TomaschOscillator —
+ *                harvest_noise_energy, process_thermal_waves,
+ *                TOMASCH_THRESHOLD; MagnonicBridge — setup_wireless_h_device,
+ *                transmit_magnon, receive_magnon)
+ * Initial multiset: two charge pumps, one thermal noise quantum and two
+ *                   medium noise quanta in the skin so the simulator runs
+ *                   >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'h_device_a []'h_device_b []'thermal ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the shared wireless medium between the two devices)
+ *     '- h_device_a : sender H device (linear Psi-Q engine)
+ *     |    '- cavity_a : Tomasch cavity — two vibrating boundaries
+ *     '- h_device_b : receiver H device (condensing lattice)
+ *     |    '- cavity_b : receiver cavity — readout of ripple periodicity
+ *     '- thermal    : thermal-wave management (friend, not foe)
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'cavity_a ]'h_device_a [ []'cavity_b ]'h_device_b
+        []'thermal ]'skin;
 
-@mskin = seed;
-@mh_device_a = unit(h_device_a), fuel;
-@mh_device_b = unit(h_device_b), fuel;
-@mthermal = unit(thermal), fuel;
+/* Sample initial multiset. */
+@mskin       = charge_pump*2, thermal_noise, medium_noise*2;
+@mh_device_a = h_constant, geometry(l_p_d);
+@mcavity_a   = boundary(left), boundary(right);
+@mh_device_b = receiver_lattice, condensation_seed;
+@mcavity_b   = probe_boundary;
+@mthermal    = alpha_helix, entropy(s0), band_fill;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.4  Linear variation of magnetic flux with stored charge.
+ * inject_q    : the skin pumps immobile stored charge into device A — no
+ *               current ever flows
+ * linear_flux : Psi = Q x H — the constant hinductance (catalyst) converts
+ *               ONE unit of stored charge into ONE flux quantum per step:
+ *               a point-by-point linear ramp
+ * sum_product : classical sum and quantum product of the lattice phases
+ *               integrate at the ratio 1 : 1.0205 — a singularity is born
+ * geometry_h  : the L, P, D geometry keeps H periodic yet locally constant
+ *               (eq. 8.10) — the conductance is redefined as dQ/dPsi
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_h_device_a ]'skin;
-[seed_dispense : seed --> (work)in_h_device_b ]'skin;
-[seed_dispense : seed --> (work)in_thermal ]'skin;
-[step : work * unit(h_device_a) * fuel --> done(h_device_a) ]'h_device_a;
-[step : work * unit(h_device_b) * fuel --> done(h_device_b) ]'h_device_b;
-[step : work * unit(thermal) * fuel --> done(thermal) ]'thermal;
-[report : done(h_device_a) --> (result(h_device_a))out ]'h_device_a;
-[report : done(h_device_b) --> (result(h_device_b))out ]'h_device_b;
-[report : done(thermal) --> (result(thermal))out ]'thermal;
+[inject_q : charge_pump --> (stored_charge)in_h_device_a ]'skin;
+
+[linear_flux : stored_charge * h_constant
+            --> h_constant * flux_quantum ]'h_device_a;
+[sum_product : flux_quantum*2
+            --> psi_linkage(classical_sum) * psi_linkage(quantum_product)
+              * singularity(ratio_1_0205) ]'h_device_a;
+[geometry_h : psi_linkage(quantum_product) * geometry(l_p_d)
+           --> geometry(l_p_d) * conductance(dq_dpsi) ]'h_device_a;
+
+/* --------------------------------------------------------------------------
+ * 8.4.3  Tomasch oscillations and harvesting noise.
+ * tomasch_seed : the newborn singularity becomes a carrier trapped in the
+ *                cavity between the two boundaries
+ * reflect_l/r  : the carrier reflects like a pendulum between the vibrating
+ *                boundaries — each pass emits one Tomasch ripple (the
+ *                boundary vibration supplies the energy; the loop is
+ *                perpetual by design)
+ * harvest      : every ripple is harvested out of the cavity — noise
+ *                becomes usable periodic signal
+ * ------------------------------------------------------------------------*/
+[tomasch_seed : singularity(ratio_1_0205) --> (carrier)in_cavity_a
+              ]'h_device_a;
+
+[reflect_l : carrier * boundary(left)
+          --> boundary(left) * carrier_returning * ripple ]'cavity_a;
+[reflect_r : carrier_returning * boundary(right)
+          --> boundary(right) * carrier * ripple ]'cavity_a;
+[harvest : ripple --> (ripple)out ]'cavity_a;
+
+/* --------------------------------------------------------------------------
+ * 8.4.2  Wireless communication between two H devices.
+ * broadcast : device A fuses one harvested ripple with its classical flux
+ *             linkage into a magnon at the sender resonance omega_s
+ * couple    : magneto-inductive coupling across the skin medium — the
+ *             transfer succeeds only when noise exceeds TWICE the signal
+ *             (two medium noise quanta per magnon); the magnon arrives
+ *             retuned to the receiver resonance omega_r
+ * condense_b: beyond the critical radius the receiver lattice condenses
+ *             around the arriving magnon
+ * phase_gain: the condensed cluster phase-synchronizes the receiver with
+ *             the sender — the wireless link is locked
+ * echo      : the synchronized phase enters cavity B and rings its boundary
+ * readout   : the ripple periodicity yields the Fermi velocity — the
+ *             differential flux-charge readout of the received signal
+ * report_b  : device B announces the completed wireless reception
+ * ------------------------------------------------------------------------*/
+[broadcast : psi_linkage(classical_sum) * ripple
+          --> (magnon(omega_s))out ]'h_device_a;
+
+[couple : magnon(omega_s) * medium_noise*2
+       --> (magnon(omega_r))in_h_device_b ]'skin;
+
+[condense_b : magnon(omega_r) * condensation_seed
+           --> cluster(critical_radius) ]'h_device_b;
+[phase_gain : cluster(critical_radius) * receiver_lattice
+           --> receiver_lattice * phase_synchronized ]'h_device_b;
+[echo : phase_synchronized --> (phase_synchronized)in_cavity_b ]'h_device_b;
+
+[readout : phase_synchronized * probe_boundary
+        --> probe_boundary * (fermi_velocity(extracted))out ]'cavity_b;
+[report_b : fermi_velocity(extracted) --> (wireless_received)out
+          ]'h_device_b;
+
+/* --------------------------------------------------------------------------
+ * 8.4.1  Flow of thermal wave — friend, not foe.
+ * thermal_in : the skin routes ambient thermal noise into the thermal
+ *              membrane
+ * soliton    : the alpha-helix zig-zag turns the thermal wave into a
+ *              lossless soliton packet (kB.T energy quanta)
+ * pour_in    : when entropy slips, the noise is poured into the lattice —
+ *              the packet is banked
+ * pump_out   : the band-fill feedback restores entropy to s0 and credits
+ *              the negative-specific-heat sink — entropy stays constant
+ *              from 5 to 320 K
+ * friend     : banked energy plus the heat-sink credit prove the thermal
+ *              wave a FRIEND — harvested, never harmful
+ * ------------------------------------------------------------------------*/
+[thermal_in : thermal_noise --> (thermal_wave)in_thermal ]'skin;
+
+[soliton : thermal_wave * alpha_helix
+        --> alpha_helix * soliton_packet ]'thermal;
+[pour_in : soliton_packet * entropy(s0)
+        --> entropy(slipped) * energy_packet(kbt) ]'thermal;
+[pump_out : entropy(slipped) * band_fill
+         --> band_fill * entropy(s0) * heat_sink_credit ]'thermal;
+[friend : energy_packet(kbt) * heat_sink_credit
+       --> (thermal_friend)out ]'thermal;
+
+/* --------------------------------------------------------------------------
+ * The skin certifies the Hinductor core law: a linear Psi-Q device whose
+ * conductance is dQ/dPsi, wireless-linked to its twin and fed, not harmed,
+ * by the thermal wave.
+ * ------------------------------------------------------------------------*/
+[core_law : wireless_received * thermal_friend
+         --> hinductor_core(psi_q_linear) ]'skin;

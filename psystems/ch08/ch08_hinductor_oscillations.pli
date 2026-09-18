@@ -1,38 +1,158 @@
 /* ============================================================================
  * psystems/ch08/ch08_hinductor_oscillations.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.5, 8.5.1-8.5.3
- * Functionality: Periodic oscillation of capacitance, inductance and hinductance with geometry; phase space with 12 blinking holes; oscillations with length, pitch, lattice area/diameter; knots of darkness on the H interface.
+ * Sections: 8.5 (periodic oscillation of capacitance, inductance and
+ *           hinductance with its geometry), 8.5.1 (the concept of phase
+ *           space with 12 holes that blinks), 8.5.2 (periodic oscillations
+ *           with length, pitch, lattice area/diameter: theory, experiment),
+ *           8.5.3 (knots of darkness on the H interface)
+ *
+ * Functionality: Quantum capacitance Cq and quantum inductance Lq of an H
+ *   device live in VIRTUAL quantum wells whose height and width depend on
+ *   the frequency (dwell time) of the pumped wave, not on real charge; as
+ *   the helix length L, pitch P and diameter D sweep, Cq, Lq and the
+ *   hinductance H all oscillate periodically (8.5, 8.5.2 theory). A 0.2 THz
+ *   coaxial pulse traps an oscillating charge whose three reflections link
+ *   charge and flux directly (eqs. 8.13-8.14, Breit-Wigner phases) — the
+ *   experiment reproducing the theory point by point (8.5.2 experiment).
+ *   The device phase sphere carries 12 holes — one pair per direction
+ *   x, y, z, xy, yz, zx — and when the geometry oscillates the holes BLINK
+ *   (open/close); combinations of blinking holes span the 2^12 - 1 = 4095
+ *   (about 4047 usable) temporal dynamics, each hole boundary shaping one
+ *   magnetic-vortex geometry (8.5.1). On the H interface the resonant
+ *   trapped light decomposes into the quaternion components i, j, k of
+ *   psi_mag (eq. 8.16), a 3D spiral connecting localized phase
+ *   singularities; at E = E_R the spiral closes into a CIRCLE — the
+ *   quantized dark ring, a knot of darkness (8.5.3).
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — the 12 holes blink at prime-related
+ *                                  frequencies (PhaseSpaceConfig)
+ *     common/hypernumbers.pli    — the i, j, k components of psi_mag are
+ *                                  quaternion axes
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (Hinductor::oscillate_capacitance,
+ *                calculate_oscillating_capacitance; PHASE_SPACE_HOLES = 12;
+ *                PhaseSpaceDynamics — update_hole_states, HoleState
+ *                Active/Inactive/Transition, get_active_pattern;
+ *                PhaseSpaceConfig.prime_frequencies)
+ * Initial multiset: three geometry sweep commands, one 0.2 THz pulse and
+ *                   one resonant light pump in the skin so the simulator
+ *                   runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'c_l_h []'holes_12 []'knots ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (couples geometry oscillation to hole blinking to dark knots)
+ *     '- geometry_sweep : L, P, D parameter sweeps (8.5, 8.5.2)
+ *     |    '- virtual_well : frequency-built virtual quantum well
+ *     '- phase_sphere   : the 12 blinking holes (8.5.1)
+ *     '- interface      : knots of darkness on the H surface (8.5.3)
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'virtual_well ]'geometry_sweep []'phase_sphere
+        []'interface ]'skin;
 
-@mskin = seed;
-@mc_l_h = unit(c_l_h), fuel;
-@mholes_12 = unit(holes_12), fuel;
-@mknots = unit(knots), fuel;
+/* Sample initial multiset — the 12 holes are the pairs x+-, y+-, z+-,
+ * xy+-, yz+-, zx+- of the device phase sphere. */
+@mskin           = sweep_cmd(length), sweep_cmd(pitch), sweep_cmd(diameter),
+                   pulse(thz_0_2), light_pump;
+@mgeometry_sweep = helix(l_p_d);
+@mvirtual_well   = alpha_helix_pair, water_channel;
+@mphase_sphere   = hole(x_plus), hole(x_minus), hole(y_plus), hole(y_minus),
+                   hole(z_plus), hole(z_minus), hole(xy_plus), hole(xy_minus),
+                   hole(yz_plus), hole(yz_minus), hole(zx_plus),
+                   hole(zx_minus);
+@minterface      = quaternion_axes, singularity_site*2;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.5 / 8.5.2  C, L, H oscillate periodically with the geometry.
+ * sweep     : each geometry command becomes a parameter perturbation
+ * probe     : the 0.2 THz coaxial pulse heads for the virtual well
+ * illuminate: the resonant light pump heads for the H interface
+ * tune      : sweeping one parameter makes Cq, Lq AND H oscillate together
+ *             (one parameter per step — the helix is the catalyst)
+ * to_well   : the THz pulse descends into the virtual well
+ * virtual   : the wave's dwell time BUILDS the virtual well on the
+ *             alpha-helix pair — no real charge is stored
+ * breit_wigner : the trapped wave re-emits as psi_osci with an oscillating
+ *             charge q_osci (eq. 8.13, Breit-Wigner phases)
+ * well_report : the three reflections link charge and flux directly
+ *             (eq. 8.14) — three flux ripples leave the well
+ * collect   : theory (flux ripple) meets experiment (geometry oscillation):
+ *             the periodic H oscillation for that parameter is certified
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_c_l_h ]'skin;
-[seed_dispense : seed --> (work)in_holes_12 ]'skin;
-[seed_dispense : seed --> (work)in_knots ]'skin;
-[step : work * unit(c_l_h) * fuel --> done(c_l_h) ]'c_l_h;
-[step : work * unit(holes_12) * fuel --> done(holes_12) ]'holes_12;
-[step : work * unit(knots) * fuel --> done(knots) ]'knots;
-[report : done(c_l_h) --> (result(c_l_h))out ]'c_l_h;
-[report : done(holes_12) --> (result(holes_12))out ]'holes_12;
-[report : done(knots) --> (result(knots))out ]'knots;
+[sweep : sweep_cmd(X) --> (delta(X))in_geometry_sweep ]'skin;
+[probe : pulse(thz_0_2) --> (thz_pulse)in_geometry_sweep ]'skin;
+[illuminate : light_pump --> (resonant_light)in_interface ]'skin;
+
+[tune : delta(X) * helix(l_p_d)
+     --> helix(l_p_d) * osc(c_q, X) * osc(l_q, X) * osc(h, X)
+      ]'geometry_sweep;
+[to_well : thz_pulse --> (thz_pulse)in_virtual_well ]'geometry_sweep;
+
+[virtual : thz_pulse * alpha_helix_pair
+        --> alpha_helix_pair * psi_trap ]'virtual_well;
+[breit_wigner : psi_trap * water_channel
+             --> water_channel * psi_osci * q_osci ]'virtual_well;
+[well_report : psi_osci * q_osci
+            --> (flux_ripple)out * (flux_ripple)out * (flux_ripple)out
+             ]'virtual_well;
+
+[collect : osc(c_q, X) * osc(l_q, X) * osc(h, X) * flux_ripple
+        --> (h_oscillation(X))out ]'geometry_sweep;
+
+/* --------------------------------------------------------------------------
+ * 8.5.1  The phase space with 12 holes that blinks.
+ * to_sphere   : every certified geometry oscillation becomes one blink
+ *               drive on the phase sphere
+ * blink_open  : a drive opens (lights) one hole per step — Active state
+ * blink_close : a lit hole falls back closed, releasing one wink — the
+ *               hole has BLINKED (Transition -> Inactive); the loop is
+ *               perpetual, the sphere keeps blinking
+ * pattern     : two winks combine into one of the 2^12 - 1 temporal
+ *               dynamics; the hole-pair boundary shapes one magnetic-vortex
+ *               geometry, exported to the skin
+ * ------------------------------------------------------------------------*/
+[to_sphere : h_oscillation(X) --> (blink_drive(X))in_phase_sphere ]'skin;
+
+[blink_open : hole(H) * blink_drive(X)
+           --> lit(H) * blink_drive(X) ]'phase_sphere;
+[blink_close : lit(H) --> hole(H) * wink(H) ]'phase_sphere;
+[pattern : wink(H1) * wink(H2)
+        --> (vortex_geometry(H1, H2))out ]'phase_sphere;
+
+/* --------------------------------------------------------------------------
+ * 8.5.3  Knots of darkness on the H interface.
+ * vortex_to_interface : each blink-shaped vortex geometry seeds the
+ *               interface
+ * spiral_knot : the resonant light decomposes on the quaternion axes into
+ *               the three orthogonal dark components psi_i, psi_j, psi_k
+ * assemble    : psi_mag = i.psi_i + j.psi_j + k.psi_k (eq. 8.16) — a 3D
+ *               spiral CONNECTING the two localized phase singularities
+ * ring_at_res : at E = E_R the spiral closes into a circle stamped by the
+ *               hole-pair geometry — the quantized dark ring
+ * report      : the knot of darkness surfaces on the H interface
+ * h_measure   : the skin reads the hinductance H ~ 0.001 — the inverse
+ *               measure of the singularities the device can open and close
+ * ------------------------------------------------------------------------*/
+[vortex_to_interface : vortex_geometry(H1, H2)
+                    --> (vortex_seed(H1, H2))in_interface ]'skin;
+
+[spiral_knot : resonant_light * quaternion_axes
+            --> quaternion_axes * psi_component(i) * psi_component(j)
+              * psi_component(k) ]'interface;
+[assemble : psi_component(i) * psi_component(j) * psi_component(k)
+          * singularity_site*2
+         --> psi_mag(spiral_3d) ]'interface;
+[ring_at_res : psi_mag(spiral_3d) * vortex_seed(H1, H2)
+            --> dark_ring(quantized) ]'interface;
+[report : dark_ring(quantized) --> (knot_of_darkness)out ]'interface;
+
+[h_measure : knot_of_darkness --> hinductance(h_0_001) ]'skin;

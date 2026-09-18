@@ -1,42 +1,206 @@
 /* ============================================================================
  * psystems/ch08/ch08_vortex_resistance.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.1, 8.1.1-8.1.4
- * Functionality: Resistance not for electrons but for vortex atoms; quantum non-demolition e-pi-phi quadratic sensors; rapidly oscillating cell membrane holding a long wave; paraxial systems; anisotropy and avoided crossing.
+ * Sections: 8.1 (it is resistance but not for electrons, but for vortex
+ *           atoms), 8.1.1 (quantum non-demolition: e-pi-phi quadratic
+ *           sensors), 8.1.2 (rapidly oscillating cell membrane holding a
+ *           long wave), 8.1.3 (paraxial systems), 8.1.4 (anisotropy and
+ *           avoided crossing)
+ *
+ * Functionality: In a Hinductor the matrix is an EXTREME INSULATOR — the
+ *   electrical resistance for electrons is infinite, yet the flux-charge
+ *   resistance for VORTEX ATOMS is tiny (~0.001). Trapped charges never
+ *   move individually; under noise they oscillate physically AS A GROUP,
+ *   emitting magnetic ripples that interfere into spiral standing waves —
+ *   vortex atoms, the true current carriers (8.1). A quantum non-demolition
+ *   sensor locks onto the coupled electric-mechanical-magnetic rhythm
+ *   e-pi-phi (e^2 + phi^2 = pi^2) and records flux rate, charge rate and
+ *   hinductance simultaneously without destroying the vortex (8.1.1). The
+ *   cell boundary vibrates slowly (kHz) while the core vibrates at MHz-GHz;
+ *   the fast core adiabatically cages a long slow wave, accruing dynamic
+ *   plus geometric (Aharonov-Bohm) phase (8.1.2). In the paraxial system
+ *   the transverse electric vector feeds the magnetic part of the stream:
+ *   one input omega spawns N low-frequency G-modes, psi_trap builds
+ *   psi_osci which builds psi_mag (8.1.3). Two anisotropic bands undergo
+ *   avoided crossing with gap Delta; the wave vector oscillates as cos k,
+ *   so the gap periodically opens/shuts while K* switches the polarization
+ *   between circular and elliptical, and the dressed levels exchange n
+ *   quanta without ever crossing (8.1.4).
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — noise-to-signal conversion feeds the
+ *                                  prime-resonance chain of later sections
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (Hinductor::vortex_resistance — infinite electron R vs
+ *                finite vortex R; HinductorState.resistance,
+ *                VortexAtom — circulation, spinor, prime_resonance;
+ *                VORTEX_COUPLING_CONSTANT)
+ * Initial multiset: four tagged noise pumps plus one electron probe in the
+ *                   skin so the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'vortex []'qnd_sensor []'cell_membrane []'paraxial ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the H device seen from outside)
+ *     '- vortex_lattice : extreme-insulator matrix (R_electron = infinity)
+ *     |    '- trap      : charge-trap centers — charges oscillate as a group
+ *     '- qnd_sensor     : e-pi-phi quadratic non-demolition sensor (8.1.1)
+ *     '- cell           : slowly vibrating boundary membrane (kHz) (8.1.2)
+ *     |    '- core      : rapidly vibrating interior (MHz-GHz)
+ *     '- paraxial       : paraxial E-to-B feeder and G-mode ladder (8.1.3)
+ *     '- bands          : anisotropic band pair, avoided crossing (8.1.4)
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'trap ]'vortex_lattice []'qnd_sensor [ []'core ]'cell
+        []'paraxial []'bands ]'skin;
 
-@mskin = seed;
-@mvortex = unit(vortex), fuel;
-@mqnd_sensor = unit(qnd_sensor), fuel;
-@mcell_membrane = unit(cell_membrane), fuel;
-@mparaxial = unit(paraxial), fuel;
+/* Sample initial multiset. */
+@mskin           = noise(lattice), noise(cell), noise(paraxial),
+                   noise(bands), electron_probe;
+@mvortex_lattice = insulator_matrix;
+@mtrap           = trapped_charge*3;
+@mqnd_sensor     = sensor_ready, axis(e), axis(pi), axis(phi);
+@mcell           = boundary(khz);
+@mcore           = core_clock(ghz);
+@mparaxial       = optical_axis, e_vector(transverse);
+@mbands          = band(upper), band(lower), k_vector, polarization(circular);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.1  Resistance for vortex atoms, not electrons.
+ * drive_*       : the skin dispenses one tagged noise pump per subsystem
+ * probe         : an electron probe attacks the insulator matrix
+ * block_e       : the matrix rejects the electron — electrical R = infinity
+ * pass_noise    : noise reaches the charge-trap centers
+ * group_osc     : trapped charges DO NOT move; the whole group oscillates
+ *                 and emits a magnetic ripple (charges stay trapped)
+ * emit/spiralize: ripples interfere into a spiral standing wave — a vortex
+ *                 atom is born and released to the skin
+ * vortex_conduct: the vortex atom is the carrier: it transports one flux
+ *                 quantum bound to one stored charge (no electron flow)
+ * h_resist      : flux-per-charge transport meets only the tiny topological
+ *                 resistance ~0.001 — the fourth-element signature
+ * contrast      : infinite electron resistance vs 0.001 vortex resistance
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_vortex ]'skin;
-[seed_dispense : seed --> (work)in_qnd_sensor ]'skin;
-[seed_dispense : seed --> (work)in_cell_membrane ]'skin;
-[seed_dispense : seed --> (work)in_paraxial ]'skin;
-[step : work * unit(vortex) * fuel --> done(vortex) ]'vortex;
-[step : work * unit(qnd_sensor) * fuel --> done(qnd_sensor) ]'qnd_sensor;
-[step : work * unit(cell_membrane) * fuel --> done(cell_membrane) ]'cell_membrane;
-[step : work * unit(paraxial) * fuel --> done(paraxial) ]'paraxial;
-[report : done(vortex) --> (result(vortex))out ]'vortex;
-[report : done(qnd_sensor) --> (result(qnd_sensor))out ]'qnd_sensor;
-[report : done(cell_membrane) --> (result(cell_membrane))out ]'cell_membrane;
-[report : done(paraxial) --> (result(paraxial))out ]'paraxial;
+[drive_lattice  : noise(lattice)  --> (noise(lattice))in_vortex_lattice ]'skin;
+[drive_cell     : noise(cell)     --> (noise(cell))in_cell ]'skin;
+[drive_paraxial : noise(paraxial) --> (noise(paraxial))in_paraxial ]'skin;
+[drive_bands    : noise(bands)    --> (noise(bands))in_bands ]'skin;
+[probe          : electron_probe  --> (electron_probe)in_vortex_lattice ]'skin;
+
+[block_e : electron_probe * insulator_matrix
+        --> insulator_matrix * (r_electron(infinite))out ]'vortex_lattice;
+[pass_noise : noise(lattice) --> (noise(lattice))in_trap ]'vortex_lattice;
+
+[group_osc : noise(lattice) * trapped_charge*3
+          --> trapped_charge*3 * ripple(magnetic) ]'trap;
+[emit      : ripple(magnetic) --> (ripple(magnetic))out ]'trap;
+
+[spiralize : ripple(magnetic) --> (vortex_atom)out ]'vortex_lattice;
+
+[vortex_conduct : vortex_atom --> vortex_carrier * flux_quantum
+                                * stored_charge ]'skin;
+[h_resist  : flux_quantum * stored_charge --> h_resistance(0_001) ]'skin;
+[contrast  : r_electron(infinite) * h_resistance(0_001)
+          --> resistance_contrast ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.1.1  Quantum non-demolition e-pi-phi quadratic sensor.
+ * to_qnd    : the conducting vortex enters the sensor cavity
+ * qnd_read  : the sensor synchronises with the coupled e-pi-phi oscillation
+ *             (e^2 + phi^2 = pi^2) and records flux rate, charge rate AND
+ *             hinductance in one shot — the vortex atom SURVIVES (priority
+ *             1: measure before releasing)
+ * quadratic : the three simultaneous readings lock the quadratic relation
+ * release   : the measured vortex leaves the sensor undemolished
+ * ------------------------------------------------------------------------*/
+[to_qnd : vortex_carrier --> (vortex_atom)in_qnd_sensor ]'skin;
+
+[qnd_read : vortex_atom * sensor_ready * axis(e) * axis(pi) * axis(phi)
+         --> vortex_atom * reading(flux_rate) * reading(charge_rate)
+           * reading(hinductance) ]'qnd_sensor, 1;
+[quadratic : reading(flux_rate) * reading(charge_rate) * reading(hinductance)
+          --> (e_pi_phi_locked)out ]'qnd_sensor;
+[release : vortex_atom --> (vortex_atom_intact)out ]'qnd_sensor;
+
+/* --------------------------------------------------------------------------
+ * 8.1.2  Rapidly oscillating cell membrane holding a long wave.
+ * isolate    : the kHz boundary filters environmental noise into one slow
+ *              long wave and shields the interior (adiabatic cage)
+ * adiabatic  : the slow wave is handed to the MHz-GHz core
+ * hold       : the fast core wraps the long wave, accruing dynamic AND
+ *              geometric (Aharonov-Bohm) phase at ambient temperature
+ * report_hold/export_cell : the held wave is announced to the skin
+ * ------------------------------------------------------------------------*/
+[isolate   : noise(cell) * boundary(khz) --> boundary(khz) * slow_wave ]'cell;
+[adiabatic : slow_wave --> (slow_wave)in_core ]'cell;
+
+[hold : slow_wave * core_clock(ghz)
+     --> core_clock(ghz) * long_wave * dynamic_phase * geometric_phase ]'core;
+[report_hold : long_wave * dynamic_phase * geometric_phase
+            --> (held_wave)out ]'core;
+
+[export_cell : held_wave --> (held_wave)out ]'cell;
+
+/* --------------------------------------------------------------------------
+ * 8.1.3  Paraxial systems.
+ * g_mode_split : one high-frequency input spawns N low-frequency G-modes
+ * e_to_b       : the transverse electric vector contributes to the magnetic
+ *                part of the electromagnetic stream (paraxial signature)
+ * trap_wave    : the cell delays the signal — oscillating walls build
+ *                psi_trap
+ * oscillate    : psi_trap re-emits as psi_osci
+ * magnetize    : psi_osci plus the fed magnetic vector build psi_mag
+ * ------------------------------------------------------------------------*/
+[g_mode_split : noise(paraxial) * optical_axis
+             --> optical_axis * g_mode(omega_1) * g_mode(omega_2)
+               * g_mode(omega_3) ]'paraxial;
+[e_to_b    : e_vector(transverse) * g_mode(omega_1) --> b_vector ]'paraxial;
+[trap_wave : g_mode(omega_2) --> psi_trap ]'paraxial;
+[oscillate : psi_trap * g_mode(omega_3) --> psi_osci ]'paraxial;
+[magnetize : psi_osci * b_vector --> (psi_mag)out ]'paraxial;
+
+/* --------------------------------------------------------------------------
+ * 8.1.4  Anisotropy and avoided crossing.
+ * avoided_cross  : the two anisotropic bands dress into E+ and E- with a
+ *                  finite gap Delta — they never touch (eq. 8.1)
+ * exchange_quanta: n quanta are exchanged between the dressed levels; the
+ *                  crossing is avoided (tunneling probability -> 0)
+ * gap_close/gap_reopen : the wave vector oscillates as cos k, so the band
+ *                  gap periodically shuts and reopens (eq. 8.2) — a
+ *                  perpetual oscillation loop; each transition emits one
+ *                  blink pulse
+ * pol_to_ell/pol_to_circ : K* switches the polarization between elliptical
+ *                  and circular on every blink of the gap — one pulse is
+ *                  consumed per switch, so blink and polarization stay
+ *                  phase-locked
+ * report_bands   : the avoided-crossing lock is announced to the skin
+ * ------------------------------------------------------------------------*/
+[avoided_cross : noise(bands) * band(upper) * band(lower)
+              --> dressed(e_plus) * dressed(e_minus) * gap(open) ]'bands;
+[exchange_quanta : dressed(e_plus) * dressed(e_minus)
+                --> quantum(n) * no_crossing ]'bands;
+[gap_close  : gap(open) * k_vector
+           --> k_star * gap(shut) * blink(shut) ]'bands;
+[gap_reopen : gap(shut) * k_star
+           --> k_vector * gap(open) * blink(open) ]'bands;
+[pol_to_ell  : polarization(circular) * blink(shut)
+            --> polarization(elliptical) ]'bands;
+[pol_to_circ : polarization(elliptical) * blink(open)
+            --> polarization(circular) ]'bands;
+[report_bands : quantum(n) * no_crossing
+             --> (avoided_crossing_locked)out ]'bands;
+
+/* --------------------------------------------------------------------------
+ * Chapter thesis: the four evidences assemble the 8.1 claim — the H device
+ * offers resistance to vortex atoms, never to electrons; the intact vortex
+ * (vortex_atom_intact) remains in the skin as non-demolition proof.
+ * ------------------------------------------------------------------------*/
+[signature : resistance_contrast * e_pi_phi_locked * held_wave * psi_mag
+           * avoided_crossing_locked
+          --> hinductor_resistance(vortex_atoms) ]'skin;
