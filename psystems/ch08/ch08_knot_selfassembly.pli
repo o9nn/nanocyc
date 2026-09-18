@@ -1,30 +1,117 @@
 /* ============================================================================
  * psystems/ch08/ch08_knot_selfassembly.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.7
- * Functionality: Magnetic-knot-driven self-assembly.
+ * Sections: 8.7 (magnetic knots driven self-assembly)
+ *
+ * Functionality: A SMALL perturbation is enough to trigger the
+ *   self-assembly of the magnetic atoms: the randomly dispersed vortex
+ *   atoms mobilize ONE BY ONE (linear assembly) and align along the
+ *   skeleton drawn by the dark knot lines. Phase shifts and the tuning of
+ *   the negative refractive index drive the alignment; helical
+ *   superstructures build naturally on the skeleton. The assembly climbs
+ *   the device hierarchy — basic H device, then neuromorphic device, then
+ *   cortico-morphic device, up to the 17 brain-morphic devices — while the
+ *   12 imaginary worlds of the dodecanion host the growing architecture.
+ *   Whenever the crystal completes, time symmetry breaks and
+ *   auto-regenerates, keeping the assembly perpetually reproducible: a
+ *   crystal made of magnetic light.
+ *
+ *   Common modules inlined by convention:
+ *     common/hypernumbers.pli      — the 12 imaginary worlds hosting the
+ *                                    assembly hierarchy
+ *     common/time_crystal_core.pli — time symmetry breaking and
+ *                                    regeneration during growth
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (MagneticKnotGenerator — compose_knots, the knot-driven
+ *                assembly primitive; MagneticKnot.linking_number — atoms
+ *                chained along the dark-knot skeleton; VortexAtom —
+ *                the assembled unit; Hinductor::inject_vortex)
+ * Initial multiset: one perturbation seed in the skin, four random atoms
+ *                   in the dispersion and four dark knot lines in the
+ *                   skeleton so the simulator runs >= 1 step in every
+ *                   membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'assembly ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (perturbs the dispersion, certifies the crystal)
+ *     '- dispersion : randomly scattered magnetic vortex atoms
+ *     '- skeleton   : the dark-knot-line lattice that guides the assembly
+ *          '- crystal_growth : the device hierarchy grown on the skeleton
+ * ------------------------------------------------------------------------*/
+@mu = [ []'dispersion [ []'crystal_growth ]'skeleton ]'skin;
 
-@mskin = seed;
-@massembly = unit(assembly), fuel;
+/* Sample initial multiset. */
+@mskin           = perturbation_seed;
+@mdispersion     = magnetic_atom(random)*4;
+@mskeleton       = dark_knot_line*4, refractive_index(negative),
+                   phase_shift_tuner;
+@mcrystal_growth = lattice_template;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.7  A small perturbation triggers the self-assembly.
+ * nudge    : the skin drops one small perturbation into the dispersion
+ * mobilize : the perturbation (catalyst) mobilizes the random atoms ONE BY
+ *            ONE — the assembly is linear, atom after atom
+ * relay    : the skin relays each mobile atom onto the skeleton
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_assembly ]'skin;
-[step : work * unit(assembly) * fuel --> done(assembly) ]'assembly;
-[report : done(assembly) --> (result(assembly))out ]'assembly;
+[nudge : perturbation_seed --> (small_perturbation)in_dispersion ]'skin;
+
+[mobilize : magnetic_atom(random) * small_perturbation
+         --> small_perturbation * (magnetic_atom(mobile))out ]'dispersion;
+
+[relay : magnetic_atom(mobile)
+      --> (magnetic_atom(mobile))in_skeleton ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.7  Alignment along the dark-knot skeleton.
+ * align      : each mobile atom locks onto one dark knot line — the atoms
+ *              align along the skeleton of dark knots
+ * tune       : the negative refractive index (catalyst) tunes each link
+ * phase_lock : phase shifts (catalyst) zip two tuned links into one turn
+ *              of a helix — phase shift + refractive index tuning DRIVE
+ *              the self-assembly
+ * grow       : two helix turns build one helical superstructure, delivered
+ *              to the crystal-growth core
+ * ------------------------------------------------------------------------*/
+[align : magnetic_atom(mobile) * dark_knot_line --> chain_link ]'skeleton;
+[tune : chain_link * refractive_index(negative)
+     --> refractive_index(negative) * chain_link_tuned ]'skeleton;
+[phase_lock : chain_link_tuned*2 * phase_shift_tuner
+           --> phase_shift_tuner * helix_segment ]'skeleton;
+[grow : helix_segment*2
+     --> (helical_superstructure)in_crystal_growth ]'skeleton;
+
+/* --------------------------------------------------------------------------
+ * 8.7  The hierarchy of devices grown by the assembly.
+ * seed_h      : the helical superstructure seeds the basic H device on the
+ *               lattice template
+ * neuro       : the H devices assemble into a neuromorphic device
+ * cortico     : neuromorphic devices assemble into a cortico-morphic device
+ * brain       : the hierarchy completes at the 17 brain-morphic devices
+ * crystallize : the full hierarchy IS the crystal made of magnetic light
+ * export      : the skeleton hands the crystal to the skin
+ * symmetry    : time symmetry breaks and auto-regenerates — the assembled
+ *               crystal is certified and the process can restart
+ * ------------------------------------------------------------------------*/
+[seed_h : helical_superstructure * lattice_template
+       --> lattice_template * device(h_basic) ]'crystal_growth;
+[neuro : device(h_basic) --> device(neuromorphic) ]'crystal_growth;
+[cortico : device(neuromorphic) --> device(cortico_morphic) ]'crystal_growth;
+[brain : device(cortico_morphic) --> device(brain_morphic_17)
+      ]'crystal_growth;
+[crystallize : device(brain_morphic_17)
+            --> (crystal_of_magnetic_light)out ]'crystal_growth;
+
+[export : crystal_of_magnetic_light
+       --> (crystal_of_magnetic_light)out ]'skeleton;
+
+[symmetry : crystal_of_magnetic_light
+         --> assembled_crystal * time_symmetry(regenerated) ]'skin;

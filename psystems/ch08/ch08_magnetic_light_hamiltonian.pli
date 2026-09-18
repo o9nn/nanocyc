@@ -1,46 +1,187 @@
 /* ============================================================================
  * psystems/ch08/ch08_magnetic_light_hamiltonian.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.3, 8.3.1-8.3.3
- * Functionality: Hamiltonian (energy) of four clocks creating magnetic light; birefringence and quantum/classical beating; Pancharatnam-Berry phase; pyroelectric, ferroelectric and piezoelectric properties.
+ * Sections: 8.3 (the Hamiltonian or energy of four clocks creating magnetic
+ *           light), 8.3.1 (birefringence and quantum, classical beating),
+ *           8.3.2 (Pancharatnam-Berry phase), 8.3.3 (pyroelectric,
+ *           ferroelectric and piezoelectric properties)
+ *
+ * Functionality: The total energy of an H device is H = H1 + H2 + H3 + H4 —
+ *   FOUR CLOCKS whose sum creates magnetic light (eq. 8.8). H1 filters the
+ *   total energy from noise via quantized clocking waves psi_osci; H2 is the
+ *   anisotropy clock (chi, sigma) whose L, P, D geometry sets the flux
+ *   strength; H3 is the interference of four sources in the intimately
+ *   coupled coils, shaping ring and spiral flux morphologies; H4 is the
+ *   dislocation clock (screw delta = 0, pi; edge delta = pi/2) — the energy
+ *   of dark lines with E = 0 but B != 0 (8.3). Birefringence emits an
+ *   ordinary/extraordinary coherent ray pair; quantum beating survives a
+ *   pair of lattice units (THz noise beating at GHz) while classical
+ *   beating survives thousands (MHz), and their phases couple exponentially
+ *   — beating of beats (8.3.1). Noise pumped along the spiral column morphs
+ *   the flux into a ring; pumping the surface (about 23 degrees) morphs the
+ *   ring into a spiral; the ring/spiral oscillation at 20 < V < 80 mV
+ *   accumulates a Pancharatnam-Berry geometric phase — flux without any
+ *   current (8.3.2). Crossing the Curie window (about 40-55 C) blocks the
+ *   +/-23-degree dipole switch into one minimum: a perfectly square,
+ *   lossless hysteresis — pyro-, piezo- and ferroelectric responses fused
+ *   (8.3.3).
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the four Hamiltonian clocks are nested
+ *                                    clocks of one device time crystal
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (Hinductor::generate_magnetic_light, emit_magnetic_light;
+ *                HinductorState.light_intensity/light_frequency/polarization;
+ *                MAGNETIC_LIGHT_FREQUENCY; update_hysteresis,
+ *                compute_hysteresis_area — square lossless loop)
+ * Initial multiset: one noise quantum per clock membrane plus the shared
+ *                   pump tokens in the skin so the simulator runs >= 1 step
+ *                   in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'clock_1 []'clock_2 []'clock_3 []'clock_4 []'pb_phase ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (integrates the four clock terms into magnetic light)
+ *     '- clock_h1 : noise-filter clock (quantized psi_osci)
+ *     '- clock_h2 : anisotropy clock (chi, sigma; L, P, D geometry)
+ *     '- clock_h3 : four-source interference clock (ring/spiral morphology)
+ *     '- clock_h4 : dislocation clock (dark lines, E = 0, B != 0)
+ *     '- beating  : birefringent O/E rays, quantum + classical beats (8.3.1)
+ *     '- pb_phase : Pancharatnam-Berry ring/spiral phase pump (8.3.2)
+ *     '- polar_props : pyro/ferro/piezo hysteresis engine (8.3.3)
+ * ------------------------------------------------------------------------*/
+@mu = [ []'clock_h1 []'clock_h2 []'clock_h3 []'clock_h4
+        []'beating []'pb_phase []'polar_props ]'skin;
 
-@mskin = seed;
-@mclock_1 = unit(clock_1), fuel;
-@mclock_2 = unit(clock_2), fuel;
-@mclock_3 = unit(clock_3), fuel;
-@mclock_4 = unit(clock_4), fuel;
-@mpb_phase = unit(pb_phase), fuel;
+/* Sample initial multiset. */
+@mskin        = noise(h1), noise(h2), noise(h3), noise(h4);
+@mclock_h1    = quantizer;
+@mclock_h2    = anisotropy(chi_sigma), geometry(l_p_d);
+@mclock_h3    = source*4, coupled_coils;
+@mclock_h4    = dislocation(screw_0), dislocation(edge_half_pi);
+@mbeating     = birefringent_helix, lattice_pair, lattice_kilo;
+@mpb_phase    = spiral_column, surface_pump(deg23), noise_bias(v_20_80mv);
+@mpolar_props = curie_window(c40_55), lattice_class(c6v), dipole(pm_deg23);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.3  Four clocks — one Hamiltonian term per clock membrane.
+ * feed_h*   : the skin dispenses one noise quantum to each clock
+ * h1_filter : H1 filters total energy from noise into a quantized clocking
+ *             wave psi_osci
+ * h1_term   : the filtered energy is the first Hamiltonian term
+ * h2_split  : H2's anisotropy (chi, sigma) diffracts the noise
+ * h2_term   : the L, P, D geometry fixes the flux strength of the term
+ * h3_interfere : H3 — four sources interfere inside the coupled coils,
+ *             yielding both ring and spiral flux morphologies
+ * h3_term   : ring + spiral morphologies compose the third term
+ * h4_screw  : H4 — the screw dislocation turns noise into a dark line with
+ *             E = 0 and B != 0 (a magnetic structure)
+ * h4_term   : the edge dislocation certifies the dark-line energy term
+ * hamiltonian : the four terms sum in the skin — MAGNETIC LIGHT is created,
+ *             and one probe is dispatched to each property membrane
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_clock_1 ]'skin;
-[seed_dispense : seed --> (work)in_clock_2 ]'skin;
-[seed_dispense : seed --> (work)in_clock_3 ]'skin;
-[seed_dispense : seed --> (work)in_clock_4 ]'skin;
-[seed_dispense : seed --> (work)in_pb_phase ]'skin;
-[step : work * unit(clock_1) * fuel --> done(clock_1) ]'clock_1;
-[step : work * unit(clock_2) * fuel --> done(clock_2) ]'clock_2;
-[step : work * unit(clock_3) * fuel --> done(clock_3) ]'clock_3;
-[step : work * unit(clock_4) * fuel --> done(clock_4) ]'clock_4;
-[step : work * unit(pb_phase) * fuel --> done(pb_phase) ]'pb_phase;
-[report : done(clock_1) --> (result(clock_1))out ]'clock_1;
-[report : done(clock_2) --> (result(clock_2))out ]'clock_2;
-[report : done(clock_3) --> (result(clock_3))out ]'clock_3;
-[report : done(clock_4) --> (result(clock_4))out ]'clock_4;
-[report : done(pb_phase) --> (result(pb_phase))out ]'pb_phase;
+[feed_h1 : noise(h1) --> (noise(h1))in_clock_h1 ]'skin;
+[feed_h2 : noise(h2) --> (noise(h2))in_clock_h2 ]'skin;
+[feed_h3 : noise(h3) --> (noise(h3))in_clock_h3 ]'skin;
+[feed_h4 : noise(h4) --> (noise(h4))in_clock_h4 ]'skin;
+
+[h1_filter : noise(h1) * quantizer --> quantizer * psi_osci ]'clock_h1;
+[h1_term   : psi_osci --> (term(h1))out ]'clock_h1;
+
+[h2_split : noise(h2) * anisotropy(chi_sigma)
+         --> anisotropy(chi_sigma) * diffracted_wave ]'clock_h2;
+[h2_term  : diffracted_wave * geometry(l_p_d) --> (term(h2))out ]'clock_h2;
+
+[h3_interfere : noise(h3) * source*4 * coupled_coils
+             --> coupled_coils * flux_morph(ring) * flux_morph(spiral)
+              ]'clock_h3;
+[h3_term : flux_morph(ring) * flux_morph(spiral) --> (term(h3))out ]'clock_h3;
+
+[h4_screw : noise(h4) * dislocation(screw_0)
+         --> dislocation(screw_0) * dark_line(e0_bnot0) ]'clock_h4;
+[h4_term  : dark_line(e0_bnot0) * dislocation(edge_half_pi)
+         --> dislocation(edge_half_pi) * (term(h4))out ]'clock_h4;
+
+[hamiltonian : term(h1) * term(h2) * term(h3) * term(h4)
+            --> magnetic_light * (probe)in_beating * (probe)in_pb_phase
+              * (probe)in_polar_props ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.3.1  Birefringence and quantum, classical beating.
+ * birefringe : the alpha-helix antenna splits the probe into two coherent
+ *              ray pairs (ordinary + extraordinary)
+ * q_beat     : a ray pair beating across ONE lattice pair — quantum beating
+ *              (THz noise beating at GHz; survives a pair of lattice units)
+ * c_beat     : a ray pair beating across a thousand lattice units — the
+ *              classical beat near 1 MHz
+ * beat_of_beats : the two beats couple EXPONENTIALLY (phase of a phase) —
+ *              the beating-of-beats hierarchy is reported to the skin
+ * ------------------------------------------------------------------------*/
+[birefringe : probe * birefringent_helix
+           --> birefringent_helix * ray_pair(o_e)*2 ]'beating;
+[q_beat : ray_pair(o_e) * lattice_pair --> beat(quantum_ghz) ]'beating;
+[c_beat : ray_pair(o_e) * lattice_kilo --> beat(classical_mhz) ]'beating;
+[beat_of_beats : beat(quantum_ghz) * beat(classical_mhz)
+              --> (beat_hierarchy)out ]'beating;
+
+/* --------------------------------------------------------------------------
+ * 8.3.2  Pancharatnam-Berry phase.
+ * pump_axis    : the probe pumped along the spiral column morphs the flux
+ *                into a RING
+ * pump_surface : pumping the surface at about 23 degrees morphs the ring
+ *                into a SPIRAL, banking one quantum of geometric phase
+ * pb_cycle     : with the noise bias inside 20 < V < 80 mV the spiral
+ *                relaxes back to a ring, banking a second quantum — the
+ *                ring/spiral oscillation loops forever, accumulating
+ *                geometric (NOT dynamic) phase without any current
+ * pb_report    : two banked quanta close one 0-360 degree geodesic loop on
+ *                the Poincare sphere — the Pancharatnam-Berry phase
+ * ------------------------------------------------------------------------*/
+[pump_axis : probe * spiral_column
+          --> spiral_column * flux_shape(ring) ]'pb_phase;
+[pump_surface : flux_shape(ring) * surface_pump(deg23)
+             --> surface_pump(deg23) * flux_shape(spiral)
+               * berry_quantum ]'pb_phase;
+[pb_cycle : flux_shape(spiral) * noise_bias(v_20_80mv)
+         --> noise_bias(v_20_80mv) * flux_shape(ring)
+           * berry_quantum ]'pb_phase;
+[pb_report : berry_quantum*2
+          --> (pancharatnam_berry(deg360))out ]'pb_phase;
+
+/* --------------------------------------------------------------------------
+ * 8.3.3  Pyroelectric, ferroelectric and piezoelectric properties.
+ * fanout : the probe becomes the three stimuli — heat, stress, field
+ * pyro   : heating across the Curie window (about 40-55 C) releases the
+ *          pyroelectric polarization
+ * piezo  : stress on the C6v polar lattice class releases the piezoelectric
+ *          polarization
+ * ferro  : the field finds the +/-23-degree dipole switch BLOCKED into one
+ *          minimum — ferroelectric switching with a single ground state
+ * hysteresis : the three responses fuse into the perfectly square,
+ *          lossless hysteresis loop of the H device
+ * ------------------------------------------------------------------------*/
+[fanout : probe --> stimulus(heat) * stimulus(stress)
+                  * stimulus(field) ]'polar_props;
+[pyro  : stimulus(heat) * curie_window(c40_55)
+      --> curie_window(c40_55) * polarization(pyro) ]'polar_props;
+[piezo : stimulus(stress) * lattice_class(c6v)
+      --> lattice_class(c6v) * polarization(piezo) ]'polar_props;
+[ferro : stimulus(field) * dipole(pm_deg23)
+      --> dipole(locked_single_minimum) * polarization(ferro) ]'polar_props;
+[hysteresis : polarization(pyro) * polarization(piezo) * polarization(ferro)
+           --> (square_lossless_hysteresis)out ]'polar_props;
+
+/* --------------------------------------------------------------------------
+ * The skin fuses the created magnetic light with its three measured
+ * properties — the light of four clocks, beating, phased and polarized.
+ * ------------------------------------------------------------------------*/
+[light_certified : magnetic_light * beat_hierarchy
+                 * pancharatnam_berry(deg360) * square_lossless_hysteresis
+                --> magnetic_light(certified) ]'skin;

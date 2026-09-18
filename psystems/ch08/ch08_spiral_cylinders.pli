@@ -1,38 +1,167 @@
 /* ============================================================================
  * psystems/ch08/ch08_spiral_cylinders.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.2, 8.2.1-8.2.2
- * Functionality: Three concentric spiral cylinders talking to each other; periodically oscillating edge and screw dislocations; topology regulating polarization.
+ * Sections: 8.2 (three concentric spiral cylinders talking to each other —
+ *           fundamental structural parameters of the fourth-circuit
+ *           element), 8.2.1 (periodically oscillating edge and screw
+ *           dislocations), 8.2.2 (topology regulating the polarization)
+ *
+ * Functionality: The Hinductor is a TRIPLET of concentric spiral cylinders
+ *   with pitch P, diameter D, length L, twist angle delta and Omega
+ *   quadrilateral lattice cells of sides a,b — a capacitor inside a
+ *   capacitor inside a capacitor whose nested traps make a super-super-
+ *   insulator (8.2). The twist angle oscillates delta = 0 (right screw) ->
+ *   pi/2 (edge) -> pi (left screw) -> 0 ..., a perpetual dislocation clock;
+ *   the inner coil perturbs the central carrier with e1, the outer with e2,
+ *   and the knot shape is governed by Delta_e = e1 - e2, while the beating
+ *   of the three near-identical G-modes sharpens the B knots (8.2.1).
+ *   Absorbed noise is re-emitted QUANTIZED and monochromatic; the twisted
+ *   (edge-screw) spiral splits it into a pair of plane-polarized signals,
+ *   quantized flux phi/phi_0 is exchanged between two parallel paths whose
+ *   charge asymmetry holds the energy — topology, not fields, regulates
+ *   the polarization (8.2.2).
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the dislocation clock is one nested
+ *                                    clock of the device time crystal
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (HinductorConfig — capacitance/inductance/resistance bases
+ *                of the three nested layers; MagneticKnot.writhe/torsion —
+ *                edge-screw mix; HinductorState.polarization)
+ * Initial multiset: four tagged pump waves in the skin; every cylinder
+ *                   carries its wall and sources so the simulator runs
+ *                   >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'cyl_inner []'cyl_mid []'cyl_outer ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure — the concentric geometry itself:
+ *   skin > outer > central > inner  (cylinder inside cylinder inside
+ *   cylinder; every exchange between coils crosses one nesting level, so
+ *   the cylinders literally "talk to each other" through membrane walls).
+ * ------------------------------------------------------------------------*/
+@mu = [ [ [ []'inner ]'central ]'outer ]'skin;
 
-@mskin = seed;
-@mcyl_inner = unit(cyl_inner), fuel;
-@mcyl_mid = unit(cyl_mid), fuel;
-@mcyl_outer = unit(cyl_outer), fuel;
+/* Sample initial multiset. */
+@mskin    = pump(outer_wall), pump(e2), pump(central_wall), pump(quantizer),
+            pump(inner_wall),
+            geometry(pitch_p), geometry(diameter_d), geometry(length_l),
+            lattice(a_b, omega_cells);
+@mouter   = wall(outer), e2_source;
+@mcentral = wall(central), carrier_source, twist(delta_0),
+            topo(edge_screw), quantum_cell(a_b), path_pair(d),
+            coherent_source*8;
+@minner   = wall(inner), e1_source;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.2  Structural parameters and nested-capacitor talk.
+ * lock_params : P, D, L and the a,b lattice define the fourth element
+ * pump_in     : the skin antenna feeds every tagged wave into the outer coil
+ * absorb_o/c/i: each cylinder wall traps its share — trap inside trap
+ *               inside trap (super-super-insulator)
+ * relay_*     : the remaining waves sink one nesting level per step
+ * seal_i      : the innermost trap reports the completed nesting outward
+ * pass_cap / export_cap : the nesting evidence climbs back to the skin
+ * super_ins   : the skin certifies the super-super-insulator
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cyl_inner ]'skin;
-[seed_dispense : seed --> (work)in_cyl_mid ]'skin;
-[seed_dispense : seed --> (work)in_cyl_outer ]'skin;
-[step : work * unit(cyl_inner) * fuel --> done(cyl_inner) ]'cyl_inner;
-[step : work * unit(cyl_mid) * fuel --> done(cyl_mid) ]'cyl_mid;
-[step : work * unit(cyl_outer) * fuel --> done(cyl_outer) ]'cyl_outer;
-[report : done(cyl_inner) --> (result(cyl_inner))out ]'cyl_inner;
-[report : done(cyl_mid) --> (result(cyl_mid))out ]'cyl_mid;
-[report : done(cyl_outer) --> (result(cyl_outer))out ]'cyl_outer;
+[lock_params : geometry(pitch_p) * geometry(diameter_d) * geometry(length_l)
+             * lattice(a_b, omega_cells) --> params_locked ]'skin;
+[pump_in : pump(outer_wall) --> (wave(outer_wall))in_outer ]'skin;
+[pump_e2 : pump(e2) --> (wave(e2))in_outer ]'skin;
+[pump_cw : pump(central_wall) --> (wave(central_wall))in_outer ]'skin;
+[pump_qz : pump(quantizer) --> (wave(quantizer))in_outer ]'skin;
+[pump_iw : pump(inner_wall) --> (wave(inner_wall))in_outer ]'skin;
+
+[absorb_o : wave(outer_wall) * wall(outer)
+         --> wall(outer) * trapped(outer) ]'outer;
+[relay_cw : wave(central_wall) --> (wave(central_wall))in_central ]'outer;
+[relay_qz : wave(quantizer) --> (wave(quantizer))in_central ]'outer;
+[relay_iw : wave(inner_wall) --> (wave(inner_wall))in_central ]'outer;
+
+[absorb_c : wave(central_wall) * wall(central)
+         --> wall(central) * trapped(central) ]'central;
+[relay_i  : wave(inner_wall) --> (wave(inner_wall))in_inner ]'central;
+
+[absorb_i : wave(inner_wall) * wall(inner)
+         --> wall(inner) * trapped(inner) ]'inner;
+[seal_i   : trapped(inner) * e1_source
+         --> (e1_wave)out * (cap_nested)out ]'inner;
+
+[pass_cap   : cap_nested --> (cap_nested)out ]'central;
+[export_cap : cap_nested --> (cap_nested)out ]'outer;
+[super_ins  : cap_nested --> super_super_insulator ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.2.1  Periodically oscillating edge and screw dislocations.
+ * feed_e2   : the outer coil sends its perturbation e2 into the central coil
+ *             (the inner already sent e1 via seal_i) — the coils talk
+ * int_neg / int_pos : central+inner and central+outer interference are TWO
+ *             DISTINCT events, each a superposition of four coherent sources
+ *             (perturbation angle alpha negative for inner, positive for
+ *             outer)
+ * disloc_*  : the twist angle clocks delta = 0 -> pi/2 -> pi -> 0 forever,
+ *             emitting right screw, edge and left screw dislocation waves
+ * stationary: the two interference beats meet the central carrier — a dark
+ *             line seed whose knot shape is governed by Delta_e = e1 - e2
+ * knot_pitch: a screw wave sets the knot pitch Delta_z' = lambda * sec(delta)
+ *             (right-handed)
+ * knot_sharpen : the edge wave's beating with the near-identical G-modes
+ *             sharpens the B knot
+ * ------------------------------------------------------------------------*/
+[feed_e2 : wave(e2) * e2_source --> (e2_wave)in_central ]'outer;
+
+[int_neg : e1_wave * coherent_source*4 --> beat(alpha_negative) ]'central;
+[int_pos : e2_wave * coherent_source*4 --> beat(alpha_positive) ]'central;
+
+[disloc_screw_r : twist(delta_0)
+               --> screw_wave(right) * twist(delta_half_pi) ]'central;
+[disloc_edge    : twist(delta_half_pi)
+               --> edge_wave * twist(delta_pi) ]'central;
+[disloc_screw_l : twist(delta_pi)
+               --> screw_wave(left) * twist(delta_0) ]'central;
+
+[stationary : beat(alpha_negative) * beat(alpha_positive) * carrier_source
+           --> dark_line_seed(delta_e) ]'central;
+[knot_pitch : dark_line_seed(delta_e) * screw_wave(right)
+           --> b_knot(pitch_lambda_sec_delta) ]'central;
+[knot_sharpen : b_knot(pitch_lambda_sec_delta) * edge_wave
+             --> b_knot(sharp) ]'central;
+
+/* --------------------------------------------------------------------------
+ * 8.2.2  Topology regulating the polarization.
+ * quantize  : noise absorbed by the lattice cells is re-emitted QUANTIZED —
+ *             a monochromatic photon (electrons cannot hop; the crystal is
+ *             an incredibly strong insulator)
+ * pol_pair  : the twisted (edge-screw) spiral splits the quantized photon
+ *             into a PAIR of plane-polarized signals
+ * flux_swap : quantized flux phi/phi_0 is exchanged between the two
+ *             parallel paths separated by d; the charge asymmetry between
+ *             the paths holds the energy (Hamiltonian H2)
+ * regulate  : the sharp B knot leaves with its polarization fixed by
+ *             topology alone
+ * export    : the outer coil releases the polarized knot to the skin
+ * ------------------------------------------------------------------------*/
+[quantize : wave(quantizer) * quantum_cell(a_b)
+         --> quantum_cell(a_b) * photon(monochromatic) ]'central;
+[pol_pair : photon(monochromatic) * topo(edge_screw)
+         --> topo(edge_screw) * plane_polarized*2 ]'central;
+[flux_swap : plane_polarized*2 * path_pair(d)
+          --> flux_exchange(phi_over_phi0) * charge_asymmetry ]'central;
+[regulate : b_knot(sharp) * flux_exchange(phi_over_phi0) * charge_asymmetry
+         --> (polarized_knot)out ]'central;
+
+[export : polarized_knot --> (polarized_knot)out ]'outer;
+
+/* --------------------------------------------------------------------------
+ * The skin certifies the fourth-circuit element: structural parameters
+ * locked, nested traps sealed, and a topology-polarized magnetic knot
+ * delivered by the three talking cylinders.
+ * ------------------------------------------------------------------------*/
+[fourth_element : polarized_knot * super_super_insulator * params_locked
+               --> hinductor_structure(certified) ]'skin;
