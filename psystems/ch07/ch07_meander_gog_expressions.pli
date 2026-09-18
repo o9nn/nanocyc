@@ -5,34 +5,124 @@
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
  * Sections: 7.12, 7.12.1
- * Functionality: Time crystal made meander flower to a garden of gardens; 12 dodecanions and 8 octonions build 20 conscious human expressions.
+ *
+ * Functionality: The final step of the brain time crystal. A time crystal
+ *   plotted in polar coordinates makes a MEANDER FLOWER (one system point
+ *   + two clocks). The family of all flowers of one symmetry is a
+ *   GARDEN, and the family of all gardens is the GARDEN OF GARDENS (GOG).
+ *
+ *     7.12.1  12 DODECANIONS and 8 OCTONIONS BUILD 20 CONSCIOUS HUMAN
+ *             EXPRESSIONS — the exact ConsciousExpression enum in
+ *             nanobrain_brain_model.h:
+ *
+ *               dodecanion states (0..11): Focus, Diffuse, Creative,
+ *                 Analytical, Emotional, Logical, Intuitive, Deliberate,
+ *                 Receptive, Projective, Unified, Fragmented
+ *               octonion states (12..19): Alert, Drowsy, Euphoric,
+ *                 Anxious, Calm, Agitated, Present, Distant
+ *
+ *   In this P-system a meander flower is picked into the garden of
+ *   gardens, and the GOG COMPOSITION rule fires 12 dodecanion + 8
+ *   octonion tokens into the expressions membrane, which stamps each with
+ *   its ConsciousExpression id and reports the ExpressionClassification.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli (meander flower is one time crystal)
+ *     common/hypernumbers.pli      (dodecanion + octonion)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (ConsciousExpression, ExpressionClassification,
+ *                ConsciousnessExpressionEngine::classify_state,
+ *                generate_expression, blend_expressions,
+ *                get_opposite, is_dodecanion_expression)
+ * Initial multiset: one meander crystal in the garden, a composer in the
+ *                   GOG, and 12 dodecanion + 8 octonion seeds pre-loaded
+ *                   in the expressions membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'meander []'gog []'expressions_20 ]'skin;
+/* meander flower lives inside a garden which lives inside the GOG (skin).
+ * expressions is a sibling of the garden — 20 final states are produced
+ * there. */
+@mu = [ [ []'meander ]'garden []'expressions ]'skin;
 
-@mskin = seed;
-@mmeander = unit(meander), fuel;
-@mgog = unit(gog), fuel;
-@mexpressions_20 = unit(expressions_20), fuel;
+@mskin        = composer, gog_ready;
+@mgarden      = tend;
+@mmeander     = crystal(t1);
+@mexpressions =
+        dodecanion_seed(focus),      dodecanion_seed(diffuse),
+        dodecanion_seed(creative),   dodecanion_seed(analytical),
+        dodecanion_seed(emotional),  dodecanion_seed(logical),
+        dodecanion_seed(intuitive),  dodecanion_seed(deliberate),
+        dodecanion_seed(receptive),  dodecanion_seed(projective),
+        dodecanion_seed(unified),    dodecanion_seed(fragmented),
+        octonion_seed(alert),        octonion_seed(drowsy),
+        octonion_seed(euphoric),     octonion_seed(anxious),
+        octonion_seed(calm),         octonion_seed(agitated),
+        octonion_seed(present),      octonion_seed(distant);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.12  Meander flower blooms from the crystal, is picked by the garden
+ *       and offered up to the garden of gardens (skin).
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_meander ]'skin;
-[seed_dispense : seed --> (work)in_gog ]'skin;
-[seed_dispense : seed --> (work)in_expressions_20 ]'skin;
-[step : work * unit(meander) * fuel --> done(meander) ]'meander;
-[step : work * unit(gog) * fuel --> done(gog) ]'gog;
-[step : work * unit(expressions_20) * fuel --> done(expressions_20) ]'expressions_20;
-[report : done(meander) --> (result(meander))out ]'meander;
-[report : done(gog) --> (result(gog))out ]'gog;
-[report : done(expressions_20) --> (result(expressions_20))out ]'expressions_20;
+[tend_bed : tend --> (tend)in_meander ]'garden;
+[bloom    : crystal(T) * tend --> flower(T) ]'meander;
+[pick     : flower(T) --> flower(T) * (picked(T))out ]'meander;
+[offer    : picked(T) --> (picked(T))out ]'garden;
+
+/* --------------------------------------------------------------------------
+ * 7.12.1  The GOG composer fires the meander flower into 12 dodecanion +
+ *         8 octonion drive pulses that reach the expressions membrane.
+ * ------------------------------------------------------------------------*/
+[fire_gog : gog_ready * composer * picked(T)
+          --> gog_ready * composer * (dodec_pulse)in_expressions
+                                   * (octo_pulse)in_expressions ]'skin;
+
+/* Each dodecanion seed consumes a dodec_pulse and emits the named
+ * conscious expression (indices 0..11 of the enum). */
+[expr_focus       : dodec_pulse * dodecanion_seed(focus)
+                  --> conscious_expression(0,focus) ]'expressions;
+[expr_diffuse     : dodec_pulse * dodecanion_seed(diffuse)
+                  --> conscious_expression(1,diffuse) ]'expressions;
+[expr_creative    : dodec_pulse * dodecanion_seed(creative)
+                  --> conscious_expression(2,creative) ]'expressions;
+[expr_analytical  : dodec_pulse * dodecanion_seed(analytical)
+                  --> conscious_expression(3,analytical) ]'expressions;
+[expr_emotional   : dodec_pulse * dodecanion_seed(emotional)
+                  --> conscious_expression(4,emotional) ]'expressions;
+[expr_logical     : dodec_pulse * dodecanion_seed(logical)
+                  --> conscious_expression(5,logical) ]'expressions;
+[expr_intuitive   : dodec_pulse * dodecanion_seed(intuitive)
+                  --> conscious_expression(6,intuitive) ]'expressions;
+[expr_deliberate  : dodec_pulse * dodecanion_seed(deliberate)
+                  --> conscious_expression(7,deliberate) ]'expressions;
+[expr_receptive   : dodec_pulse * dodecanion_seed(receptive)
+                  --> conscious_expression(8,receptive) ]'expressions;
+[expr_projective  : dodec_pulse * dodecanion_seed(projective)
+                  --> conscious_expression(9,projective) ]'expressions;
+[expr_unified     : dodec_pulse * dodecanion_seed(unified)
+                  --> conscious_expression(10,unified) ]'expressions;
+[expr_fragmented  : dodec_pulse * dodecanion_seed(fragmented)
+                  --> conscious_expression(11,fragmented) ]'expressions;
+
+/* Octonion seeds handle indices 12..19 of the enum. */
+[expr_alert    : octo_pulse * octonion_seed(alert)
+               --> conscious_expression(12,alert) ]'expressions;
+[expr_drowsy   : octo_pulse * octonion_seed(drowsy)
+               --> conscious_expression(13,drowsy) ]'expressions;
+[expr_euphoric : octo_pulse * octonion_seed(euphoric)
+               --> conscious_expression(14,euphoric) ]'expressions;
+[expr_anxious  : octo_pulse * octonion_seed(anxious)
+               --> conscious_expression(15,anxious) ]'expressions;
+[expr_calm     : octo_pulse * octonion_seed(calm)
+               --> conscious_expression(16,calm) ]'expressions;
+[expr_agitated : octo_pulse * octonion_seed(agitated)
+               --> conscious_expression(17,agitated) ]'expressions;
+[expr_present  : octo_pulse * octonion_seed(present)
+               --> conscious_expression(18,present) ]'expressions;
+[expr_distant  : octo_pulse * octonion_seed(distant)
+               --> conscious_expression(19,distant) ]'expressions;
+
+/* Emit each classified expression out to the ExpressionClassification. */
+[emit_expr : conscious_expression(I,N) --> (expression_classification(I,N))out ]'expressions;

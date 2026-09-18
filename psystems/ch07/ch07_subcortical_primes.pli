@@ -4,35 +4,93 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.3
- * Functionality: Primes in the cerebellum, hippocampus and hypothalamus.
+ * Sections: 7.3 (primes in the cerebellum, hippocampus and hypothalamus)
+ *
+ * Functionality: Three subcortical brain regions each run their own prime
+ *   metric — three specialised BrainRegionSimulator instances in the C++.
+ *
+ *     Cerebellum  (motor coordination and TIMING): loads a small-prime
+ *       rhythm 2/3/5 that turns motor pulses into predicted timings —
+ *       predict_timing() in CerebellumSimulator.
+ *     Hippocampus (episodic MEMORY, place/grid cells): loads primes 7/11
+ *       that lock experiences into place-cell/grid-cell codes —
+ *       encode_episodic() and spatial_map() in HippocampusSimulator.
+ *     Hypothalamus (HOMEOSTASIS): loads primes 13/17 that convert
+ *       setpoint/current pairs into a homeostatic drive tensor —
+ *       calculate_drive() in HypothalamusSimulator.
+ *
+ *   The skin acts as the integrator that combines the three region tokens
+ *   into a subcortical_state — the coherence signal reported into the
+ *   IntegratedBrainMetrics.region_activities map.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli   (2, 3, 5, 7, 11, 13, 17)
+ *     common/time_crystal_core.pli (a tick drives every region cycle)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BrainRegion::Cerebellum/Hippocampus/Hypothalamus,
+ *                CerebellumSimulator::predict_timing / coordinate,
+ *                HippocampusSimulator::encode_episodic / spatial_map /
+ *                replay_memories,
+ *                HypothalamusSimulator::calculate_drive /
+ *                get_regulation_signal)
+ * Initial multiset: one motor_input in the cerebellum, one experience in
+ *                   the hippocampus, one homeostatic setpoint/current pair
+ *                   in the hypothalamus, plus a cycle tick in the skin.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
 @mu = [ []'cerebellum []'hippocampus []'hypothalamus ]'skin;
 
-@mskin = seed;
-@mcerebellum = unit(cerebellum), fuel;
-@mhippocampus = unit(hippocampus), fuel;
-@mhypothalamus = unit(hypothalamus), fuel;
+@mskin         = cycle_tick, integrator_ready;
+@mcerebellum   = motor_input, prime(2), prime(3), prime(5);
+@mhippocampus  = experience, place_seed, grid_seed, prime(7), prime(11);
+@mhypothalamus = setpoint(temp), current(temp), prime(13), prime(17);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.3  Cycle the tick into every subcortical region so each simulator
+ *      runs one process_cycle() worth of work.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cerebellum ]'skin;
-[seed_dispense : seed --> (work)in_hippocampus ]'skin;
-[seed_dispense : seed --> (work)in_hypothalamus ]'skin;
-[step : work * unit(cerebellum) * fuel --> done(cerebellum) ]'cerebellum;
-[step : work * unit(hippocampus) * fuel --> done(hippocampus) ]'hippocampus;
-[step : work * unit(hypothalamus) * fuel --> done(hypothalamus) ]'hypothalamus;
-[report : done(cerebellum) --> (result(cerebellum))out ]'cerebellum;
-[report : done(hippocampus) --> (result(hippocampus))out ]'hippocampus;
-[report : done(hypothalamus) --> (result(hypothalamus))out ]'hypothalamus;
+[dispatch_cb : cycle_tick --> cycle_tick * (tick)in_cerebellum ]'skin;
+[dispatch_hc : cycle_tick --> cycle_tick * (tick)in_hippocampus ]'skin;
+[dispatch_ht : cycle_tick --> cycle_tick * (tick)in_hypothalamus ]'skin;
+
+/* --------------------------------------------------------------------------
+ * Cerebellum: timing prediction and motor coordination via primes 2/3/5.
+ * ------------------------------------------------------------------------*/
+[predict_timing : tick * motor_input * prime(2) * prime(3) * prime(5)
+                --> timing_pred(fast, med, slow) ]'cerebellum;
+[coordinate     : timing_pred(A,B,C)
+                --> (region_out(cerebellum,A,B,C))out ]'cerebellum;
+
+/* --------------------------------------------------------------------------
+ * Hippocampus: episodic encoding + spatial mapping via primes 7/11.
+ * A single experience is bound to a place-cell code and a grid-cell code,
+ * and a replay copy is kept for later memory_buffer replay.
+ * ------------------------------------------------------------------------*/
+[encode_episodic : tick * experience * place_seed * prime(7)
+                 --> place_code(p7) * replay(p7) ]'hippocampus;
+[spatial_map     : place_code(p7) * grid_seed * prime(11)
+                 --> episode(p7,g11) ]'hippocampus;
+[emit_hc         : episode(P,G) --> (region_out(hippocampus,P,G))out ]'hippocampus;
+[replay_store    : replay(P) --> replay(P) ]'hippocampus;
+
+/* --------------------------------------------------------------------------
+ * Hypothalamus: homeostatic drive = error(setpoint - current), gated by
+ * primes 13/17 and turned into a regulation signal.
+ * ------------------------------------------------------------------------*/
+[calculate_drive : tick * setpoint(temp) * current(temp) * prime(13)
+                 --> drive(temp,p13) ]'hypothalamus;
+[regulation      : drive(temp,p13) * prime(17)
+                 --> (region_out(hypothalamus,temp,p13,p17))out ]'hypothalamus;
+
+/* --------------------------------------------------------------------------
+ * Skin integrator: fuse the three region outputs into a subcortical_state
+ * — this is what IntegratedBrainModel::process_brain_regions returns.
+ * ------------------------------------------------------------------------*/
+[integrate : integrator_ready
+           * region_out(cerebellum,A,B,C)
+           * region_out(hippocampus,P,G)
+           * region_out(hypothalamus,X,Y,Z)
+           --> (subcortical_state(A,B,C,P,G,X,Y,Z))out ]'skin;

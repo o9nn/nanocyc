@@ -4,31 +4,82 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.9
- * Functionality: Fusion of the cavity and dielectric resonator models of a human brain.
+ * Sections: 7.9 (fusion of cavity & dielectric resonator model of a human
+ *                brain)
+ *
+ * Functionality: The human brain is simultaneously a CAVITY RESONATOR (its
+ *   ventricular / skull-bounded standing-wave modes) and a DIELECTRIC
+ *   RESONATOR (its water- and lipid-loaded permittivity modes). Neither
+ *   picture alone explains the observed spectrum; the FUSED model marries
+ *   the two resonator classes into one integrated time-crystal engine.
+ *
+ *   In this P-system:
+ *     cavity     : holds standing-wave modes mode_c(k) driven by an EM
+ *                  pump; each cavity mode has a mode number k.
+ *     dielectric : holds polarisation modes mode_d(k) driven by the same
+ *                  EM pump but modulated by the permittivity epsilon.
+ *     fuser      : matches a cavity mode to a dielectric mode of the same
+ *                  index k and produces a hybrid_mode — the RESONANT PAIR
+ *                  that the brain actually uses.
+ *
+ *   The skin holds the EM pump and dispatches it to both resonator
+ *   membranes; fused hybrid modes are emitted as the brain's operating
+ *   spectrum — the same spectrum that IntegratedBrainMetrics reports
+ *   through overall_brain_coherence.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli (nested phase membranes)
+ *     common/gml_shapes.pli        (mode shapes)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (IntegratedBrainModel::process_cycle — cavity + dielectric
+ *               fusion is the electromagnetic substrate on top of which
+ *               the region simulators and expression engine run;
+ *               nanobrain_time_crystal.h — TimeCrystalQuantumState)
+ * Initial multiset: three cavity modes and three dielectric modes indexed
+ *                   1..3, plus one EM pump and a permittivity token in the
+ *                   dielectric.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'cavity []'dielectric ]'skin;
+@mu = [ []'cavity []'dielectric []'fuser ]'skin;
 
-@mskin = seed;
-@mcavity = unit(cavity), fuel;
-@mdielectric = unit(dielectric), fuel;
+@mskin       = em_pump;
+@mcavity     = mode_c(1), mode_c(2), mode_c(3);
+@mdielectric = mode_d(1), mode_d(2), mode_d(3), epsilon;
+@mfuser      = mixer;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.9  Pump both resonators from the same EM source in the skin.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cavity ]'skin;
-[seed_dispense : seed --> (work)in_dielectric ]'skin;
-[step : work * unit(cavity) * fuel --> done(cavity) ]'cavity;
-[step : work * unit(dielectric) * fuel --> done(dielectric) ]'dielectric;
-[report : done(cavity) --> (result(cavity))out ]'cavity;
-[report : done(dielectric) --> (result(dielectric))out ]'dielectric;
+[pump_c : em_pump --> em_pump * (drive)in_cavity ]'skin;
+[pump_d : em_pump --> em_pump * (drive)in_dielectric ]'skin;
+
+/* --------------------------------------------------------------------------
+ * Cavity resonator: the drive excites each cavity mode; excited modes are
+ * emitted upward as excited_c(k) tokens.
+ * ------------------------------------------------------------------------*/
+[excite_c : drive * mode_c(K) --> excited_c(K) * mode_c(K) ]'cavity;
+[emit_c   : excited_c(K) --> (excited_c(K))out ]'cavity;
+
+/* --------------------------------------------------------------------------
+ * Dielectric resonator: the drive combined with the permittivity epsilon
+ * excites the polarisation modes; excited_d(k) tokens climb up.
+ * ------------------------------------------------------------------------*/
+[excite_d : drive * mode_d(K) * epsilon
+          --> excited_d(K) * mode_d(K) * epsilon ]'dielectric;
+[emit_d   : excited_d(K) --> (excited_d(K))out ]'dielectric;
+
+/* --------------------------------------------------------------------------
+ * FUSION: the skin routes matched (cavity, dielectric) mode pairs into
+ * the fuser membrane, where the mixer creates a hybrid_mode. Only pairs
+ * with the SAME index k are fused — this is the key resonance selection
+ * rule of the cavity+dielectric brain model.
+ * ------------------------------------------------------------------------*/
+[route_pair : excited_c(K) * excited_d(K)
+            --> (pair(K))in_fuser ]'skin;
+[fuse_hybrid : pair(K) * mixer
+            --> hybrid_mode(K) * mixer ]'fuser;
+[report_hybrid : hybrid_mode(K)
+              --> (brain_spectrum(K))out ]'fuser;

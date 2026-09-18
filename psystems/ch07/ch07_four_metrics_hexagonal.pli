@@ -4,43 +4,116 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.11, 7.11.1-7.11.2
- * Functionality: Four metrics of primes running in parallel — the saga of the hexagonal lattice; composition of 4/8/12-dimension tensors: quaternion, octonion, dodecanion.
+ * Sections: 7.11, 7.11.1, 7.11.2
+ *
+ * Functionality: The brain runs FOUR METRICS OF PRIMES IN PARALLEL, all
+ *   projected onto one HEXAGONAL LATTICE — the saga of the honeycomb
+ *   substrate that unifies the four prime metrics into a single geometric
+ *   fabric.
+ *
+ *   The four metrics are:
+ *     m1  ordered-factor metric  (which primes appear in what order)
+ *     m2  gap metric             (spacings between consecutive primes)
+ *     m3  phase-path metric      (rotation angle per prime step)
+ *     m4  imaginary-world metric (embedding in 4/8/12-D hypernumbers)
+ *
+ *     7.11.1  COMPOSITION OF FOUR, EIGHT AND TWELVE DIMENSION-TENSORS.
+ *             The four metrics feed the hex_lattice which composes their
+ *             outputs into three tensor bundles: a 4-tensor, an 8-tensor
+ *             and a 12-tensor. Each hexagonal cell holds one composed
+ *             tensor sample.
+ *
+ *     7.11.2  QUATERNION, OCTONION AND DODECANION. The 4/8/12-tensors are
+ *             promoted into their canonical hypernumber types — the
+ *             quaternion (4D), the octonion (8D) and the dodecanion (12D)
+ *             — the three normed / near-normed number systems the brain
+ *             uses as its arithmetic core.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli (the primes on which the four metrics run)
+ *     common/hypernumbers.pli    (quaternion / octonion / dodecanion algebras)
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (ConsciousnessExpressionEngine — the 12 dodecanion + 8
+ *               octonion states are the direct consumers of the tensors
+ *               composed here),
+ *               src/cpp/nanobrain_dodecanion.h (12-D algebra),
+ *               src/cpp/nanobrain_ppm.h        (the four PPM metrics).
+ * Initial multiset: seed sample in every metric membrane, an empty hex
+ *                   lattice ready to receive metric outputs, and three
+ *                   hypernumber slots ready to be filled.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'metric_1 []'metric_2 []'metric_3 []'metric_4 []'hex_lattice ]'skin;
+@mu = [ []'m1 []'m2 []'m3 []'m4
+        []'hex_lattice []'quaternion []'octonion []'dodecanion ]'skin;
 
-@mskin = seed;
-@mmetric_1 = unit(metric_1), fuel;
-@mmetric_2 = unit(metric_2), fuel;
-@mmetric_3 = unit(metric_3), fuel;
-@mmetric_4 = unit(metric_4), fuel;
-@mhex_lattice = unit(hex_lattice), fuel;
+@mskin        = distributor;
+@mm1          = sample(m1), prime(2), prime(3), prime(5);
+@mm2          = sample(m2), prime(7), prime(11);
+@mm3          = sample(m3), prime(13), prime(17), prime(19);
+@mm4          = sample(m4), prime(23), prime(29);
+@mhex_lattice = cell(1), cell(2), cell(3), cell(4), cell(5), cell(6);
+@mquaternion  = q_slot;
+@moctonion    = o_slot;
+@mdodecanion  = d_slot;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.11  Every metric runs on its own primes in parallel and emits a metric
+ *       reading upward to the skin. Four parallel prime streams.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_metric_1 ]'skin;
-[seed_dispense : seed --> (work)in_metric_2 ]'skin;
-[seed_dispense : seed --> (work)in_metric_3 ]'skin;
-[seed_dispense : seed --> (work)in_metric_4 ]'skin;
-[seed_dispense : seed --> (work)in_hex_lattice ]'skin;
-[step : work * unit(metric_1) * fuel --> done(metric_1) ]'metric_1;
-[step : work * unit(metric_2) * fuel --> done(metric_2) ]'metric_2;
-[step : work * unit(metric_3) * fuel --> done(metric_3) ]'metric_3;
-[step : work * unit(metric_4) * fuel --> done(metric_4) ]'metric_4;
-[step : work * unit(hex_lattice) * fuel --> done(hex_lattice) ]'hex_lattice;
-[report : done(metric_1) --> (result(metric_1))out ]'metric_1;
-[report : done(metric_2) --> (result(metric_2))out ]'metric_2;
-[report : done(metric_3) --> (result(metric_3))out ]'metric_3;
-[report : done(metric_4) --> (result(metric_4))out ]'metric_4;
-[report : done(hex_lattice) --> (result(hex_lattice))out ]'hex_lattice;
+[run_m1 : sample(m1) * prime(2) * prime(3) * prime(5)
+        --> reading(m1,2,3,5) ]'m1;
+[run_m2 : sample(m2) * prime(7) * prime(11)
+        --> reading(m2,7,11) ]'m2;
+[run_m3 : sample(m3) * prime(13) * prime(17) * prime(19)
+        --> reading(m3,13,17,19) ]'m3;
+[run_m4 : sample(m4) * prime(23) * prime(29)
+        --> reading(m4,23,29) ]'m4;
+
+[emit_m1 : reading(m1,A,B,C) --> (reading(m1,A,B,C))out ]'m1;
+[emit_m2 : reading(m2,A,B)   --> (reading(m2,A,B))out   ]'m2;
+[emit_m3 : reading(m3,A,B,C) --> (reading(m3,A,B,C))out ]'m3;
+[emit_m4 : reading(m4,A,B)   --> (reading(m4,A,B))out   ]'m4;
+
+/* --------------------------------------------------------------------------
+ * 7.11.1  Route every reading into the hex_lattice, where six honeycomb
+ *         cells host the composed 4/8/12-tensor samples.
+ * ------------------------------------------------------------------------*/
+[route_hex_1 : reading(M,A,B,C) --> (reading(M,A,B,C))in_hex_lattice ]'skin;
+[route_hex_2 : reading(M,A,B)   --> (reading(M,A,B))in_hex_lattice   ]'skin;
+
+[compose_4  : cell(K) * reading(m1,A,B,C) * reading(m2,D,E)
+            --> tensor4(K,A,B,C,D,E) ]'hex_lattice;
+[compose_8  : cell(K) * reading(m1,A,B,C) * reading(m3,D,E,F)
+            --> tensor8(K,A,B,C,D,E,F) ]'hex_lattice;
+[compose_12 : cell(K) * reading(m3,A,B,C) * reading(m4,D,E)
+            --> tensor12(K,A,B,C,D,E) ]'hex_lattice;
+
+[emit_t4  : tensor4(K,A,B,C,D,E)      --> (tensor4(K,A,B,C,D,E))out      ]'hex_lattice;
+[emit_t8  : tensor8(K,A,B,C,D,E,F)    --> (tensor8(K,A,B,C,D,E,F))out    ]'hex_lattice;
+[emit_t12 : tensor12(K,A,B,C,D,E)     --> (tensor12(K,A,B,C,D,E))out     ]'hex_lattice;
+
+/* --------------------------------------------------------------------------
+ * 7.11.2  Promote each tensor to its hypernumber type.
+ * ------------------------------------------------------------------------*/
+[to_q  : distributor * tensor4(K,A,B,C,D,E)
+       --> distributor * (tensor4(K,A,B,C,D,E))in_quaternion ]'skin;
+[to_o  : distributor * tensor8(K,A,B,C,D,E,F)
+       --> distributor * (tensor8(K,A,B,C,D,E,F))in_octonion ]'skin;
+[to_d  : distributor * tensor12(K,A,B,C,D,E)
+       --> distributor * (tensor12(K,A,B,C,D,E))in_dodecanion ]'skin;
+
+[form_q : tensor4(K,A,B,C,D,E)      * q_slot --> quaternion_value(K)  * q_slot ]'quaternion;
+[form_o : tensor8(K,A,B,C,D,E,F)    * o_slot --> octonion_value(K)    * o_slot ]'octonion;
+[form_d : tensor12(K,A,B,C,D,E)     * d_slot --> dodecanion_value(K)  * d_slot ]'dodecanion;
+
+[out_q : quaternion_value(K)  --> (hypernumber(quaternion,K))out ]'quaternion;
+[out_o : octonion_value(K)    --> (hypernumber(octonion,K))out   ]'octonion;
+[out_d : dodecanion_value(K)  --> (hypernumber(dodecanion,K))out ]'dodecanion;
+
+[four_metrics_state : hypernumber(quaternion,K1)
+                    * hypernumber(octonion,K2)
+                    * hypernumber(dodecanion,K3)
+                    --> (four_metrics_state(K1,K2,K3))out ]'skin;

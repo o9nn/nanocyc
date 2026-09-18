@@ -4,51 +4,98 @@
  * NanoBrain CH07: A complete, integrated time crystal model of a human brain
  * Issue #12 — P-Lingua specification (see psystems/README.md).
  *
- * Sections: 7.1, 7.1.1-7.1.2
- * Functionality: The brain as prime engineering in a triplet-of-triplet cage; 4, 8 and 12 imaginary worlds working together; singularity on a sphere as the key to a time-crystal clock.
+ * Sections: 7.1, 7.1.1, 7.1.2
+ *
+ * Functionality: The brain is the engineering of PRIME NUMBERS embedded in a
+ *   TRIPLET-OF-TRIPLETS cage. Nine ordered primes fill three prime triplets;
+ *   the three triplets themselves form a higher-order triplet — a cage of
+ *   3 x 3 = 9 primes that the brain uses to encode every sensory event.
+ *
+ *   Around this cage FOUR, EIGHT and TWELVE imaginary worlds work together:
+ *     - the 4-world  = quaternion  (i, j, k)
+ *     - the 8-world  = octonion    (i1..i7)
+ *     - the 12-world = dodecanion  (i1..i11)
+ *   Primes flow from the triplet cage into the three imaginary worlds; each
+ *   world composes them into hypernumbers of its own dimensionality.
+ *
+ *   A SINGULARITY ON A SPHERE (7.1.2) is the key to a clock of a time
+ *   crystal: a singular point on the closed sphere seeds a rotation whose
+ *   period IS the time-crystal clock. Once the singularity is placed the
+ *   cage begins to tick.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli   — prime objects p1..p9 (2,3,5,7,11,13,17,19,23)
+ *     common/time_crystal_core.pli — singularity_point seeds a tick
+ *     common/hypernumbers.pli      — quaternion / octonion / dodecanion objects
+ *
  * Traceability: src/cpp/nanobrain_brain_model.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (IntegratedBrainModel — the triplet cage is the substrate that
+ *               feeds SensoryPrimeMapper and ConsciousnessExpressionEngine),
+ *               src/cpp/nanobrain_time_crystal.h (11D quantum manifold),
+ *               src/cpp/nanobrain_dodecanion.h  (12-imaginary world).
+ * Initial multiset: three triplets each loaded with three ordered primes,
+ *                   a singularity_point on the sphere, and empty world
+ *                   membranes ready to receive prime tokens.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'cage_1 []'cage_2 []'cage_3 []'worlds_4 []'worlds_8 []'worlds_12 []'sphere ]'skin;
+/* Three prime triplets and three imaginary-world membranes hang inside the
+ * cage; the sphere sits alongside them and carries the singularity. */
+@mu = [ []'triplet_1 []'triplet_2 []'triplet_3
+        []'world_4 []'world_8 []'world_12
+        []'sphere ]'skin;
 
-@mskin = seed;
-@mcage_1 = unit(cage_1), fuel;
-@mcage_2 = unit(cage_2), fuel;
-@mcage_3 = unit(cage_3), fuel;
-@mworlds_4 = unit(worlds_4), fuel;
-@mworlds_8 = unit(worlds_8), fuel;
-@mworlds_12 = unit(worlds_12), fuel;
-@msphere = unit(sphere), fuel;
+@mskin      = cage_ready;
+@mtriplet_1 = prime(2), prime(3), prime(5);
+@mtriplet_2 = prime(7), prime(11), prime(13);
+@mtriplet_3 = prime(17), prime(19), prime(23);
+@mworld_4   = quaternion_seed;
+@mworld_8   = octonion_seed;
+@mworld_12  = dodecanion_seed;
+@msphere    = singularity_point;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 7.1  Triplet-of-triplets cage: emit an ordered prime triplet from each
+ *      triplet membrane, then bind the three triplets into ONE cage token.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cage_1 ]'skin;
-[seed_dispense : seed --> (work)in_cage_2 ]'skin;
-[seed_dispense : seed --> (work)in_cage_3 ]'skin;
-[seed_dispense : seed --> (work)in_worlds_4 ]'skin;
-[seed_dispense : seed --> (work)in_worlds_8 ]'skin;
-[seed_dispense : seed --> (work)in_worlds_12 ]'skin;
-[seed_dispense : seed --> (work)in_sphere ]'skin;
-[step : work * unit(cage_1) * fuel --> done(cage_1) ]'cage_1;
-[step : work * unit(cage_2) * fuel --> done(cage_2) ]'cage_2;
-[step : work * unit(cage_3) * fuel --> done(cage_3) ]'cage_3;
-[step : work * unit(worlds_4) * fuel --> done(worlds_4) ]'worlds_4;
-[step : work * unit(worlds_8) * fuel --> done(worlds_8) ]'worlds_8;
-[step : work * unit(worlds_12) * fuel --> done(worlds_12) ]'worlds_12;
-[step : work * unit(sphere) * fuel --> done(sphere) ]'sphere;
-[report : done(cage_1) --> (result(cage_1))out ]'cage_1;
-[report : done(cage_2) --> (result(cage_2))out ]'cage_2;
-[report : done(cage_3) --> (result(cage_3))out ]'cage_3;
-[report : done(worlds_4) --> (result(worlds_4))out ]'worlds_4;
-[report : done(worlds_8) --> (result(worlds_8))out ]'worlds_8;
-[report : done(worlds_12) --> (result(worlds_12))out ]'worlds_12;
-[report : done(sphere) --> (result(sphere))out ]'sphere;
+[form_triplet_1 : prime(2) * prime(3) * prime(5)
+                --> (triplet(2,3,5))out ]'triplet_1;
+[form_triplet_2 : prime(7) * prime(11) * prime(13)
+                --> (triplet(7,11,13))out ]'triplet_2;
+[form_triplet_3 : prime(17) * prime(19) * prime(23)
+                --> (triplet(17,19,23))out ]'triplet_3;
+[bind_cage      : cage_ready * triplet(2,3,5) * triplet(7,11,13) * triplet(17,19,23)
+                --> cage(9) ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 7.1.1  Four, eight and twelve imaginary worlds work together.
+ *        The cage feeds prime tokens into the three worlds; each world
+ *        assembles a hypernumber of its own dimension from those primes.
+ *        Four dispatch rules are needed because the worlds are siblings —
+ *        the cage (in the skin) sends primes IN to each world membrane.
+ * ------------------------------------------------------------------------*/
+[dispatch_q : cage(9) --> cage(9) * (prime_token)in_world_4 ]'skin;
+[dispatch_o : cage(9) --> cage(9) * (prime_token)in_world_8 ]'skin;
+[dispatch_d : cage(9) --> cage(9) * (prime_token)in_world_12 ]'skin;
+
+[compose_q : prime_token * quaternion_seed  --> quaternion(4) ]'world_4;
+[compose_o : prime_token * octonion_seed    --> octonion(8) ]'world_8;
+[compose_d : prime_token * dodecanion_seed  --> dodecanion(12) ]'world_12;
+
+/* --------------------------------------------------------------------------
+ * 7.1.2  Singularity on a sphere is the key to a time-crystal clock.
+ *        The singular point on the closed sphere spawns a tick pulse; the
+ *        tick returns to the skin where it drives the cage to fire a clock
+ *        cycle, integrating the three world-hypernumbers into one composite
+ *        cage state that the rest of the brain model consumes.
+ * ------------------------------------------------------------------------*/
+[seed_clock : singularity_point --> singularity_point * (tick)out ]'sphere;
+[fire_cage  : tick * cage(9) --> (clock_pulse)in_world_4
+                              * (clock_pulse)in_world_8
+                              * (clock_pulse)in_world_12 ]'skin;
+[emit_q : clock_pulse * quaternion(4)  --> (world_state(q))out ]'world_4;
+[emit_o : clock_pulse * octonion(8)    --> (world_state(o))out ]'world_8;
+[emit_d : clock_pulse * dodecanion(12) --> (world_state(d))out ]'world_12;
+[integrate : world_state(q) * world_state(o) * world_state(d)
+           --> (cage_state(triplet_of_triplets))out ]'skin;
