@@ -1,38 +1,107 @@
 /* ============================================================================
  * psystems/ch09/ch09_magnetic_light_reading.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.8, 9.8.1-9.8.2
- * Functionality: Tuning undefined holes to read magnetic light; a spiral nanowire writes a time crystal, read it as a crystal of light; writing prime numbers in a jelly.
+ * Sections: 9.8   — Tuning undefined holes to read magnetic light,
+ *           9.8.1 — A spiral nanowire writes a time crystal; read it as a
+ *                   crystal of light,
+ *           9.8.2 — Writing prime numbers in a jelly.
+ *
+ * Functionality: The brain jelly reads MAGNETIC LIGHT by TUNING its
+ *   undefined holes (9.8): a hole is an undefined resonance until it is
+ *   tuned, and once tuned it admits exactly one mode of magnetic light —
+ *   the jelly becomes a reader. The writing instrument is a SPIRAL NANOWIRE
+ *   (9.8.1): wound into a spiral it writes a TIME CRYSTAL — a pattern that
+ *   repeats in time rather than space — and that same pattern, read back
+ *   through the tuned holes, appears as a CRYSTAL OF LIGHT. Finally the
+ *   jelly is a writable medium (9.8.2): PRIME NUMBERS are written into it
+ *   one ordered factor at a time, and the written primes persist as active
+ *   markers that the magnetic light can later read out.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli   — prime(p)/active(p) written into the
+ *                                    jelly; ordered_factor objects
+ *     common/time_crystal_core.pli — the spiral nanowire writes tick loops
+ *                                    of the 11D time-crystal clock
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BrainJellySimulator — write_prime_pattern,
+ *                read_prime_pattern, enable_prime_writing;
+ *                CondensationPoint.resonance_frequency/temporal_phase —
+ *                the tuned holes and the time-crystal readout)
+ * Initial multiset: magnetic light and a write-head token in the skin;
+ *                   undefined holes, a spiral nanowire and jelly primes
+ *                   pre-loaded, so the simulator runs >= 1 step everywhere.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'holes []'nanowire []'prime_write ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the read/write head)
+ *     '- holes    : the tunable undefined holes — the magnetic-light reader
+ *     '- nanowire : the spiral nanowire — the time-crystal writer
+ *     |    '- spiral : the spiral winding that impresses the time pattern
+ *     '- jelly    : the writable jelly where prime numbers are stored
+ * ------------------------------------------------------------------------*/
+@mu = [ []'holes [ []'spiral ]'nanowire []'jelly ]'skin;
 
-@mskin = seed;
-@mholes = unit(holes), fuel;
-@mnanowire = unit(nanowire), fuel;
-@mprime_write = unit(prime_write), fuel;
+/* Sample initial multiset. */
+@mskin     = magnetic_light, write_token;
+@mholes    = hole(undefined), hole(undefined);
+@mnanowire = nanowire_core;
+@mspiral   = winding;
+@mjelly    = jelly_matrix, prime(2), prime(3), prime(5);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.8  Tuning undefined holes to read magnetic light.
+ * tune   : an undefined hole is tuned to a resonance — it is no longer
+ *          undefined but a selective gate
+ * admit  : magnetic light enters the reader
+ * read   : the tuned hole passes exactly one mode of the magnetic light —
+ *          the undefined hole now READS
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_holes ]'skin;
-[seed_dispense : seed --> (work)in_nanowire ]'skin;
-[seed_dispense : seed --> (work)in_prime_write ]'skin;
-[step : work * unit(holes) * fuel --> done(holes) ]'holes;
-[step : work * unit(nanowire) * fuel --> done(nanowire) ]'nanowire;
-[step : work * unit(prime_write) * fuel --> done(prime_write) ]'prime_write;
-[report : done(holes) --> (result(holes))out ]'holes;
-[report : done(nanowire) --> (result(nanowire))out ]'nanowire;
-[report : done(prime_write) --> (result(prime_write))out ]'prime_write;
+[tune : hole(undefined) --> hole(tuned) ]'holes;
+[admit : magnetic_light --> (magnetic_light)in_holes ]'skin;
+[read : magnetic_light * hole(tuned)
+     --> hole(tuned) * (mode(read))out ]'holes;
+
+/* --------------------------------------------------------------------------
+ * 9.8.1  A spiral nanowire writes a time crystal; read it as a crystal of
+ *        light.
+ * spin   : the write token spins the spiral winding — the nanowire writes
+ * write  : the spun winding impresses a repeating tick pattern — a TIME
+ *          crystal is written into the wire
+ * as_light: the written time crystal, read through the tuned magnetic-light
+ *          mode, appears as a CRYSTAL OF LIGHT
+ * ------------------------------------------------------------------------*/
+[spin : write_token --> (write_token)in_nanowire ]'skin;
+[wind : write_token * nanowire_core
+     --> nanowire_core * (rotation)in_spiral ]'nanowire;
+[write : rotation * winding --> winding * time_crystal ]'spiral;
+[surface : time_crystal --> (time_crystal)out ]'spiral;
+[as_light : time_crystal * nanowire_core
+         --> nanowire_core * (crystal_of_light)out ]'nanowire;
+
+/* --------------------------------------------------------------------------
+ * 9.8.2  Writing prime numbers in a jelly.
+ * enter  : the jelly primes are ready in the matrix
+ * imprint: a prime is written into the jelly as an ACTIVE ordered factor —
+ *          the number persists in the medium
+ * persist: written primes fuse into the stored prime pattern of the jelly
+ * ------------------------------------------------------------------------*/
+[enter : magnetic_light --> (write_pulse)in_jelly ]'skin;
+[imprint : write_pulse * prime(P) * jelly_matrix
+        --> jelly_matrix * active(P) * written(P) ]'jelly;
+[persist : written(P) * written(Q)
+        --> (stored_primes(P,Q))out ]'jelly;
+
+/* --------------------------------------------------------------------------
+ * The head certifies the reader/writer: magnetic light was read through a
+ * tuned hole, the nanowire's time crystal read back as a crystal of light,
+ * and prime numbers were written into the jelly.
+ * ------------------------------------------------------------------------*/
+[certify : mode(read) * crystal_of_light * stored_primes(P,Q)
+        --> magnetic_light_reader(tuned) ]'skin;

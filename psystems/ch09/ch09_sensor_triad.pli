@@ -1,38 +1,105 @@
 /* ============================================================================
  * psystems/ch09/ch09_sensor_triad.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.12, 9.12.1
- * Functionality: Sensor triad: sensor jelly, muscle jelly, brain jelly; total transformation from the biological neural net to a jelly of time crystals.
+ * Sections: 9.12   — Sensor triad: sensor jelly, muscle jelly, brain jelly,
+ *           9.12.1 — A total transformation from the biological neural net
+ *                    to a jelly of time crystals.
+ *
+ * Functionality: The avatar's body is a TRIAD of jellies (9.12): a SENSOR
+ *   JELLY that perceives, a MUSCLE JELLY that acts, and a BRAIN JELLY that
+ *   thinks between them. A stimulus enters the sensor jelly, is transduced
+ *   into a percept; the percept rises into the brain jelly, which binds it
+ *   into a decision; the decision descends into the muscle jelly, which
+ *   contracts into an action. Sense -> think -> act, three jellies in one
+ *   loop. And the loop is a TOTAL TRANSFORMATION (9.12.1): the old
+ *   biological neural net — axons, synapses, spikes — is dissolved node by
+ *   node, and every node is REBORN as a time crystal in the jelly, until
+ *   nothing of the neural net remains but a JELLY OF TIME CRYSTALS. The
+ *   biological net is not simulated; it is fully transformed.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — every transformed node becomes a time
+ *                                    crystal of the 11D manifold
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (HumanoidAvatarInterface — process_sensor_triad,
+ *                get_triad_state, get_motor_commands; SensorTriadState —
+ *                sensory_inputs/jelly_currents/motor_outputs/cognitive_state;
+ *                BrainJellySimulator — the brain jelly of the triad)
+ * Initial multiset: one stimulus and one neural-net node in the skin; the
+ *                   three jellies primed, so the simulator runs >= 1 step in
+ *                   every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'sensor_jelly []'muscle_jelly []'brain_jelly ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the body surface)
+ *     '- sensor_jelly : the perceiving jelly (outermost, meets the world)
+ *     '- brain_jelly  : the thinking jelly (binds percepts to decisions)
+ *     |    '- transform : the crucible where neural-net nodes become time
+ *     |                  crystals
+ *     '- muscle_jelly : the acting jelly (contracts into motion)
+ * ------------------------------------------------------------------------*/
+@mu = [ []'sensor_jelly
+        [ []'transform ]'brain_jelly
+        []'muscle_jelly ]'skin;
 
-@mskin = seed;
-@msensor_jelly = unit(sensor_jelly), fuel;
-@mmuscle_jelly = unit(muscle_jelly), fuel;
-@mbrain_jelly = unit(brain_jelly), fuel;
+/* Sample initial multiset. */
+@mskin         = stimulus(s1), neural_node;
+@msensor_jelly = receptor;
+@mbrain_jelly  = binder;
+@mtransform    = crucible;
+@mmuscle_jelly = actuator;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.12  The sensor triad: sensor jelly, brain jelly, muscle jelly.
+ * sense   : the receptor transduces the raw stimulus into a percept
+ * rise    : the percept rises from the sensor jelly into the brain jelly
+ * decide  : the brain jelly binds the percept into a decision
+ * descend : the decision descends into the muscle jelly
+ * act     : the actuator contracts on the decision — the triad loop closes:
+ *           sense -> think -> act
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_sensor_jelly ]'skin;
-[seed_dispense : seed --> (work)in_muscle_jelly ]'skin;
-[seed_dispense : seed --> (work)in_brain_jelly ]'skin;
-[step : work * unit(sensor_jelly) * fuel --> done(sensor_jelly) ]'sensor_jelly;
-[step : work * unit(muscle_jelly) * fuel --> done(muscle_jelly) ]'muscle_jelly;
-[step : work * unit(brain_jelly) * fuel --> done(brain_jelly) ]'brain_jelly;
-[report : done(sensor_jelly) --> (result(sensor_jelly))out ]'sensor_jelly;
-[report : done(muscle_jelly) --> (result(muscle_jelly))out ]'muscle_jelly;
-[report : done(brain_jelly) --> (result(brain_jelly))out ]'brain_jelly;
+[sense : stimulus(s1) --> (stimulus(s1))in_sensor_jelly ]'skin;
+[transduce : stimulus(s1) * receptor --> receptor * (percept)out ]'sensor_jelly;
+
+[rise : percept --> (percept)in_brain_jelly ]'skin;
+[decide : percept * binder --> binder * decision ]'brain_jelly;
+[descend : decision --> (decision)out ]'brain_jelly;
+
+[route_act : decision --> (decision)in_muscle_jelly ]'skin;
+[act : decision * actuator --> actuator * (action)out ]'muscle_jelly;
+
+[triad : action --> sensor_triad(sense_think_act) ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 9.12.1  Total transformation: neural net -> jelly of time crystals.
+ * dissolve : a biological neural-net node enters the crucible and is
+ *            dissolved — axons, synapses and spikes give up their form
+ * rebirth  : the dissolved node is REBORN as a time crystal in the jelly —
+ *            not simulated, TRANSFORMED
+ * join_tc  : the newborn time crystal joins the jelly — the neural net is
+ *            becoming a jelly of time crystals
+ * ------------------------------------------------------------------------*/
+[dissolve : neural_node --> (neural_node)in_transform ]'skin;
+[route_crucible : neural_node --> (neural_node)in_transform ]'brain_jelly;
+
+[transform_node : neural_node * crucible
+               --> crucible * time_crystal(node) ]'transform;
+[rebirth : time_crystal(node) --> (time_crystal(node))out ]'transform;
+
+[join_tc : time_crystal(node) * binder
+        --> binder * (tc_jelly_member)out ]'brain_jelly;
+
+/* --------------------------------------------------------------------------
+ * The body certifies the transformation: the triad loop closed
+ * (sense-think-act) and a neural-net node was reborn into the jelly of time
+ * crystals — the total transformation from the biological neural net.
+ * ------------------------------------------------------------------------*/
+[certify : sensor_triad(sense_think_act) * tc_jelly_member
+        --> jelly_of_time_crystals(total_transformation) ]'skin;

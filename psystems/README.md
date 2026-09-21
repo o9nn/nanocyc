@@ -30,6 +30,19 @@ psystems/
 │                          ch03_ppm_evolution.pli (3.13–3.14),
 │                          ch03_diabetes_bigdata.pli (3.15),
 │                          ch03_prime_classes.pli (3.16, 3.16.1–3.16.2)
+│   └── ch09/            ← Brain jelly to humanoid avatar (issue #14):
+│                          ch09_biomorphic_devices.pli (9.1),
+│                          ch09_cortical_sheet.pli (9.2, 9.2.1–9.2.2),
+│                          ch09_quantum_cloaking.pli (9.3, 9.3.1),
+│                          ch09_living_gel.pli (9.4),
+│                          ch09_fractal_condensation.pli (9.5, 9.5.1),
+│                          ch09_fractal_reaction_kinetics.pli (9.6),
+│                          ch09_nanobrain_lifeform.pli (9.7, 9.7.1–9.7.2),
+│                          ch09_magnetic_light_reading.pli (9.8, 9.8.1–9.8.2),
+│                          ch09_entropy_primes.pli (9.9, 9.9.1),
+│                          ch09_cortical_pen.pli (9.10, 9.10.1),
+│                          ch09_seeking_sensor.pli (9.11, 9.11.1–9.11.2),
+│                          ch09_sensor_triad.pli (9.12, 9.12.1)
 ```
 
 Naming: `chNN_<feature>.pli` (e.g. `ch03_ppm_metric3_phasepath.pli`).

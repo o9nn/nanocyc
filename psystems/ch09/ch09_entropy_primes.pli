@@ -1,34 +1,98 @@
 /* ============================================================================
  * psystems/ch09/ch09_entropy_primes.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.9, 9.9.1
- * Functionality: Entropy drives the synthesis of a pattern of primes; Hesse diagram for entropy builds the material analog of integers.
+ * Sections: 9.9   — Entropy drives the synthesis of a pattern of primes,
+ *           9.9.1 — Hesse diagram for entropy builds the material analog of
+ *                   integers.
+ *
+ * Functionality: Entropy is not the enemy of order here — it is the ENGINE
+ *   (9.9). A heat bath pours entropy quanta into the synthesis membrane;
+ *   each quantum drives one synthesis step that assembles scattered factor
+ *   objects into a coherent PATTERN OF PRIMES. The more entropy flows
+ *   through, the more the pattern orders itself: synthesis is entropy-
+ *   driven, and the prime pattern is the ordered exhaust of the entropy
+ *   stream. The Hesse diagram makes this concrete (9.9.1): entropy levels
+ *   are plotted as a Hesse normal-form diagram in which every integer has a
+ *   MATERIAL ANALOG — a physical tile whose position encodes the integer's
+ *   ordered prime factors. Integers stop being abstractions: each becomes a
+ *   piece of matter in the entropy landscape.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — prime(p)/active(p)/ordered_factor(p):
+ *                                  the synthesized pattern and the material
+ *                                  analog's prime factors
+ *     common/ecan_attention.pli    — the entropy stream is the wage that
+ *                                  pays for each synthesis step
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (FractalCondensation — set_prime_pattern,
+ *                compute_pattern_coherence; CondensationPoint.prime_pattern,
+ *                condensation_order — the Hesse material analog of integers)
+ * Initial multiset: an entropy bath in the skin; scattered factors and a
+ *                   Hesse plane ready, so the simulator runs >= 1 step in
+ *                   every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'entropy []'hesse ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the heat bath)
+ *     '- synthesis : the entropy-driven prime synthesizer
+ *     |    '- reactor : where scattered factors fuse into a pattern
+ *     '- hesse : the Hesse diagram plane — material analog of integers
+ *          '- plot : the plotting membrane that lays integer tiles
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'reactor ]'synthesis [ []'plot ]'hesse ]'skin;
 
-@mskin = seed;
-@mentropy = unit(entropy), fuel;
-@mhesse = unit(hesse), fuel;
+/* Sample initial multiset. */
+@mskin      = entropy*2;
+@msynthesis = catalyst;
+@mreactor   = factor(2), factor(3), factor(5);
+@mhesse     = hesse_plane;
+@mplot      = integer(6), integer(10);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.9  Entropy drives the synthesis of a pattern of primes.
+ * pour     : the bath pours entropy quanta into the synthesizer
+ * drive    : one entropy quantum pushes one scattered factor into the
+ *            reactor — synthesis is paid for in entropy
+ * fuse     : two factors in the reactor fuse into an ordered prime bond;
+ *            the catalyst is preserved — the pattern assembles itself
+ * pattern  : the fused bonds surface as the synthesized pattern of primes
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_entropy ]'skin;
-[seed_dispense : seed --> (work)in_hesse ]'skin;
-[step : work * unit(entropy) * fuel --> done(entropy) ]'entropy;
-[step : work * unit(hesse) * fuel --> done(hesse) ]'hesse;
-[report : done(entropy) --> (result(entropy))out ]'entropy;
-[report : done(hesse) --> (result(hesse))out ]'hesse;
+[pour : entropy --> (entropy)in_synthesis ]'skin;
+[drive : entropy * catalyst --> catalyst * (thrust)in_reactor ]'synthesis;
+
+[fuse : thrust * factor(P) * factor(Q)
+     --> ordered_bond(P,Q) ]'reactor;
+[pattern : ordered_bond(P,Q) --> (prime_bond(P,Q))out ]'reactor;
+
+[synthesize : catalyst * prime_bond(P,Q)
+           --> catalyst * (prime_pattern(synthesized))out ]'synthesis;
+
+/* --------------------------------------------------------------------------
+ * 9.9.1  Hesse diagram: the material analog of integers.
+ * admit  : an integer enters the Hesse plane
+ * lay    : the plotting membrane lays the integer as a TILE on the plane —
+ *          its position encodes its ordered prime factors; the integer is
+ *          now a piece of matter
+ * analog : the laid tile is the MATERIAL ANALOG of the integer
+ * ------------------------------------------------------------------------*/
+[admit : prime_pattern(synthesized) --> (pattern)in_hesse ]'skin;
+[route : integer(N) --> (integer(N))in_plot ]'hesse;
+
+[lay : integer(N) * pattern --> tile(N) ]'plot;
+[analog : tile(N) --> (material_analog(N))out ]'plot;
+
+[hesse_out : material_analog(N) --> (material_analog(N))out ]'hesse;
+
+/* --------------------------------------------------------------------------
+ * The bath certifies the engine: entropy drove a prime pattern into being,
+ * and the Hesse diagram gave the integers material form.
+ * ------------------------------------------------------------------------*/
+[certify : material_analog(N) * entropy
+        --> entropy_synthesis(hesse_built) ]'skin;
