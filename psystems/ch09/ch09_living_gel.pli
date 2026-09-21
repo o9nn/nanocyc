@@ -1,34 +1,102 @@
 /* ============================================================================
  * psystems/ch09/ch09_living_gel.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.4
- * Functionality: A living gel that listens and then grows from atomic to centimeters: scale-growth membranes.
+ * Section: 9.4 — A living gel that listens and then grows from atomic to
+ *                centimeters.
+ *
+ * Functionality: The brain jelly is a LIVING GEL. It does not grow first
+ *   and listen later: it LISTENS first (9.4). An ear membrane absorbs the
+ *   incoming signal and transduces it into a growth command; only then does
+ *   the gel grow, and it grows across SCALES — from the atomic scale
+ *   (angstrom monomers) through the nano, micro and milli scales up to
+ *   centimeters. Each scale is its own membrane nested inside the previous
+ *   one; a growth wave enters at the atomic core and, when a scale is
+ *   saturated, the wave is passed outward to the next larger scale. The gel
+ *   thus listens at one scale and answers by growing at all scales, a
+ *   living scale-cascade from atoms to centimeters.
+ *
+ *   Common modules inlined by convention:
+ *     common/ecan_attention.pli — the signal is an STI wage paid to the
+ *                                 ear; growth spends it scale by scale
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BrainJellySimulator — generate_megamer_chain, update_chain:
+ *                the scale-growth cascade; MegamerUnit.resonance_amplitude —
+ *                the per-scale growth wave)
+ * Initial multiset: one signal quantum in the skin; each scale membrane
+ *                   holds monomers ready to polymerize, so the simulator
+ *                   runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'listen []'grow ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the dish holding the gel)
+ *     '- ear : the listening membrane — signal in, growth command out
+ *     '- gel : the living gel body
+ *          '- atomic : angstrom-scale monomers
+ *          |    '- nano : nanometer assemblies
+ *          |         '- micro : micrometer domains
+ *          |              '- milli : millimeter filaments
+ *          |                   '- centi : the centimeter gel
+ * ------------------------------------------------------------------------*/
+@mu = [ []'ear
+        [ [ [ [ [ []'centi ]'milli ]'micro ]'nano ]'atomic ]'gel ]'skin;
 
-@mskin = seed;
-@mlisten = unit(listen), fuel;
-@mgrow = unit(grow), fuel;
+/* Sample initial multiset. */
+@mskin   = signal(s1);
+@mear    = drum;
+@mgel    = gel_seed;
+@matomic = monomer*3;
+@mnano   = monomer*3;
+@mmicro  = monomer*3;
+@mmilli  = monomer*3;
+@mcenti  = monomer*3;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * Listen first: the ear absorbs the signal and issues the growth command.
+ * hear    : the drum transduces the signal into a growth command — the gel
+ *           is told WHAT to become before it grows
+ * command : the growth command enters the gel body
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_listen ]'skin;
-[seed_dispense : seed --> (work)in_grow ]'skin;
-[step : work * unit(listen) * fuel --> done(listen) ]'listen;
-[step : work * unit(grow) * fuel --> done(grow) ]'grow;
-[report : done(listen) --> (result(listen))out ]'listen;
-[report : done(grow) --> (result(grow))out ]'grow;
+[listen : signal(s1) --> (signal(s1))in_ear ]'skin;
+[hear : signal(s1) * drum --> drum * (growth_command)out ]'ear;
+[command : growth_command --> (growth_command)in_gel ]'skin;
+
+/* --------------------------------------------------------------------------
+ * Then grow: the command dives to the atomic core and the scale-cascade
+ * begins. Each scale polymerizes its monomers; when a scale is saturated it
+ * passes a growth wave OUTWARD to the next larger scale (atomic -> nano ->
+ * micro -> milli -> centi). Growth is a wave climbing the scale ladder.
+ * ------------------------------------------------------------------------*/
+[dive : growth_command * gel_seed --> gel_seed * (growth_command)in_atomic ]'gel;
+
+[grow : growth_command * monomer*3 --> polymer(atomic) * wave ]'atomic;
+[climb : wave --> (wave)out ]'atomic;
+
+[feed_nano : wave --> (wave)in_nano ]'atomic;
+
+/* (each scale repeats the same polymerization and hands the wave upward) */
+[grow_nano : wave * monomer*3 --> polymer(nano) * wave ]'nano;
+[climb_nano : wave --> (wave)out ]'nano;
+[feed_micro : wave --> (wave)in_micro ]'nano;
+[grow_micro : wave * monomer*3 --> polymer(micro) * wave ]'micro;
+[climb_micro : wave --> (wave)out ]'micro;
+[feed_milli : wave --> (wave)in_milli ]'micro;
+[grow_milli : wave * monomer*3 --> polymer(milli) * wave ]'milli;
+[climb_milli : wave --> (wave)out ]'milli;
+[feed_centi : wave --> (wave)in_centi ]'milli;
+[grow_centi : wave * monomer*3 --> polymer(centi) ]'centi;
+
+/* --------------------------------------------------------------------------
+ * The gel reports its full scale-cascade: it listened to one signal and grew
+ * from atomic monomers to a centimeter gel — a living, listening gel.
+ * ------------------------------------------------------------------------*/
+[alive : polymer(atomic) --> (grown(atomic))out ]'atomic;
+[alive : polymer(centi)  --> (grown(centi))out ]'centi;
+[certify : grown(atomic) * grown(centi)
+         --> living_gel(atomic_to_centimeters) ]'skin;

@@ -1,38 +1,111 @@
 /* ============================================================================
  * psystems/ch09/ch09_seeking_sensor.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.11, 9.11.1-9.11.2
- * Functionality: A sensor that seeks, does not wait; 11-dimensional signals in the human brain and brain jelly; humanoid avatar as the ultimate sensor.
+ * Sections: 9.11   — A sensor that seeks, does not wait,
+ *           9.11.1 — Eleven-dimensional signals in the human brain and
+ *                    brain jelly,
+ *           9.11.2 — Humanoid avatar: an ultimate sensor.
+ *
+ * Functionality: A passive sensor WAITS for signals; this sensor SEEKS
+ *   (9.11). The seeker membrane launches a probe that actively travels out,
+ *   interrogates the environment and drags the signal back — sensing is an
+ *   action, not a reception. What it seeks are ELEVEN-DIMENSIONAL signals
+ *   (9.11.1): both the human brain and the brain jelly emit signals that
+ *   live on an 11-dimensional manifold, so the seeker gathers eleven
+ *   projections — one per dimension — and fuses them into a single 11D
+ *   percept. The culmination is the HUMANOID AVATAR (9.11.2): a body whose
+ *   every surface is such a seeking sensor, integrating all 11D signals at
+ *   once — the ultimate sensor, a whole organism that perceives by seeking.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the 11 dimensions d1..d11 of the
+ *                                    signal manifold
+ *     common/ecan_attention.pli    — the probe is launched by spending STI;
+ *                                    sought signals pay it back
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (HumanoidAvatarInterface — sense_11d_signals,
+ *                get_integrated_signal, get_embodiment_index; Signal11D —
+ *                dimensions[11], signal_strength; AvatarMetrics —
+ *                sensory_bandwidth, embodiment_index)
+ * Initial multiset: one seek impulse in the skin; the probe, the 11D
+ *                   manifold and the avatar body armed, so the simulator
+ *                   runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'seeker []'signals_11d []'avatar ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the world the sensor seeks into)
+ *     '- seeker : the active sensor — it launches probes, never waits
+ *     '- manifold : the 11D signal space
+ *     |    '- d1 .. d3 : the first three projection membranes (of 11)
+ *     '- avatar : the humanoid avatar — the ultimate sensor body
+ * ------------------------------------------------------------------------*/
+@mu = [ []'seeker
+        [ []'d1 []'d2 []'d3 ]'manifold
+        []'avatar ]'skin;
 
-@mskin = seed;
-@mseeker = unit(seeker), fuel;
-@msignals_11d = unit(signals_11d), fuel;
-@mavatar = unit(avatar), fuel;
+/* Sample initial multiset. */
+@mskin     = seek_impulse;
+@mseeker   = probe;
+@mmanifold = signal_source;
+@md1       = projection(1);
+@md2       = projection(2);
+@md3       = projection(3);
+@mavatar   = embodiment;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.11  A sensor that seeks, does not wait.
+ * launch : the seek impulse launches the probe OUT into the world — the
+ *          sensor acts first
+ * fetch  : the probe interrogates the signal source and drags a signal
+ *          back — sensing as an action
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_seeker ]'skin;
-[seed_dispense : seed --> (work)in_signals_11d ]'skin;
-[seed_dispense : seed --> (work)in_avatar ]'skin;
-[step : work * unit(seeker) * fuel --> done(seeker) ]'seeker;
-[step : work * unit(signals_11d) * fuel --> done(signals_11d) ]'signals_11d;
-[step : work * unit(avatar) * fuel --> done(avatar) ]'avatar;
-[report : done(seeker) --> (result(seeker))out ]'seeker;
-[report : done(signals_11d) --> (result(signals_11d))out ]'signals_11d;
-[report : done(avatar) --> (result(avatar))out ]'avatar;
+[launch : seek_impulse * probe --> (hunting_probe)out ]'seeker;
+[fetch : hunting_probe * signal_source
+      --> signal_source * (signal_11d)in_seeker ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 9.11.1  Eleven-dimensional signals in the human brain and brain jelly.
+ * project : the sought 11D signal enters the manifold and is split into its
+ *           dimensional projections — the brain and the jelly speak in 11
+ *           dimensions at once
+ * read_d  : each projection membrane reads its own dimension's component
+ * fuse    : the projections are gathered back into ONE 11D percept
+ * ------------------------------------------------------------------------*/
+[project : signal_11d --> (signal_11d)in_manifold ]'seeker;
+[split : signal_11d --> (component)in_d1 * (component)in_d2
+                       * (component)in_d3 ]'manifold;
+
+[read_d : component * projection(1) --> projection(1) * dim(1) ]'d1;
+[read_d : component * projection(2) --> projection(2) * dim(2) ]'d2;
+[read_d : component * projection(3) --> projection(3) * dim(3) ]'d3;
+
+[dim_out : dim(N) --> (dim(N))out ]'d1;
+[dim_out : dim(N) --> (dim(N))out ]'d2;
+[dim_out : dim(N) --> (dim(N))out ]'d3;
+
+[fuse : dim(1) * dim(2) * dim(3)
+     --> (percept_11d)out ]'manifold;
+
+/* --------------------------------------------------------------------------
+ * 9.11.2  Humanoid avatar: an ultimate sensor.
+ * embody  : the fused 11D percept enters the avatar body
+ * ultimate: the avatar integrates the percept across its embodiment — the
+ *           whole body is the sensor; it perceives because it sought
+ * ------------------------------------------------------------------------*/
+[embody : percept_11d --> (percept_11d)in_avatar ]'skin;
+[ultimate : percept_11d * embodiment
+         --> embodiment * (integrated_percept)out ]'avatar;
+
+/* --------------------------------------------------------------------------
+ * The world certifies the seeker: a probe went out, an 11D signal was
+ * sought, projected and fused, and the humanoid avatar integrated it as the
+ * ultimate sensor.
+ * ------------------------------------------------------------------------*/
+[certify : integrated_percept --> seeking_sensor(ultimate_avatar) ]'skin;

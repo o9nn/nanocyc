@@ -1,94 +1,175 @@
 /* ============================================================================
  * psystems/ch09/ch09_biomorphic_devices.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.1
- * Functionality: Neuromorphic devices are not alone: 17 bio-morphic devices singing together as a membrane chorus.
+ * Section: 9.1 — Neuromorphic devices are not alone: 17 bio-morphic devices
+ *                sing together.
+ *
+ * Functionality: Neuromorphic hardware is only ONE voice. The brain jelly
+ *   assembles SEVENTEEN bio-morphic device archetypes — the fundamental
+ *   neuristors (neuristor, memristor, synapstor, denristor, axonistor), the
+ *   glial family (gliaistor, astrocystor, oligodendrocystor, microglisator,
+ *   ependymistor) and the specialized cortical/cerebellar neurons
+ *   (purkinjistor, pyramidistor, stellatistor, granulistor, basketistor,
+ *   chandelieristor, martinottistor). Each device membrane runs the same
+ *   integrate-and-fire cycle (activate -> threshold -> fire -> refractory),
+ *   and the seventeen voices are phase-locked into ONE CHORUS: devices do not
+ *   shout at each other pairwise — every one emits a tone into the shared
+ *   skin medium, and a singing chord is born only when all seventeen tones
+ *   are simultaneously present. Synchronization is the music; the chord is
+ *   the collective response of the device registry.
+ *
+ *   Common modules inlined by convention:
+ *     common/ecan_attention.pli — each device pays fuel-rent per cycle and
+ *                                 is paid a work wage by the skin bank; the
+ *                                 wage/rent economy keeps the chorus alive
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BioMorphicDeviceType — the 17 archetypes;
+ *                BioMorphicDevice — activation_level/threshold/refractory;
+ *                BioMorphicDeviceRegistry — update_all_devices,
+ *                propagate_signals, compute_collective_response;
+ *                CollectiveResponse — synchronization_index, harmonic_modes)
+ * Initial multiset: one baton and one seed tone in the skin; every device
+ *                   membrane holds a fresh voice and a unit of fuel, so the
+ *                   simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'dev_1 []'dev_2 []'dev_3 []'dev_4 []'dev_5 []'dev_6 []'dev_7 []'dev_8 []'dev_9 []'dev_10 []'dev_11 []'dev_12 []'dev_13 []'dev_14 []'dev_15 []'dev_16 []'dev_17 ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the shared medium — the concert hall)
+ *     '- chorus : the conductor membrane where the 17 tones fuse
+ *     '- dev_neuristor  ... dev_martinottistor : the 17 device voices
+ *        (5 neuristors, 5 glial devices, 7 specialized neurons)
+ * ------------------------------------------------------------------------*/
+@mu = [ []'chorus
+        []'dev_neuristor []'dev_memristor []'dev_synapstor []'dev_denristor
+        []'dev_axonistor
+        []'dev_gliaistor []'dev_astrocystor []'dev_oligodendrocystor
+        []'dev_microglisator []'dev_ependymistor
+        []'dev_purkinjistor []'dev_pyramidistor []'dev_stellatistor
+        []'dev_granulistor []'dev_basketistor []'dev_chandelieristor
+        []'dev_martinottistor ]'skin;
 
-@mskin = seed;
-@mdev_1 = unit(dev_1), fuel;
-@mdev_2 = unit(dev_2), fuel;
-@mdev_3 = unit(dev_3), fuel;
-@mdev_4 = unit(dev_4), fuel;
-@mdev_5 = unit(dev_5), fuel;
-@mdev_6 = unit(dev_6), fuel;
-@mdev_7 = unit(dev_7), fuel;
-@mdev_8 = unit(dev_8), fuel;
-@mdev_9 = unit(dev_9), fuel;
-@mdev_10 = unit(dev_10), fuel;
-@mdev_11 = unit(dev_11), fuel;
-@mdev_12 = unit(dev_12), fuel;
-@mdev_13 = unit(dev_13), fuel;
-@mdev_14 = unit(dev_14), fuel;
-@mdev_15 = unit(dev_15), fuel;
-@mdev_16 = unit(dev_16), fuel;
-@mdev_17 = unit(dev_17), fuel;
+/* Sample initial multiset. */
+@mskin                 = baton, seed_tone;
+@mchorus               = tonic;
+@mdev_neuristor        = voice(neuristor),        fuel;
+@mdev_memristor        = voice(memristor),        fuel;
+@mdev_synapstor        = voice(synapstor),        fuel;
+@mdev_denristor        = voice(denristor),        fuel;
+@mdev_axonistor        = voice(axonistor),        fuel;
+@mdev_gliaistor        = voice(gliaistor),        fuel;
+@mdev_astrocystor      = voice(astrocystor),      fuel;
+@mdev_oligodendrocystor = voice(oligodendrocystor), fuel;
+@mdev_microglisator    = voice(microglisator),    fuel;
+@mdev_ependymistor     = voice(ependymistor),     fuel;
+@mdev_purkinjistor     = voice(purkinjistor),     fuel;
+@mdev_pyramidistor     = voice(pyramidistor),     fuel;
+@mdev_stellatistor     = voice(stellatistor),     fuel;
+@mdev_granulistor      = voice(granulistor),      fuel;
+@mdev_basketistor      = voice(basketistor),      fuel;
+@mdev_chandelieristor  = voice(chandelieristor),  fuel;
+@mdev_martinottistor   = voice(martinottistor),   fuel;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.1  The conductor calls and every voice answers.
+ * conduct  : the baton broadcasts the seed tone into every device membrane —
+ *            no device sings alone; the call reaches all seventeen at once
+ * activate : a voice integrates the incoming tone against its fuel — the
+ *            device activation_level rises (one tone quantum per cycle)
+ * fire     : activation crosses the firing threshold — the device EMITS its
+ *            characteristic tone into the shared medium (send-out to skin)
+ * refract  : after firing, the voice resets — the refractory period restores
+ *            a fresh voice so the device can sing the next cycle
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_dev_1 ]'skin;
-[seed_dispense : seed --> (work)in_dev_2 ]'skin;
-[seed_dispense : seed --> (work)in_dev_3 ]'skin;
-[seed_dispense : seed --> (work)in_dev_4 ]'skin;
-[seed_dispense : seed --> (work)in_dev_5 ]'skin;
-[seed_dispense : seed --> (work)in_dev_6 ]'skin;
-[seed_dispense : seed --> (work)in_dev_7 ]'skin;
-[seed_dispense : seed --> (work)in_dev_8 ]'skin;
-[seed_dispense : seed --> (work)in_dev_9 ]'skin;
-[seed_dispense : seed --> (work)in_dev_10 ]'skin;
-[seed_dispense : seed --> (work)in_dev_11 ]'skin;
-[seed_dispense : seed --> (work)in_dev_12 ]'skin;
-[seed_dispense : seed --> (work)in_dev_13 ]'skin;
-[seed_dispense : seed --> (work)in_dev_14 ]'skin;
-[seed_dispense : seed --> (work)in_dev_15 ]'skin;
-[seed_dispense : seed --> (work)in_dev_16 ]'skin;
-[seed_dispense : seed --> (work)in_dev_17 ]'skin;
-[step : work * unit(dev_1) * fuel --> done(dev_1) ]'dev_1;
-[step : work * unit(dev_2) * fuel --> done(dev_2) ]'dev_2;
-[step : work * unit(dev_3) * fuel --> done(dev_3) ]'dev_3;
-[step : work * unit(dev_4) * fuel --> done(dev_4) ]'dev_4;
-[step : work * unit(dev_5) * fuel --> done(dev_5) ]'dev_5;
-[step : work * unit(dev_6) * fuel --> done(dev_6) ]'dev_6;
-[step : work * unit(dev_7) * fuel --> done(dev_7) ]'dev_7;
-[step : work * unit(dev_8) * fuel --> done(dev_8) ]'dev_8;
-[step : work * unit(dev_9) * fuel --> done(dev_9) ]'dev_9;
-[step : work * unit(dev_10) * fuel --> done(dev_10) ]'dev_10;
-[step : work * unit(dev_11) * fuel --> done(dev_11) ]'dev_11;
-[step : work * unit(dev_12) * fuel --> done(dev_12) ]'dev_12;
-[step : work * unit(dev_13) * fuel --> done(dev_13) ]'dev_13;
-[step : work * unit(dev_14) * fuel --> done(dev_14) ]'dev_14;
-[step : work * unit(dev_15) * fuel --> done(dev_15) ]'dev_15;
-[step : work * unit(dev_16) * fuel --> done(dev_16) ]'dev_16;
-[step : work * unit(dev_17) * fuel --> done(dev_17) ]'dev_17;
-[report : done(dev_1) --> (result(dev_1))out ]'dev_1;
-[report : done(dev_2) --> (result(dev_2))out ]'dev_2;
-[report : done(dev_3) --> (result(dev_3))out ]'dev_3;
-[report : done(dev_4) --> (result(dev_4))out ]'dev_4;
-[report : done(dev_5) --> (result(dev_5))out ]'dev_5;
-[report : done(dev_6) --> (result(dev_6))out ]'dev_6;
-[report : done(dev_7) --> (result(dev_7))out ]'dev_7;
-[report : done(dev_8) --> (result(dev_8))out ]'dev_8;
-[report : done(dev_9) --> (result(dev_9))out ]'dev_9;
-[report : done(dev_10) --> (result(dev_10))out ]'dev_10;
-[report : done(dev_11) --> (result(dev_11))out ]'dev_11;
-[report : done(dev_12) --> (result(dev_12))out ]'dev_12;
-[report : done(dev_13) --> (result(dev_13))out ]'dev_13;
-[report : done(dev_14) --> (result(dev_14))out ]'dev_14;
-[report : done(dev_15) --> (result(dev_15))out ]'dev_15;
-[report : done(dev_16) --> (result(dev_16))out ]'dev_16;
-[report : done(dev_17) --> (result(dev_17))out ]'dev_17;
+[conduct : baton * seed_tone
+        --> (tone)in_dev_neuristor * (tone)in_dev_memristor
+          * (tone)in_dev_synapstor * (tone)in_dev_denristor
+          * (tone)in_dev_axonistor
+          * (tone)in_dev_gliaistor * (tone)in_dev_astrocystor
+          * (tone)in_dev_oligodendrocystor * (tone)in_dev_microglisator
+          * (tone)in_dev_ependymistor
+          * (tone)in_dev_purkinjistor * (tone)in_dev_pyramidistor
+          * (tone)in_dev_stellatistor * (tone)in_dev_granulistor
+          * (tone)in_dev_basketistor * (tone)in_dev_chandelieristor
+          * (tone)in_dev_martinottistor ]'skin;
+
+[activate : voice(neuristor) * tone * fuel
+         --> fired(neuristor) ]'dev_neuristor;
+[activate : voice(memristor) * tone * fuel
+         --> fired(memristor) ]'dev_memristor;
+[activate : voice(synapstor) * tone * fuel
+         --> fired(synapstor) ]'dev_synapstor;
+[activate : voice(denristor) * tone * fuel
+         --> fired(denristor) ]'dev_denristor;
+[activate : voice(axonistor) * tone * fuel
+         --> fired(axonistor) ]'dev_axonistor;
+[activate : voice(gliaistor) * tone * fuel
+         --> fired(gliaistor) ]'dev_gliaistor;
+[activate : voice(astrocystor) * tone * fuel
+         --> fired(astrocystor) ]'dev_astrocystor;
+[activate : voice(oligodendrocystor) * tone * fuel
+         --> fired(oligodendrocystor) ]'dev_oligodendrocystor;
+[activate : voice(microglisator) * tone * fuel
+         --> fired(microglisator) ]'dev_microglisator;
+[activate : voice(ependymistor) * tone * fuel
+         --> fired(ependymistor) ]'dev_ependymistor;
+[activate : voice(purkinjistor) * tone * fuel
+         --> fired(purkinjistor) ]'dev_purkinjistor;
+[activate : voice(pyramidistor) * tone * fuel
+         --> fired(pyramidistor) ]'dev_pyramidistor;
+[activate : voice(stellatistor) * tone * fuel
+         --> fired(stellatistor) ]'dev_stellatistor;
+[activate : voice(granulistor) * tone * fuel
+         --> fired(granulistor) ]'dev_granulistor;
+[activate : voice(basketistor) * tone * fuel
+         --> fired(basketistor) ]'dev_basketistor;
+[activate : voice(chandelieristor) * tone * fuel
+         --> fired(chandelieristor) ]'dev_chandelieristor;
+[activate : voice(martinottistor) * tone * fuel
+         --> fired(martinottistor) ]'dev_martinottistor;
+
+[fire : fired(neuristor)        --> voice(neuristor)        * (sung(neuristor))out ]'dev_neuristor;
+[fire : fired(memristor)        --> voice(memristor)        * (sung(memristor))out ]'dev_memristor;
+[fire : fired(synapstor)        --> voice(synapstor)        * (sung(synapstor))out ]'dev_synapstor;
+[fire : fired(denristor)        --> voice(denristor)        * (sung(denristor))out ]'dev_denristor;
+[fire : fired(axonistor)        --> voice(axonistor)        * (sung(axonistor))out ]'dev_axonistor;
+[fire : fired(gliaistor)        --> voice(gliaistor)        * (sung(gliaistor))out ]'dev_gliaistor;
+[fire : fired(astrocystor)      --> voice(astrocystor)      * (sung(astrocystor))out ]'dev_astrocystor;
+[fire : fired(oligodendrocystor) --> voice(oligodendrocystor) * (sung(oligodendrocystor))out ]'dev_oligodendrocystor;
+[fire : fired(microglisator)    --> voice(microglisator)    * (sung(microglisator))out ]'dev_microglisator;
+[fire : fired(ependymistor)     --> voice(ependymistor)     * (sung(ependymistor))out ]'dev_ependymistor;
+[fire : fired(purkinjistor)     --> voice(purkinjistor)     * (sung(purkinjistor))out ]'dev_purkinjistor;
+[fire : fired(pyramidistor)     --> voice(pyramidistor)     * (sung(pyramidistor))out ]'dev_pyramidistor;
+[fire : fired(stellatistor)     --> voice(stellatistor)     * (sung(stellatistor))out ]'dev_stellatistor;
+[fire : fired(granulistor)      --> voice(granulistor)      * (sung(granulistor))out ]'dev_granulistor;
+[fire : fired(basketistor)      --> voice(basketistor)      * (sung(basketistor))out ]'dev_basketistor;
+[fire : fired(chandelieristor)  --> voice(chandelieristor)  * (sung(chandelieristor))out ]'dev_chandelieristor;
+[fire : fired(martinottistor)   --> voice(martinottistor)   * (sung(martinottistor))out ]'dev_martinottistor;
+
+/* --------------------------------------------------------------------------
+ * The chorus: seventeen tones fuse into one chord.
+ * gather   : the skin routes every sung tone into the chorus membrane
+ * chord    : all seventeen tones are present at once — they fuse into the
+ *            singing chord (synchronization_index = 1); the tonic catalyst
+ *            anchors the harmony
+ * collective: the chord is the COLLECTIVE RESPONSE — the registry certifies
+ *            that neuromorphic devices are not alone anymore
+ * ------------------------------------------------------------------------*/
+[gather : sung(D) --> (sung(D))in_chorus ]'skin;
+
+[chord : tonic * sung(neuristor) * sung(memristor) * sung(synapstor)
+          * sung(denristor) * sung(axonistor)
+          * sung(gliaistor) * sung(astrocystor) * sung(oligodendrocystor)
+          * sung(microglisator) * sung(ependymistor)
+          * sung(purkinjistor) * sung(pyramidistor) * sung(stellatistor)
+          * sung(granulistor) * sung(basketistor) * sung(chandelieristor)
+          * sung(martinottistor)
+       --> tonic * (chord(17))out ]'chorus;
+
+[collective : chord(17) --> biomorphic_chorus(singing) ]'skin;

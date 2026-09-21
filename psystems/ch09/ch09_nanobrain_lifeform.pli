@@ -1,38 +1,129 @@
 /* ============================================================================
  * psystems/ch09/ch09_nanobrain_lifeform.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.7, 9.7.1-9.7.2
- * Functionality: Nanobrain, the smallest life form: jelly of megamers following a resonance chain; EEG of a nanobrain.
+ * Sections: 9.7   — Nanobrain, the smallest life form,
+ *           9.7.1 — Jelly of megamers following a resonance chain,
+ *           9.7.2 — EEG of a nanobrain.
+ *
+ * Functionality: The nanobrain is the SMALLEST LIFE FORM (9.7): a jelly of
+ *   MEGAMERS — giant molecular units — linked head-to-tail into a RESONANCE
+ *   CHAIN (9.7.1). A resonance quantum enters the first megamer and walks
+ *   the chain: each megamer absorbs it, oscillates at its own phase offset,
+ *   and hands it to the next, so the whole jelly rings as one coupled
+ *   oscillator. The life of the nanobrain is that ringing. And like any
+ *   living brain it has an EEG (9.7.2): electrodes on the jelly read the
+ *   chain's oscillation and split it into the five bands — delta, theta,
+ *   alpha, beta, gamma — whose power spectrum is the nanobrain's
+ *   consciousness index. The smallest life form thinks, and its EEG proves
+ *   it.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — each megamer's phase offset is a tick
+ *                                    of the 11D time-crystal clock
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BrainJellySimulator — generate_megamer_chain, update_chain,
+ *                generate_eeg_signal, get_consciousness_index; MegamerUnit —
+ *                chain_position, resonance_amplitude, phase_offset;
+ *                EEGSignal — band_power[5], dominant_band,
+ *                consciousness_index; EEGBand — Delta..Gamma)
+ * Initial multiset: one resonance quantum in the skin; megamers pre-linked
+ *                   and electrodes armed, so the simulator runs >= 1 step in
+ *                   every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'megamer []'resonance []'eeg ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the medium the nanobrain lives in)
+ *     '- jelly : the megamer jelly — the life form's body
+ *     |    '- megamer_1 .. megamer_4 : the resonance chain (head to tail)
+ *     '- eeg  : the electrode cap reading the jelly
+ *          '- delta, theta, alpha, beta, gamma : the five band filters
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'megamer_1 []'megamer_2 []'megamer_3 []'megamer_4 ]'jelly
+        [ []'delta []'theta []'alpha []'beta []'gamma ]'eeg ]'skin;
 
-@mskin = seed;
-@mmegamer = unit(megamer), fuel;
-@mresonance = unit(resonance), fuel;
-@meeg = unit(eeg), fuel;
+/* Sample initial multiset. */
+@mskin      = resonance_quantum;
+@mjelly     = jelly_medium;
+@mmegamer_1 = megamer(1), phase(0);
+@mmegamer_2 = megamer(2), phase(1);
+@mmegamer_3 = megamer(3), phase(2);
+@mmegamer_4 = megamer(4), phase(3);
+@meeg       = electrode;
+@mdelta     = band_pass(delta);
+@mtheta     = band_pass(theta);
+@malpha     = band_pass(alpha);
+@mbeta      = band_pass(beta);
+@mgamma     = band_pass(gamma);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.7.1  Jelly of megamers following a resonance chain.
+ * excite   : the resonance quantum enters the jelly at the chain head
+ * resonate : a megamer absorbs the quantum, rings at ITS phase offset, and
+ *            passes the quantum to the NEXT megamer — the chain walks
+ *            head-to-tail (megamer_1 -> 2 -> 3 -> 4)
+ * ring     : each megamer's ring is reported to the jelly medium — the
+ *            whole body oscillates as one coupled chain
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_megamer ]'skin;
-[seed_dispense : seed --> (work)in_resonance ]'skin;
-[seed_dispense : seed --> (work)in_eeg ]'skin;
-[step : work * unit(megamer) * fuel --> done(megamer) ]'megamer;
-[step : work * unit(resonance) * fuel --> done(resonance) ]'resonance;
-[step : work * unit(eeg) * fuel --> done(eeg) ]'eeg;
-[report : done(megamer) --> (result(megamer))out ]'megamer;
-[report : done(resonance) --> (result(resonance))out ]'resonance;
-[report : done(eeg) --> (result(eeg))out ]'eeg;
+[excite : resonance_quantum --> (quantum)in_jelly ]'skin;
+[enter : quantum --> (quantum)in_megamer_1 ]'jelly;
+
+[resonate : quantum * megamer(1) * phase(0)
+         --> megamer(1) * ring(1) * (quantum)out ]'megamer_1;
+[hand_12 : quantum --> (quantum)in_megamer_2 ]'jelly;
+[resonate : quantum * megamer(2) * phase(1)
+         --> megamer(2) * ring(2) * (quantum)out ]'megamer_2;
+[hand_23 : quantum --> (quantum)in_megamer_3 ]'jelly;
+[resonate : quantum * megamer(3) * phase(2)
+         --> megamer(3) * ring(3) * (quantum)out ]'megamer_3;
+[hand_34 : quantum --> (quantum)in_megamer_4 ]'jelly;
+[resonate : quantum * megamer(4) * phase(3)
+         --> megamer(4) * ring(4) ]'megamer_4;
+
+[ring_out : ring(N) --> (ring(N))out ]'megamer_1;
+[ring_out : ring(N) --> (ring(N))out ]'megamer_2;
+[ring_out : ring(N) --> (ring(N))out ]'megamer_3;
+[ring_out : ring(N) --> (ring(N))out ]'megamer_4;
+
+/* The jelly sums the four rings into one chain oscillation — the nanobrain
+ * is alive while the chain rings. */
+[chain_rings : jelly_medium * ring(1) * ring(2) * ring(3) * ring(4)
+            --> jelly_medium * (chain_oscillation)out ]'jelly;
+
+/* --------------------------------------------------------------------------
+ * 9.7.2  EEG of a nanobrain.
+ * sample   : the electrode reads the chain oscillation into the EEG cap
+ * split    : the oscillation is copied to all five band filters at once
+ * filter_* : each band pass extracts its own rhythm power — delta through
+ *            gamma, the nanobrain's spectral fingerprint
+ * ------------------------------------------------------------------------*/
+[sample : chain_oscillation --> (chain_oscillation)in_eeg ]'skin;
+[split : chain_oscillation * electrode
+      --> electrode * (osc)in_delta * (osc)in_theta * (osc)in_alpha
+        * (osc)in_beta * (osc)in_gamma ]'eeg;
+
+[filter_d : osc * band_pass(delta) --> band_pass(delta) * power(delta) ]'delta;
+[filter_t : osc * band_pass(theta) --> band_pass(theta) * power(theta) ]'theta;
+[filter_a : osc * band_pass(alpha) --> band_pass(alpha) * power(alpha) ]'alpha;
+[filter_b : osc * band_pass(beta)  --> band_pass(beta)  * power(beta) ]'beta;
+[filter_g : osc * band_pass(gamma) --> band_pass(gamma) * power(gamma) ]'gamma;
+
+[band_out : power(B) --> (power(B))out ]'delta;
+[band_out : power(B) --> (power(B))out ]'theta;
+[band_out : power(B) --> (power(B))out ]'alpha;
+[band_out : power(B) --> (power(B))out ]'beta;
+[band_out : power(B) --> (power(B))out ]'gamma;
+
+/* --------------------------------------------------------------------------
+ * The medium certifies the smallest life form: the megamer chain rang as
+ * one, and its five-band EEG carries the nanobrain's consciousness index.
+ * ------------------------------------------------------------------------*/
+[alive : power(delta) * power(theta) * power(alpha) * power(beta)
+          * power(gamma)
+       --> nanobrain_eeg(consciousness_index) ]'skin;

@@ -1,34 +1,108 @@
 /* ============================================================================
  * psystems/ch09/ch09_cortical_pen.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.10, 9.10.1
- * Functionality: A cortical pen that freezes unknown dynamics into a time crystal; capsules of brain jelly, one each for one big problem.
+ * Sections: 9.10   — A cortical pen that freezes unknown dynamics into a
+ *                    time crystal,
+ *           9.10.1 — Capsules of brain jelly, one each for one big problem.
+ *
+ * Functionality: The cortical pen is an instrument of capture (9.10): it
+ *   touches a flow of UNKNOWN DYNAMICS and FREEZES it — a live, streaming
+ *   process is locked into a TIME CRYSTAL, a pattern that now repeats in
+ *   time instead of evolving unpredictably. Freezing is crystallization:
+ *   the dynamics' trajectory is sampled at the freeze threshold and locked
+ *   into the 11D time-crystal lattice, where it can be stored and replayed.
+ *   The frozen crystals are not piled in one heap (9.10.1): each BIG
+ *   PROBLEM gets its OWN CAPSULE of brain jelly — a sealed membrane holding
+ *   exactly one frozen time crystal with its prime signature, so that each
+ *   hard problem is preserved, addressed and thawed independently.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — freezing locks dynamics into the 11D
+ *                                    nested phase membranes / tick loop
+ *     common/alphabet_primes.pli   — every capsule is labeled by its prime
+ *                                    signature
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (CorticalPenFreezer — freeze_dynamics, create_problem_capsule,
+ *                thaw_capsule, get_capsule_signature; ProblemCapsule —
+ *                frozen_state, prime_signature, temporal_anchor,
+ *                complexity_order; CorticalPenConfig — freeze_threshold,
+ *                time_crystal_resolution = 11)
+ * Initial multiset: a stream of unknown dynamics and a problem in the skin;
+ *                   pen ink and capsule shells ready, so the simulator runs
+ *                   >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'pen []'capsules ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the desk where problems arrive)
+ *     '- pen : the cortical pen — the freezing instrument
+ *     |    '- nib : the freezing point that touches the dynamics
+ *     '- capsules : the capsule library
+ *          '- capsule_a : one capsule for one big problem
+ *          '- capsule_b : another problem, another capsule
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'nib ]'pen [ []'capsule_a []'capsule_b ]'capsules ]'skin;
 
-@mskin = seed;
-@mpen = unit(pen), fuel;
-@mcapsules = unit(capsules), fuel;
+/* Sample initial multiset. */
+@mskin      = unknown_dynamics, problem(p1), problem(p2);
+@mpen       = ink, freeze_threshold;
+@mnib       = freezing_point;
+@mcapsules  = shell_stock;
+@mcapsule_a = seal(a);
+@mcapsule_b = seal(b);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.10  Freezing unknown dynamics into a time crystal.
+ * draw   : the pen draws the unknown dynamics to its nib
+ * touch  : the freezing point touches the dynamics — at the freeze
+ *          threshold the live trajectory is sampled and STOPS evolving
+ * freeze : the sampled trajectory is locked into a time crystal — the
+ *          unknown dynamics now repeats in time, frozen and replayable
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_pen ]'skin;
-[seed_dispense : seed --> (work)in_capsules ]'skin;
-[step : work * unit(pen) * fuel --> done(pen) ]'pen;
-[step : work * unit(capsules) * fuel --> done(capsules) ]'capsules;
-[report : done(pen) --> (result(pen))out ]'pen;
-[report : done(capsules) --> (result(capsules))out ]'capsules;
+[draw : unknown_dynamics --> (unknown_dynamics)in_pen ]'skin;
+[route_nib : unknown_dynamics * ink --> ink * (dynamics)in_nib ]'pen;
+
+[touch : dynamics * freezing_point
+      --> freezing_point * sampled(trajectory) ]'nib;
+[freeze : sampled(trajectory) --> time_crystal(frozen) ]'nib;
+[surface : time_crystal(frozen) --> (time_crystal(frozen))out ]'nib;
+
+[anchor : time_crystal(frozen) * freeze_threshold
+       --> freeze_threshold * (anchored_crystal)out ]'pen;
+
+/* --------------------------------------------------------------------------
+ * 9.10.1  Capsules of brain jelly — one each for one big problem.
+ * assign : the skin assigns one problem to each capsule shell
+ * fill_a : capsule A receives the frozen crystal for its problem — ONE
+ *          capsule, ONE big problem, sealed with its prime signature
+ * seal_a : the capsule seals itself around the crystal — preserved,
+ *          addressed, independently thawable
+ * ------------------------------------------------------------------------*/
+[assign : problem(p1) --> (problem(p1))in_capsules ]'skin;
+[assign : problem(p2) --> (problem(p2))in_capsules ]'skin;
+[fill_route : anchored_crystal --> (anchored_crystal)in_capsules ]'skin;
+
+[deliver_a : problem(p1) --> (problem(p1))in_capsule_a ]'capsules;
+[deliver_b : problem(p2) --> (problem(p2))in_capsule_b ]'capsules;
+[crystal_a : anchored_crystal --> (anchored_crystal)in_capsule_a ]'capsules;
+
+[seal_a : anchored_crystal * problem(p1) * seal(a)
+       --> capsule(p1, frozen) ]'capsule_a;
+[seal_b : problem(p2) * seal(b)
+       --> capsule(p2, ready) ]'capsule_b;
+
+[capsule_out : capsule(p1, frozen) --> (capsule(p1))out ]'capsule_a;
+[capsule_out : capsule(p2, ready)  --> (capsule(p2))out ]'capsule_b;
+
+/* --------------------------------------------------------------------------
+ * The desk certifies the pen: unknown dynamics were frozen into a time
+ * crystal, and each big problem rests in its own capsule of brain jelly.
+ * ------------------------------------------------------------------------*/
+[library : capsule(p1) * capsule(p2)
+        --> cortical_pen_library(one_capsule_per_problem) ]'skin;
