@@ -1,34 +1,121 @@
 /* ============================================================================
  * psystems/ch08/ch08_magnonics_transition.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.9
- * Functionality: Transition from the old era of electronics to magnonics.
+ * Sections: 8.9 (transition from the old era of electronics to magnonics)
+ *
+ * Functionality: The old era pushes electrons through copper wires, reads
+ *   conductivity with a multimeter and pays the joule tax — heat piles up
+ *   as waste. The new era retires the electrons one by one: a SUPER
+ *   NON-CONDUCTOR transmits PHASE, not electrons, turning each retiring
+ *   electron into a magnon; the multimeter is replaced by a semiconductor
+ *   camera that images the magnetic flux patterns, and the dark lines that
+ *   electronics neglected turn out to hold the novel concepts (knots of
+ *   darkness). The single imaginary world of electronics opens into
+ *   layers: a cube inscribed in the phase sphere touches it at 8 points
+ *   and projects a hologram, while the e-pi-phi quadratic relation
+ *   simultaneously controls resonance, cloaking over the 6-25 GHz band and
+ *   holography. Instead of regulating conductivity, magnonics HARVESTS the
+ *   singularity. The transition completes when the three simultaneous
+ *   operating modes lock: electrical mode carries power, magnetic mode
+ *   carries information, mechanical mode evolves the hardware.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — the e-pi-phi quadratic sensor triad
+ *     common/hypernumbers.pli    — one imaginary world opening into layers
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (MagnonicBridge — transition_electron_to_magnon,
+ *                transmit_magnon, receive_magnon, setup_wireless_h_device;
+ *                MagnonType Acoustic/Optical/Surface/Bulk/Topological;
+ *                MagnonPacket — the phase-flow carrier)
+ * Initial multiset: three legacy currents (the future power, information
+ *                   and hardware modes) plus the era-shift token in the
+ *                   skin so the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'electronics []'magnonics ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (bridges the two eras)
+ *     '- electronics_era : copper wires, multimeter, joule losses
+ *     '- magnonics_era   : super non-conductor, semiconductor camera
+ *          '- hologram   : phase-sphere cube projection and e-pi-phi cloak
+ * ------------------------------------------------------------------------*/
+@mu = [ []'electronics_era [ []'hologram ]'magnonics_era ]'skin;
 
-@mskin = seed;
-@melectronics = unit(electronics), fuel;
-@mmagnonics = unit(magnonics), fuel;
+/* Sample initial multiset — one legacy current per future operating mode. */
+@mskin            = legacy_current(power), legacy_current(information),
+                    legacy_current(hardware), era_shift;
+@melectronics_era = copper_wire, multimeter, joule_loss;
+@mmagnonics_era   = super_nonconductor, camera(semiconductor);
+@mhologram        = phase_sphere(cube_8_points), quadratic(e_pi_phi);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.9  The old era of electronics.
+ * feed_old    : every legacy current is still an electron current
+ * conduct     : the copper wire conducts — and dissipates joule heat that
+ *               accumulates as the waste of the old era
+ * measure_old : the multimeter can only read conductivity (I-V thinking)
+ * retire      : each reading convinces one electron to retire — the old
+ *               era hands its carriers to the skin
+ * bridge      : the era-shift token walks the retiring electrons into the
+ *               magnonic era one by one
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_electronics ]'skin;
-[seed_dispense : seed --> (work)in_magnonics ]'skin;
-[step : work * unit(electronics) * fuel --> done(electronics) ]'electronics;
-[step : work * unit(magnonics) * fuel --> done(magnonics) ]'magnonics;
-[report : done(electronics) --> (result(electronics))out ]'electronics;
-[report : done(magnonics) --> (result(magnonics))out ]'magnonics;
+[feed_old : legacy_current(X) --> (electron(X))in_electronics_era ]'skin;
+
+[conduct : electron(X) * copper_wire
+        --> copper_wire * current(X) * heat(dissipated) ]'electronics_era;
+[measure_old : current(X) * multimeter
+            --> multimeter * reading(X) ]'electronics_era;
+[retire : reading(X) * joule_loss
+       --> joule_loss * (electron_retiring(X))out ]'electronics_era;
+
+[bridge : electron_retiring(X) * era_shift
+       --> era_shift * (electron_retiring(X))in_magnonics_era ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.9  The new era of magnonics.
+ * transmute   : the super non-conductor transmits PHASE, not electrons —
+ *               each retiring electron becomes a magnon
+ * measure_new : the semiconductor camera replaces the multimeter — it
+ *               images the magnetic flux pattern instead of conductivity
+ * dark_value  : the dark lines electronics neglected hold the novel
+ *               concepts — the knots of darkness become knowledge
+ * dive        : the hardware-mode magnon dives into the hologram chamber
+ * project     : the cube inscribed in the phase sphere touches it at 8
+ *               points — the magnon projects a 3D hologram
+ * cloak_band  : the e-pi-phi quadratic relation controls resonance,
+ *               cloaking (6-25 GHz) and holography at once
+ * triple_mode : power magnon + dark-line knowledge + cloaked projection
+ *               lock the three simultaneous modes — electrical carries
+ *               power, magnetic carries information, mechanical evolves
+ *               the hardware
+ * new_era     : the skin certifies the transition: conductivity is no
+ *               longer regulated, the singularity is harvested
+ * ------------------------------------------------------------------------*/
+[transmute : electron_retiring(X) * super_nonconductor
+          --> super_nonconductor * magnon(X) ]'magnonics_era;
+[measure_new : magnon(information) * camera(semiconductor)
+            --> camera(semiconductor) * flux_image(dark_lines)
+             ]'magnonics_era;
+[dark_value : flux_image(dark_lines)
+           --> knowledge(knots_of_darkness) ]'magnonics_era;
+[dive : magnon(hardware) --> (magnon(hardware))in_hologram ]'magnonics_era;
+
+[project : magnon(hardware) * phase_sphere(cube_8_points)
+        --> phase_sphere(cube_8_points) * hologram(volume_3d) ]'hologram;
+[cloak_band : hologram(volume_3d) * quadratic(e_pi_phi)
+           --> quadratic(e_pi_phi)
+             * (cloaked_projection(ghz_6_25))out ]'hologram;
+
+[triple_mode : magnon(power) * knowledge(knots_of_darkness)
+             * cloaked_projection(ghz_6_25)
+            --> (magnonics(three_modes))out ]'magnonics_era;
+
+[new_era : magnonics(three_modes)
+        --> era(magnonics_begun) * singularity(harvested) ]'skin;

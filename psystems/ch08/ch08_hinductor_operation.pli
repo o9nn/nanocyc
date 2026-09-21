@@ -1,34 +1,126 @@
 /* ============================================================================
  * psystems/ch08/ch08_hinductor_operation.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.8
- * Functionality: Design, application and operation of H; the novelty of H.
+ * Sections: 8.8 (design application and operation of H, the novelty of H)
+ *
+ * Functionality: The design protocol of the fourth circuit element. H-1: an
+ *   array of capacitors wound into a spiral whose ONLY state variables are
+ *   the magnetic flux Phi and the immobile stored charge Q — no current
+ *   flows through the device. H-2: the pitch/radius ratio and the dielectric
+ *   constant epsilon of the surface regulate the phi-q relation, so the
+ *   charging is QUANTIZED. H-3: the capacitive threshold sets the lower
+ *   frequency band and the inductive threshold the upper band; fusing the
+ *   dual band makes the response i_H(t) faster than any RC circuit.
+ *   Operation: the device must be driven by ac AND dc biases SIMULTANEOUSLY
+ *   and its output is ALWAYS 180 degrees out of phase (item 5); Dirac points
+ *   open and close as symmetry breaks and restores, running soliton-based
+ *   error-correcting learning at nano-watt power (item 6); pumping at
+ *   resonance makes the device VANISH from an STM scan — quantum cloaking
+ *   (item 9); a cloaked device wirelessly powers the next device over the
+ *   three-part resonance band and the communication avalanche
+ *   auto-amplifies (item 10). The novelty of H: the Phi-Q paradigm replaces
+ *   the I-V paradigm of electronics at atto-to-femto-watt operation.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — the resonance bands follow the prime
+ *                                  frequency ladder
+ *     common/ecan_attention.pli  — atto/femto-watt budgeting of the drive
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (HinductorState — magnetic_flux, vortex_charge, capacitance,
+ *                inductance, flux_history; Hinductor — update_hysteresis,
+ *                oscillate_capacitance, generate_magnetic_light,
+ *                inject_vortex; MagnonicBridge::setup_wireless_h_device)
+ * Initial multiset: one blueprint plus one ac and one dc bias in the skin
+ *                   so the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'design []'operate ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (issues the blueprint, certifies the fourth element)
+ *     '- design : the H-1..H-3 design protocol
+ *     |    '- spiral_array : the spiral-wound capacitor array
+ *     '- operate : drive, learning, cloaking and wireless operation
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'spiral_array ]'design []'operate ]'skin;
 
-@mskin = seed;
-@mdesign = unit(design), fuel;
-@moperate = unit(operate), fuel;
+/* Sample initial multiset. */
+@mskin         = blueprint, ac_signal, dc_bias;
+@mdesign       = designer;
+@mspiral_array = spiral_geometry;
+@moperate      = stm_probe, resonance_pump, seed(next_device), dirac_gate;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.8  Design protocol H-1, H-2, H-3.
+ * draft   : the blueprint splits into the two design specifications —
+ *           the pitch/radius ratio and the surface dielectric
+ * power   : item 5 — the device demands ac AND dc biases at once; the two
+ *           signals fuse into the single legal drive
+ * array   : H-1 — the designer winds a capacitor array seed into the spiral
+ * set_eps : H-2 — the dielectric constant epsilon is locked to regulate the
+ *           phi-q relation
+ * unroll  : the seed unrolls into the array of capacitors on the spiral
+ * no_current : H-1 — the array's ONLY state variables are the flux Phi and
+ *           the immobile charge Q; no current flows through H
+ * quantized : H-2 — the phi-q pair leaves the array QUANTIZED
+ * band    : H-3 — dielectric + quantized phi-q fuse the capacitive (lower)
+ *           and inductive (upper) thresholds into the dual-band device
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_design ]'skin;
-[seed_dispense : seed --> (work)in_operate ]'skin;
-[step : work * unit(design) * fuel --> done(design) ]'design;
-[step : work * unit(operate) * fuel --> done(operate) ]'operate;
-[report : done(design) --> (result(design))out ]'design;
-[report : done(operate) --> (result(operate))out ]'operate;
+[draft : blueprint
+      --> (spec(pitch_radius))in_design * (spec(dielectric))in_design
+       ]'skin;
+[power : ac_signal * dc_bias --> (drive(ac_plus_dc))in_operate ]'skin;
+
+[array : spec(pitch_radius) * designer
+      --> designer * (cap_seed)in_spiral_array ]'design;
+[set_eps : spec(dielectric) --> epsilon_locked ]'design;
+
+[unroll : cap_seed * spiral_geometry
+       --> spiral_geometry * cap_element*3 ]'spiral_array;
+[no_current : cap_element*3
+           --> state(flux_phi) * state(charge_q) ]'spiral_array;
+[quantized : state(flux_phi) * state(charge_q)
+          --> (phi_q_pair(quantized))out ]'spiral_array;
+
+[band : phi_q_pair(quantized) * epsilon_locked
+     --> (h_device(dual_band))out ]'design;
+
+/* --------------------------------------------------------------------------
+ * 8.8  Operation of H.
+ * deploy    : the finished dual-band device enters operation
+ * operate_1 : item 5 — driven by ac+dc, the device activates; its output is
+ *             ALWAYS 180 degrees out of phase with the drive
+ * learn     : item 6 — the Dirac gate opens/closes as symmetry breaks and
+ *             restores; solitons run error-correcting learning (nano-watt)
+ * absorb    : item 9 — pumped exactly at resonance the device absorbs all
+ *             probes and runs at atto-to-femto watt
+ * cloak_check : item 9 — the STM probe sees NOTHING: quantum cloaking
+ * avalanche : item 10 — the cloaked device wirelessly powers the next
+ *             device; the communication avalanche auto-amplifies
+ * novelty   : the four operation proofs certify the novelty of H — the
+ *             Phi-Q paradigm replacing the I-V paradigm
+ * record    : the skin certifies the fourth circuit element
+ * ------------------------------------------------------------------------*/
+[deploy : h_device(dual_band) --> (h_device(dual_band))in_operate ]'skin;
+
+[operate_1 : h_device(dual_band) * drive(ac_plus_dc)
+          --> h_active * out_of_phase(deg_180) ]'operate;
+[learn : out_of_phase(deg_180) * dirac_gate
+      --> dirac_gate * soliton(corrected) ]'operate;
+[absorb : h_active * resonance_pump
+       --> h_cloaked * power(atto_femto_watt) ]'operate;
+[cloak_check : h_cloaked * stm_probe
+            --> h_cloaked * stm_image(vanished) ]'operate;
+[avalanche : seed(next_device) * h_cloaked
+          --> h_cloaked * wireless_power(avalanche) ]'operate;
+[novelty : stm_image(vanished) * wireless_power(avalanche)
+         * soliton(corrected) * power(atto_femto_watt)
+        --> (novelty(phi_q_paradigm))out ]'operate;
+
+[record : novelty(phi_q_paradigm) --> fourth_element_certified ]'skin;

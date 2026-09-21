@@ -1,42 +1,167 @@
 /* ============================================================================
  * psystems/ch08/ch08_knot_morphogenesis.pli
  *
- * NanoBrain CH08: Hinductor not Memristor: synthesis of atoms and crystals made of magnetic light
- * Issue #13 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH08: Hinductor not Memristor — synthesis of atoms and crystals
+ * made of magnetic light. Issue #13 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 8.6, 8.6.1-8.6.3
- * Functionality: Interactive three cylinders perturbing the knots; generation of spin-like knots of dark lines; synthesis of super-super coils made of dark lines; morphogenesis of knots to vortex-like magnetic atoms.
+ * Sections: 8.6 (interactive three cylinders perturbing the knots),
+ *           8.6.1 (generation of spin-like knots of dark lines),
+ *           8.6.2 (synthesis of super-super coil made of dark lines),
+ *           8.6.3 (morphogenesis of knots to vortex-like magnetic atoms)
+ *
+ * Functionality: The inner and outer cylinders act as INTERNAL and EXTERNAL
+ *   mirrors, 180 degrees out of phase — the inner edits the perturbation
+ *   phase over 0-180 degrees (e1), the outer over 180-360 degrees (e2);
+ *   together they squeeze the central coil's straight stationary dark line
+ *   Dc into knots with mean strength e = (e1+e2)/2 and polarization
+ *   Delta_e = (e2-e1)/2 (8.6). Squeezing the first knot releases FREE
+ *   magnetic particles rotating clockwise and anticlockwise — dark-line
+ *   knots that act like the spin of a particle — and their superposition
+ *   builds a unit time crystal (8.6.1). e builds a STATIC helix that acts
+ *   as a guideline on which Delta_e's DYNAMIC helix wraps into a supercoil;
+ *   further perturbation at alpha < 0 adds a hairpin-like electric-null
+ *   singularity and yields the super-supercoil, while switching alpha to
+ *   positive reverses the clocking direction (8.6.2). The dark rings are
+ *   quantized (sec delta = phi/phi_0 — no arbitrary diameters); three rings
+ *   Psi_1, Psi_2, Psi_3 form a triangle whose angles 2.pi.phi_ij/phi_0
+ *   create the basic geometric information of GML; an oscillating electric
+ *   field across a closed ring builds a spatial B gradient that CLOCKS
+ *   around the ring — the knot completes its morphogenesis into a
+ *   vortex-like magnetic atom (8.6.3).
+ *
+ *   Common modules inlined by convention:
+ *     common/gml_shapes.pli        — the ring triangle writes GML geometric
+ *                                    information
+ *     common/time_crystal_core.pli — the unit time crystal born of the two
+ *                                    spin knots
+ *
  * Traceability: src/cpp/nanobrain_hinductor.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (MagneticKnotGenerator — generate_spin_knot,
+ *                synthesize_super_coil, compose_knots, create_vortex_atom;
+ *                KnotType Trefoil/Hopf; MagneticKnot.writhe — cw/ccw spin;
+ *                VortexAtom — circulation, spinor, topological charge)
+ * Initial multiset: one pump per mirror plus one light quantum in the skin
+ *                   so the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'perturb []'dark_lines []'coil []'morph ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (routes knots between the machines)
+ *     '- perturbation : the central coil holding the stationary dark line
+ *     |    '- inner_mirror : inner cylinder — phase editor 0-180 degrees
+ *     |    '- outer_mirror : outer cylinder — phase editor 180-360 degrees
+ *     '- supercoil    : static/dynamic helix hierarchy (8.6.2)
+ *     '- morphogenesis: rings -> GML triangle -> vortex atom (8.6.3)
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'inner_mirror []'outer_mirror ]'perturbation
+        []'supercoil []'morphogenesis ]'skin;
 
-@mskin = seed;
-@mperturb = unit(perturb), fuel;
-@mdark_lines = unit(dark_lines), fuel;
-@mcoil = unit(coil), fuel;
-@mmorph = unit(morph), fuel;
+/* Sample initial multiset. */
+@mskin          = pump(inner), pump(outer), light(omega);
+@mperturbation  = dark_line(dc_straight), phase_editor;
+@minner_mirror  = mirror(internal);
+@mouter_mirror  = mirror(external);
+@msupercoil     = alpha(negative), alpha(positive);
+@mmorphogenesis = flux_quantum(phi_0), e_field(oscillating);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 8.6  The three cylinders perturb the central dark line.
+ * route_pi/route_po : the skin pumps each mirror through the central coil
+ * to_inner/to_outer : the central coil forwards each drive to its mirror
+ * reflect_i : the internal mirror returns perturbation e1 with phase edited
+ *             over 0-180 degrees
+ * reflect_o : the external mirror returns perturbation e2, 180 degrees out
+ *             of phase (180-360 degrees)
+ * squeeze   : e1 and e2 squeeze the straight stationary dark line Dc into a
+ *             knot carrying e = (e1+e2)/2 and Delta_e = (e2-e1)/2
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_perturb ]'skin;
-[seed_dispense : seed --> (work)in_dark_lines ]'skin;
-[seed_dispense : seed --> (work)in_coil ]'skin;
-[seed_dispense : seed --> (work)in_morph ]'skin;
-[step : work * unit(perturb) * fuel --> done(perturb) ]'perturb;
-[step : work * unit(dark_lines) * fuel --> done(dark_lines) ]'dark_lines;
-[step : work * unit(coil) * fuel --> done(coil) ]'coil;
-[step : work * unit(morph) * fuel --> done(morph) ]'morph;
-[report : done(perturb) --> (result(perturb))out ]'perturb;
-[report : done(dark_lines) --> (result(dark_lines))out ]'dark_lines;
-[report : done(coil) --> (result(coil))out ]'coil;
-[report : done(morph) --> (result(morph))out ]'morph;
+[route_pi : pump(inner) --> (drive(inner))in_perturbation ]'skin;
+[route_po : pump(outer) --> (drive(outer))in_perturbation ]'skin;
+[shine    : light(omega) --> (light(omega))in_morphogenesis ]'skin;
+
+[to_inner : drive(inner) --> (drive(inner))in_inner_mirror ]'perturbation;
+[to_outer : drive(outer) --> (drive(outer))in_outer_mirror ]'perturbation;
+
+[reflect_i : drive(inner) * mirror(internal)
+          --> mirror(internal) * (e1(phase_0_180))out ]'inner_mirror;
+[reflect_o : drive(outer) * mirror(external)
+          --> mirror(external) * (e2(phase_180_360))out ]'outer_mirror;
+
+[squeeze : dark_line(dc_straight) * e1(phase_0_180) * e2(phase_180_360)
+        --> knot(e_avg, delta_e) ]'perturbation;
+
+/* --------------------------------------------------------------------------
+ * 8.6.1  Spin-like knots of dark lines.
+ * spin_split : squeezing the first knot releases a PAIR of free magnetic
+ *              particles rotating clockwise and anticlockwise — dark-line
+ *              knots acting like particle spin
+ * tc_unit    : their superposition builds a unit time crystal; knots and
+ *              crystal are exported for the next machines
+ * to_static/to_dynamic/to_morph : the skin routes the clockwise knot as the
+ *              static seed, the anticlockwise knot as the dynamic seed, and
+ *              the unit time crystal to morphogenesis
+ * ------------------------------------------------------------------------*/
+[spin_split : knot(e_avg, delta_e) * phase_editor
+           --> spin_knot(clockwise) * spin_knot(anticlockwise)
+            ]'perturbation;
+[tc_unit : spin_knot(clockwise) * spin_knot(anticlockwise)
+        --> (spin_knot(clockwise))out * (spin_knot(anticlockwise))out
+          * (unit_time_crystal)out ]'perturbation;
+
+[to_static  : spin_knot(clockwise) --> (static_seed)in_supercoil ]'skin;
+[to_dynamic : spin_knot(anticlockwise) --> (dynamic_seed)in_supercoil ]'skin;
+[to_morph   : unit_time_crystal
+           --> (unit_time_crystal)in_morphogenesis ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.6.2  Super-super coil made of dark lines.
+ * static_helix : e builds the static helix — the guideline
+ * dynamic_wrap : Delta_e's dynamic helix wraps the guideline — SUPERCOIL
+ * super_super  : one more perturbation at alpha < 0 (high e, high Delta_e)
+ *                yields the super-supercoil plus the hairpin-like
+ *                electric-null singularity around the magnetic ring
+ * clock_flip   : switching alpha to positive turns the hairpin into a
+ *                ripple structure and REVERSES the clocking direction
+ * export_coil  : the completed coil of dark lines leaves for morphogenesis
+ * ------------------------------------------------------------------------*/
+[static_helix : static_seed --> helix(static_guideline) ]'supercoil;
+[dynamic_wrap : dynamic_seed * helix(static_guideline)
+             --> supercoil_level_1 ]'supercoil;
+[super_super : supercoil_level_1 * alpha(negative)
+            --> super_supercoil * hairpin(electric_null) ]'supercoil;
+[clock_flip : hairpin(electric_null) * alpha(positive)
+           --> ripple_structure * clocking(reversed) ]'supercoil;
+[export_coil : super_supercoil * ripple_structure * clocking(reversed)
+            --> (coil_of_dark_lines)out ]'supercoil;
+
+[coil_route : coil_of_dark_lines
+           --> (coil_of_dark_lines)in_morphogenesis ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 8.6.3  Morphogenesis of knots into vortex-like magnetic atoms.
+ * quantize_rings : sec delta = phi/phi_0 — the coil condenses into three
+ *                  QUANTIZED rings (no arbitrary diameters exist)
+ * gml_triangle   : Psi_1, Psi_2, Psi_3 form a triangle whose angles
+ *                  2.pi.phi_ij/phi_0 write the basic geometric information
+ *                  of GML
+ * clock_ring     : the oscillating electric field across the closed ring
+ *                  builds a spatial B gradient that clocks around the ring
+ * vortex_atom    : ring clock + unit time crystal + monochromatic light —
+ *                  the knot completes morphogenesis into a vortex-like
+ *                  MAGNETIC ATOM (composition of circles = a time crystal)
+ * atom_born      : the skin certifies the atom of magnetic light
+ * ------------------------------------------------------------------------*/
+[quantize_rings : coil_of_dark_lines * flux_quantum(phi_0)
+               --> flux_quantum(phi_0) * ring(psi_1) * ring(psi_2)
+                 * ring(psi_3) ]'morphogenesis;
+[gml_triangle : ring(psi_1) * ring(psi_2) * ring(psi_3)
+             --> triangle(gml_angles) ]'morphogenesis;
+[clock_ring : triangle(gml_angles) * e_field(oscillating)
+           --> e_field(oscillating) * b_gradient_clock ]'morphogenesis;
+[vortex_atom : b_gradient_clock * unit_time_crystal * light(omega)
+            --> (magnetic_vortex_atom)out ]'morphogenesis;
+
+[atom_born : magnetic_vortex_atom --> atom_of_magnetic_light ]'skin;
