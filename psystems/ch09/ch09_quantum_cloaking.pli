@@ -1,34 +1,101 @@
 /* ============================================================================
  * psystems/ch09/ch09_quantum_cloaking.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.3, 9.3.1
- * Functionality: Anomalous quantum cloaking: vanishing and seeing the one we want; randomness is not random anymore.
+ * Sections: 9.3   — Anomalous quantum cloaking: vanish and seeing the one
+ *                   we want to,
+ *           9.3.1 — Randomness is not random anymore.
+ *
+ * Functionality: The brain jelly can make a chosen object VANISH from every
+ *   observer while keeping the ONE we want perfectly visible (9.3). The
+ *   cloak is a phase membrane: any object admitted into it has its address
+ *   scrambled into a hidden phantom that no probe can resolve, while the
+ *   chosen object is phase-amplified until it is the only thing a reader
+ *   sees. The scramble is not noise (9.3.1): the "random" phases are drawn
+ *   from the prime alphabet, so the cloak's randomness is a DETERMINISTIC
+ *   prime pattern — what looked random becomes a readable, ordered key.
+ *   Vanishing and selecting are two faces of the same phase prism.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — prime(p)/active(p) key objects; the
+ *                                  de-randomized pattern is an ordered
+ *                                  factor string of the 15 primes
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (CondensationPoint.prime_pattern/resonance_frequency — the
+ *                phase-selective cloak; FractalCondensation —
+ *                apply_prime_pattern, compute_pattern_coherence: the
+ *                de-randomized prime key)
+ * Initial multiset: a probe, a decoy and the chosen object in the skin, so
+ *                   the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'cloak []'derandom ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the observation chamber)
+ *     '- cloak     : the anomalous phase membrane — things vanish inside
+ *     |    '- prism : the phase prism that scrambles addresses
+ *     '- selector  : the reader that sees only the one we want
+ *     '- derandom  : the prime loom that unwinds randomness (9.3.1)
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'prism ]'cloak []'selector []'derandom ]'skin;
 
-@mskin = seed;
-@mcloak = unit(cloak), fuel;
-@mderandom = unit(derandom), fuel;
+/* Sample initial multiset. */
+@mskin     = probe, decoy, chosen;
+@mcloak    = phase_veil;
+@mprism    = prism_oil;
+@mselector = reader, want(chosen);
+@mderandom = loom, prime(2), prime(3), prime(5), prime(7);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.3  Vanish, and see the one we want.
+ * admit    : the probe, the decoy and the chosen object enter the cloak
+ * veil     : the decoy crosses the phase veil into the prism
+ * scramble : the prism scrambles the decoy into a hidden phantom — an
+ *            address no probe can resolve; the decoy has VANISHED
+ * amplify  : the chosen object is phase-amplified instead — it leaves the
+ *            cloak BRIGHTER than it entered
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_cloak ]'skin;
-[seed_dispense : seed --> (work)in_derandom ]'skin;
-[step : work * unit(cloak) * fuel --> done(cloak) ]'cloak;
-[step : work * unit(derandom) * fuel --> done(derandom) ]'derandom;
-[report : done(cloak) --> (result(cloak))out ]'cloak;
-[report : done(derandom) --> (result(derandom))out ]'derandom;
+[admit : decoy    --> (decoy)in_cloak ]'skin;
+[admit : chosen   --> (chosen)in_cloak ]'skin;
+[admit : probe    --> (probe)in_selector ]'skin;
+
+[veil : decoy * phase_veil --> phase_veil * (decoy)in_prism ]'cloak;
+[scramble : decoy * prism_oil --> prism_oil * phantom(hidden) ]'prism;
+[vanish : phantom(hidden) --> (phantom(hidden))out ]'prism;
+
+[amplify : chosen * phase_veil --> phase_veil * (bright(chosen))out ]'cloak;
+
+/* --------------------------------------------------------------------------
+ * Seeing the one we want: the reader's desire matches only the chosen
+ * object's brightness. The phantom passes through unseen (priority: the
+ * bright match fires first).
+ * ------------------------------------------------------------------------*/
+[see_wanted : probe * want(chosen) * bright(chosen)
+           --> reader * seen(chosen) ]'selector, 1;
+[blind : phantom(hidden) --> phantom(hidden) ]'selector;
+
+/* --------------------------------------------------------------------------
+ * 9.3.1  Randomness is not random anymore.
+ * catch    : a vanished phantom carries its scrambled address to the loom
+ * unwind   : the loom unwinds the scramble onto the prime alphabet — every
+ *            "random" phase is an ordered factor of primes
+ * key_out  : the unwound pattern is a readable key: randomness was a prime
+ *            pattern all along
+ * ------------------------------------------------------------------------*/
+[catch : phantom(hidden) --> (phantom(hidden))in_derandom ]'skin;
+[unwind : phantom(hidden) * loom * prime(P)
+       --> loom * active(P) * factor_of(P) ]'derandom;
+[key_out : factor_of(P) * factor_of(Q)
+        --> (prime_key(P,Q))out ]'derandom;
+
+/* --------------------------------------------------------------------------
+ * The chamber certifies the cloak: the chosen one is seen, the decoy is a
+ * hidden phantom, and its randomness reads back as a prime key.
+ * ------------------------------------------------------------------------*/
+[certify : seen(chosen) * prime_key(P,Q)
+        --> quantum_cloak(anomalous) ]'skin;

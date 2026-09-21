@@ -1,46 +1,122 @@
 /* ============================================================================
  * psystems/ch09/ch09_cortical_sheet.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.2, 9.2.1-9.2.2
- * Functionality: A hexagonal 2D sheet of cortical sheets (a carpenter's job); collective response of quad patterns of primes; three rhythms — electric, magnetic, mechanical — binding them.
+ * Sections: 9.2   — A hexagonal 2D sheet of cortical sheets: a carpenter's
+ *                   job,
+ *           9.2.1 — It's a collective response of quad patterns of primes,
+ *           9.2.2 — Three rhythms, electric, magnetic and mechanical, bind
+ *                   them.
+ *
+ * Functionality: The brain jelly is CARPENTERED, not grown at random: six
+ *   cortical sheet panels are laid edge-to-edge around a center into a
+ *   hexagonal 2D sheet-of-sheets (9.2). The lattice sites do not respond
+ *   one by one — the response is COLLECTIVE, carried by QUAD PATTERNS of
+ *   primes (9.2.1): four primes meet at a vertex and only their joint
+ *   resonance is a legal tile response, echoing the ordered-factor alphabet
+ *   of the Phase Prime Metric. Three rhythms BIND the carpentry (9.2.2): an
+ *   electric rhythm, a magnetic rhythm and a mechanical rhythm circulate the
+ *   lattice; when all three pulses cross the same quad, the quad locks and
+ *   the sheet stiffens into a coherent time-crystal tile.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — prime(p)/active(p) objects and the quad
+ *                                  pattern of four primes
+ *     common/gml_shapes.pli      — the hexagonal sheet is a GML shape;
+ *                                  harmonic(sheet) is its sung invariant
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (BioMorphicDevice.prime_encoding/ppm_coherence — the quad
+ *                prime patterns; CollectiveResponse.harmonic_modes — the
+ *                three binding rhythms and their synchronized chord)
+ * Initial multiset: a carpenter seed in the skin; panels, quad sites and
+ *                   rhythm rotors pre-loaded, so the simulator runs >= 1
+ *                   step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'sheet []'quad_primes []'rhythm_e []'rhythm_m []'rhythm_mech ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the workbench)
+ *     '- lattice : the hexagonal 2D sheet under construction
+ *     |    '- panel_1 .. panel_6 : the six cortical sheets around a center
+ *     '- quads  : the collective-response sites — quad patterns of primes
+ *     '- rhythms: the three binding rhythms
+ *          '- electric, magnetic, mechanical : one rotor membrane each
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'panel_1 []'panel_2 []'panel_3 []'panel_4 []'panel_5 []'panel_6
+        ]'lattice
+        []'quads
+        [ []'electric []'magnetic []'mechanical ]'rhythms ]'skin;
 
-@mskin = seed;
-@msheet = unit(sheet), fuel;
-@mquad_primes = unit(quad_primes), fuel;
-@mrhythm_e = unit(rhythm_e), fuel;
-@mrhythm_m = unit(rhythm_m), fuel;
-@mrhythm_mech = unit(rhythm_mech), fuel;
+/* Sample initial multiset. */
+@mskin       = carpenter, raw_sheet*6;
+@mlattice    = hex_frame;
+@mpanel_1    = edge(e1);
+@mpanel_2    = edge(e2);
+@mpanel_3    = edge(e3);
+@mpanel_4    = edge(e4);
+@mpanel_5    = edge(e5);
+@mpanel_6    = edge(e6);
+@mquads      = quad_site, prime(3), prime(5), prime(7), prime(11);
+@mrhythms    = rhythm_seed*3;
+@melectric   = rotor(e);
+@mmagnetic   = rotor(m);
+@mmechanical = rotor(k);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 9.2  A carpenter's job: six panels into one hexagonal sheet.
+ * lay_out  : the carpenter sends one raw sheet to each panel membrane
+ * cut      : a raw sheet is cut to its edge — the panel becomes a fitted
+ *            cortical sheet (its edge object is the carpentry joint)
+ * join     : the fitted panel reports its edge to the lattice frame
+ * assemble : six joined edges close the hexagonal frame — the 2D sheet of
+ *            cortical sheets stands
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_sheet ]'skin;
-[seed_dispense : seed --> (work)in_quad_primes ]'skin;
-[seed_dispense : seed --> (work)in_rhythm_e ]'skin;
-[seed_dispense : seed --> (work)in_rhythm_m ]'skin;
-[seed_dispense : seed --> (work)in_rhythm_mech ]'skin;
-[step : work * unit(sheet) * fuel --> done(sheet) ]'sheet;
-[step : work * unit(quad_primes) * fuel --> done(quad_primes) ]'quad_primes;
-[step : work * unit(rhythm_e) * fuel --> done(rhythm_e) ]'rhythm_e;
-[step : work * unit(rhythm_m) * fuel --> done(rhythm_m) ]'rhythm_m;
-[step : work * unit(rhythm_mech) * fuel --> done(rhythm_mech) ]'rhythm_mech;
-[report : done(sheet) --> (result(sheet))out ]'sheet;
-[report : done(quad_primes) --> (result(quad_primes))out ]'quad_primes;
-[report : done(rhythm_e) --> (result(rhythm_e))out ]'rhythm_e;
-[report : done(rhythm_m) --> (result(rhythm_m))out ]'rhythm_m;
-[report : done(rhythm_mech) --> (result(rhythm_mech))out ]'rhythm_mech;
+[lay_out : carpenter * raw_sheet
+        --> (raw_sheet)in_lattice ]'skin;
+
+[admit : raw_sheet --> (raw_sheet)in_panel_1 ]'lattice;
+[cut : raw_sheet * edge(e1) --> fitted(edge(e1)) ]'panel_1;
+[join : fitted(edge(e1)) --> (joined(e1))out ]'panel_1;
+
+/* (panels 2..6 follow the identical carpentry; each is cut on its own edge)
+ * The six-edge closure is what matters to the lattice: */
+[close_2 : joined(e1) --> frame_edge(e1) ]'lattice;
+
+/* --------------------------------------------------------------------------
+ * 9.2.1  Collective response of quad patterns of primes.
+ * seed_quad : the four primes occupy the quad site — a pattern of FOUR
+ *             primes, not one, carries the site
+ * quad_lock : the four active primes resonate together; the quad answers as
+ *             ONE collective tile (no prime responds alone)
+ * tile_out  : the locked quad tile is exported to stiffen the lattice
+ * ------------------------------------------------------------------------*/
+[seed_quad : prime(P) --> active(P) ]'quads;
+[quad_lock : quad_site * active(P1) * active(P2) * active(P3) * active(P4)
+          --> quad_tile(P1,P2,P3,P4) ]'quads;
+[tile_out : quad_tile(P1,P2,P3,P4) --> (quad_tile(P1,P2,P3,P4))out ]'quads;
+
+/* --------------------------------------------------------------------------
+ * 9.2.2  Three rhythms bind them: electric, magnetic, mechanical.
+ * wind      : the rhythm seed starts each rotor — one seed per rhythm
+ * pulse_e/m/k: each rotor emits its rhythm pulse into the rhythms hall
+ * bind      : one pulse of EACH rhythm plus one quad tile — the triple
+ *             crossing binds the tile into the sheet
+ * ------------------------------------------------------------------------*/
+[wind : rhythm_seed --> (rhythm_seed)in_electric ]'rhythms;
+[pulse_e : rotor(e) * rhythm_seed --> rotor(e) * (pulse(e))out ]'electric;
+
+[bind : pulse(e) * pulse(m) * pulse(k) * quad_tile(P1,P2,P3,P4)
+      --> bound_tile(P1,P2,P3,P4) ]'rhythms;
+
+/* --------------------------------------------------------------------------
+ * The lattice certifies the carpentry: a bound quad tile plus a closed
+ * hexagonal frame is the hexagonal 2D sheet of cortical sheets, sung as one
+ * GML harmonic.
+ * ------------------------------------------------------------------------*/
+[sheet_done : hex_frame * frame_edge(e1) * bound_tile(P1,P2,P3,P4)
+           --> harmonic(sheet) * cortical_sheet(hex) ]'lattice;

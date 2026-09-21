@@ -1,38 +1,90 @@
 /* ============================================================================
  * psystems/ch09/ch09_fractal_reaction_kinetics.pli
  *
- * NanoBrain CH09: Brain jelly to humanoid avatar: fractal reaction kinetics, fractal condensation, programmable matter for primes
- * Issue #14 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH09: Brain jelly to humanoid avatar. Issue #14 — P-Lingua
+ * specification (see psystems/README.md).
  *
- * Sections: 9.6
- * Functionality: Fractal reaction kinetics: many syntheses in one beaker at a time — parallel reaction membranes.
+ * Section: 9.6 — Fractal reaction kinetics: many syntheses in one beaker
+ *                at a time.
+ *
+ * Functionality: An ordinary beaker runs ONE reaction at a time; the brain
+ *   jelly runs MANY syntheses in ONE beaker AT A TIME (9.6). The beaker is
+ *   partitioned into reaction membranes that share the same soup: each
+ *   compartment runs its own synthesis with its own rate, and because the
+ *   compartments are nested inside one another the kinetics are FRACTAL —
+ *   the product of an outer reaction is the reagent of an inner one, so a
+ *   single stirring drives a whole self-similar cascade of syntheses in
+ *   parallel. Reaction rates follow the prime pattern: a compartment fires
+ *   only when its prime-count of reagent quanta is met, so many different
+ *   rate laws coexist in the same beaker without interfering.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — reagent multiplicities reagent*N are the
+ *                                  prime counts that set each rate law
+ *
  * Traceability: src/cpp/nanobrain_brain_jelly.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ *               (FractalCondensation.compute_field — the shared reaction
+ *                field; BioMorphicDeviceRegistry.propagate_signals — the
+ *                parallel compartment updates in one step)
+ * Initial multiset: one stir and shared soup in the skin; reagents in every
+ *                   compartment, so the simulator runs >= 1 step everywhere.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'beaker_a []'beaker_b []'beaker_c ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure (one beaker, many nested reactions):
+ *   skin (the beaker wall, holding the shared soup)
+ *     '- synth_a : an outer synthesis (rate set by reagent*2)
+ *     |    '- synth_a1 : an inner synthesis fed by A's product (rate *3)
+ *     |         '- synth_a11 : the deepest cascade step (rate *5)
+ *     '- synth_b : an independent parallel synthesis in the same beaker
+ * ------------------------------------------------------------------------*/
+@mu = [ [ [ []'synth_a11 ]'synth_a1 ]'synth_a
+        []'synth_b ]'skin;
 
-@mskin = seed;
-@mbeaker_a = unit(beaker_a), fuel;
-@mbeaker_b = unit(beaker_b), fuel;
-@mbeaker_c = unit(beaker_c), fuel;
+/* Sample initial multiset. */
+@mskin      = stir, soup;
+@msynth_a   = reagent*2, enzyme(a);
+@msynth_a1  = enzyme(a1);
+@msynth_a11 = enzyme(a11);
+@msynth_b   = reagent*3, enzyme(b);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * One stirring drives them all.
+ * stir_in  : the stir broadcasts activation into every compartment at once —
+ *            many syntheses, one beaker, one step
+ * react_a  : outer synthesis, rate law of 2 reagent quanta per firing;
+ *            its product is BOTH a result and the reagent of the inner
+ *            cascade (the fractal hand-off)
+ * cascade  : the product dives into the inner compartment to feed it
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_beaker_a ]'skin;
-[seed_dispense : seed --> (work)in_beaker_b ]'skin;
-[seed_dispense : seed --> (work)in_beaker_c ]'skin;
-[step : work * unit(beaker_a) * fuel --> done(beaker_a) ]'beaker_a;
-[step : work * unit(beaker_b) * fuel --> done(beaker_b) ]'beaker_b;
-[step : work * unit(beaker_c) * fuel --> done(beaker_c) ]'beaker_c;
-[report : done(beaker_a) --> (result(beaker_a))out ]'beaker_a;
-[report : done(beaker_b) --> (result(beaker_b))out ]'beaker_b;
-[report : done(beaker_c) --> (result(beaker_c))out ]'beaker_c;
+[stir_in : stir --> (activation)in_synth_a * (activation)in_synth_b ]'skin;
+
+[react_a : activation * enzyme(a) * reagent*2
+        --> enzyme(a) * product(a) * product(a) ]'synth_a;
+[cascade : product(a) --> (reagent)in_synth_a1 ]'synth_a;
+
+/* Inner cascade: the inner reaction fires on the prime count of reagents it
+ * receives from its parent — its own rate law, coexisting in the beaker. */
+[react_a1 : enzyme(a1) * reagent*3
+         --> enzyme(a1) * product(a1) * reagent ]'synth_a1;
+[hand_down : reagent --> (reagent)in_synth_a11 ]'synth_a1;
+[react_a11 : enzyme(a11) * reagent*5
+          --> enzyme(a11) * product(a11) ]'synth_a11;
+
+/* Independent parallel synthesis, same beaker, its own prime rate law: */
+[react_b : activation * enzyme(b) * reagent*3
+        --> enzyme(b) * product(b) ]'synth_b;
+
+/* --------------------------------------------------------------------------
+ * The products surface together: many syntheses completed in one beaker at
+ * a time.
+ * ------------------------------------------------------------------------*/
+[surface : product(a11) --> (product(a11))out ]'synth_a11;
+[surface : product(a1)  --> (product(a1))out ]'synth_a1;
+[surface : product(a)   --> (product(a))out ]'synth_a;
+[surface : product(b)   --> (product(b))out ]'synth_b;
+
+[many_in_one : product(a) * product(a1) * product(a11) * product(b) * soup
+            --> soup * fractal_kinetics(one_beaker) ]'skin;
