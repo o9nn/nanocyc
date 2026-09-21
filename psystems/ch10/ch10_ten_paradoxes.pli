@@ -1,66 +1,163 @@
 /* ============================================================================
  * psystems/ch10/ch10_ten_paradoxes.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.3
- * Functionality: Ten paradoxes that would change our thoughts forever, as constraint-satisfaction rule sets.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.3 — Ten paradoxes that would change our thoughts forever.
+ *
+ * Functionality: The journey from the neurogenic brain model to the
+ *   time-crystal brain model forces ten paradoxes (the twelve of the text
+ *   ordered as ten constraint sets for the build). Each paradox is a
+ *   CONSTRAINT-SATISFACTION membrane: it holds a law, receives a claim,
+ *   and DISSOLVES the claim into a resolution — not by choosing true/false
+ *   but by holding both sides in one time crystal:
+ *     p1  trumpet-paint time-cycle    — a cycle paints its own trumpet:
+ *                                         the pattern is the instrument.
+ *     p2  infinite reality spheres    — every sphere holds a network of
+ *                                         spheres; no outermost sphere.
+ *     p3  resonance drive             — the density of the resonance chain,
+ *                                         not logic, drives decisions.
+ *     p4  number-system saturation    — a metric derived from numbers
+ *                                         saturates; primes outlive integers.
+ *     p5  observer-absolute           — on a fractal tape the observer is
+ *                                         inside the observed.
+ *     p6  infinity-mechanics          — quantum is a local view; fractal
+ *                                         mechanics harvests the infinite.
+ *     p7  quest paradox               — the ten cultural quests are answered
+ *                                         by abandoning the quest for logic.
+ *     p8  cycle non-reductionism      — a cycle cannot be reduced to its
+ *                                         steps; the whole turns at once.
+ *     p9  equation-inequality-fractal — equations are inequalities inside a
+ *                                         fractal; patterns replace equations.
+ *     p10 illogical decision-making   — nonsense decides: illogical paths
+ *                                         make sense without logic.
+ *   A resolved paradox does not vanish: it is kept as a HELD constraint and
+ *   the ten held constraints together rewire thought forever.
+ *
+ *   Common modules inlined by convention:
+ *     common/pln_truth.pli         — claims carry strength/confidence; a
+ *                                    paradox is solved by REVISION of two
+ *                                    contradictory truth values, not deletion
+ *     common/time_crystal_core.pli — both sides of a paradox coexist as two
+ *                                    phases of one time crystal
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessTestSuite::test_paradox_resolution —
+ *                self-referential paradoxes must keep coherence;
+ *                ConsciousnessTestMetrics.paradox_resolution_passed)
+ * Initial multiset: ten claims in the skin and one law in every paradox
+ *                   membrane — the simulator runs >= 1 step in every
+ *                   membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'paradox_1 []'paradox_2 []'paradox_3 []'paradox_4 []'paradox_5 []'paradox_6 []'paradox_7 []'paradox_8 []'paradox_9 []'paradox_10 ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the desk of claims)
+ *     '- p1_trumpet    : cycle paints its trumpet
+ *     '- p2_spheres    : infinite network of reality spheres
+ *     '- p3_resonance  : resonance-drive paradox
+ *     '- p4_numbers    : number-system metric and its saturation
+ *     '- p5_observer   : observer-absolute paradox
+ *     '- p6_infinity   : infinity-mechanics paradox
+ *     '- p7_quest      : paradox of quest
+ *     '- p8_cycle      : cycle-non-reductionist paradox
+ *     '- p9_equation   : equation-inequality-fractal paradox
+ *     '- p10_illogical : illogical, nonsense decision-making
+ * ------------------------------------------------------------------------*/
+@mu = [ []'p1_trumpet []'p2_spheres []'p3_resonance []'p4_numbers
+        []'p5_observer []'p6_infinity []'p7_quest []'p8_cycle
+        []'p9_equation []'p10_illogical ]'skin;
 
-@mskin = seed;
-@mparadox_1 = unit(paradox_1), fuel;
-@mparadox_2 = unit(paradox_2), fuel;
-@mparadox_3 = unit(paradox_3), fuel;
-@mparadox_4 = unit(paradox_4), fuel;
-@mparadox_5 = unit(paradox_5), fuel;
-@mparadox_6 = unit(paradox_6), fuel;
-@mparadox_7 = unit(paradox_7), fuel;
-@mparadox_8 = unit(paradox_8), fuel;
-@mparadox_9 = unit(paradox_9), fuel;
-@mparadox_10 = unit(paradox_10), fuel;
+/* Sample initial multiset. */
+@mskin = claim(p1), claim(p2), claim(p3), claim(p4), claim(p5),
+         claim(p6), claim(p7), claim(p8), claim(p9), claim(p10);
+@mp1_trumpet    = law(cycle_paints_trumpet);
+@mp2_spheres    = law(no_outermost_sphere);
+@mp3_resonance  = law(density_drives);
+@mp4_numbers    = law(primes_outlive_integers);
+@mp5_observer   = law(observer_inside_observed);
+@mp6_infinity   = law(harvest_infinite);
+@mp7_quest      = law(abandon_logic_quest);
+@mp8_cycle      = law(whole_turns_at_once);
+@mp9_equation   = law(patterns_replace_equations);
+@mp10_illogical = law(nonsense_decides);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.3  Ten constraint-satisfaction membranes.
+ * confront_N : the skin sends claim N into its paradox membrane
+ * dissolve_N : the claim meets the law — the law is a CATALYST (never
+ *              consumed); the claim is not falsified but DISSOLVED into a
+ *              resolution that holds both sides in one crystal
+ * hold_N     : the resolution surfaces to the skin as a held constraint
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_paradox_1 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_2 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_3 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_4 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_5 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_6 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_7 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_8 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_9 ]'skin;
-[seed_dispense : seed --> (work)in_paradox_10 ]'skin;
-[step : work * unit(paradox_1) * fuel --> done(paradox_1) ]'paradox_1;
-[step : work * unit(paradox_2) * fuel --> done(paradox_2) ]'paradox_2;
-[step : work * unit(paradox_3) * fuel --> done(paradox_3) ]'paradox_3;
-[step : work * unit(paradox_4) * fuel --> done(paradox_4) ]'paradox_4;
-[step : work * unit(paradox_5) * fuel --> done(paradox_5) ]'paradox_5;
-[step : work * unit(paradox_6) * fuel --> done(paradox_6) ]'paradox_6;
-[step : work * unit(paradox_7) * fuel --> done(paradox_7) ]'paradox_7;
-[step : work * unit(paradox_8) * fuel --> done(paradox_8) ]'paradox_8;
-[step : work * unit(paradox_9) * fuel --> done(paradox_9) ]'paradox_9;
-[step : work * unit(paradox_10) * fuel --> done(paradox_10) ]'paradox_10;
-[report : done(paradox_1) --> (result(paradox_1))out ]'paradox_1;
-[report : done(paradox_2) --> (result(paradox_2))out ]'paradox_2;
-[report : done(paradox_3) --> (result(paradox_3))out ]'paradox_3;
-[report : done(paradox_4) --> (result(paradox_4))out ]'paradox_4;
-[report : done(paradox_5) --> (result(paradox_5))out ]'paradox_5;
-[report : done(paradox_6) --> (result(paradox_6))out ]'paradox_6;
-[report : done(paradox_7) --> (result(paradox_7))out ]'paradox_7;
-[report : done(paradox_8) --> (result(paradox_8))out ]'paradox_8;
-[report : done(paradox_9) --> (result(paradox_9))out ]'paradox_9;
-[report : done(paradox_10) --> (result(paradox_10))out ]'paradox_10;
+[confront_1 : claim(p1) --> (claim(p1))in_p1_trumpet ]'skin;
+[dissolve_1 : claim(p1) * law(cycle_paints_trumpet)
+           --> law(cycle_paints_trumpet) * resolution(p1, both_sides)
+           ]'p1_trumpet;
+[hold_1 : resolution(p1, both_sides) --> (held(p1))out ]'p1_trumpet;
+
+[confront_2 : claim(p2) --> (claim(p2))in_p2_spheres ]'skin;
+[dissolve_2 : claim(p2) * law(no_outermost_sphere)
+           --> law(no_outermost_sphere) * resolution(p2, both_sides)
+           ]'p2_spheres;
+[hold_2 : resolution(p2, both_sides) --> (held(p2))out ]'p2_spheres;
+
+[confront_3 : claim(p3) --> (claim(p3))in_p3_resonance ]'skin;
+[dissolve_3 : claim(p3) * law(density_drives)
+           --> law(density_drives) * resolution(p3, both_sides)
+           ]'p3_resonance;
+[hold_3 : resolution(p3, both_sides) --> (held(p3))out ]'p3_resonance;
+
+[confront_4 : claim(p4) --> (claim(p4))in_p4_numbers ]'skin;
+[dissolve_4 : claim(p4) * law(primes_outlive_integers)
+           --> law(primes_outlive_integers) * resolution(p4, both_sides)
+           ]'p4_numbers;
+[hold_4 : resolution(p4, both_sides) --> (held(p4))out ]'p4_numbers;
+
+[confront_5 : claim(p5) --> (claim(p5))in_p5_observer ]'skin;
+[dissolve_5 : claim(p5) * law(observer_inside_observed)
+           --> law(observer_inside_observed) * resolution(p5, both_sides)
+           ]'p5_observer;
+[hold_5 : resolution(p5, both_sides) --> (held(p5))out ]'p5_observer;
+
+[confront_6 : claim(p6) --> (claim(p6))in_p6_infinity ]'skin;
+[dissolve_6 : claim(p6) * law(harvest_infinite)
+           --> law(harvest_infinite) * resolution(p6, both_sides)
+           ]'p6_infinity;
+[hold_6 : resolution(p6, both_sides) --> (held(p6))out ]'p6_infinity;
+
+[confront_7 : claim(p7) --> (claim(p7))in_p7_quest ]'skin;
+[dissolve_7 : claim(p7) * law(abandon_logic_quest)
+           --> law(abandon_logic_quest) * resolution(p7, both_sides)
+           ]'p7_quest;
+[hold_7 : resolution(p7, both_sides) --> (held(p7))out ]'p7_quest;
+
+[confront_8 : claim(p8) --> (claim(p8))in_p8_cycle ]'skin;
+[dissolve_8 : claim(p8) * law(whole_turns_at_once)
+           --> law(whole_turns_at_once) * resolution(p8, both_sides)
+           ]'p8_cycle;
+[hold_8 : resolution(p8, both_sides) --> (held(p8))out ]'p8_cycle;
+
+[confront_9 : claim(p9) --> (claim(p9))in_p9_equation ]'skin;
+[dissolve_9 : claim(p9) * law(patterns_replace_equations)
+           --> law(patterns_replace_equations) * resolution(p9, both_sides)
+           ]'p9_equation;
+[hold_9 : resolution(p9, both_sides) --> (held(p9))out ]'p9_equation;
+
+[confront_10 : claim(p10) --> (claim(p10))in_p10_illogical ]'skin;
+[dissolve_10 : claim(p10) * law(nonsense_decides)
+            --> law(nonsense_decides) * resolution(p10, both_sides)
+            ]'p10_illogical;
+[hold_10 : resolution(p10, both_sides) --> (held(p10))out ]'p10_illogical;
+
+/* --------------------------------------------------------------------------
+ * The ten held constraints rewire thought: paradoxes are not errors to
+ * erase but the ten load-bearing constraints of the time-crystal mind.
+ * ------------------------------------------------------------------------*/
+[rewire : held(p1) * held(p2) * held(p3) * held(p4) * held(p5)
+        * held(p6) * held(p7) * held(p8) * held(p9) * held(p10)
+        --> thoughts_changed_forever(ten_paradoxes_held) ]'skin;

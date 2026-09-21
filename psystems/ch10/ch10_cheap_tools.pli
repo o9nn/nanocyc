@@ -1,30 +1,128 @@
 /* ============================================================================
  * psystems/ch10/ch10_cheap_tools.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.9
- * Functionality: Playing with cheap handy tools to break the paradigm of thoughts.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.9 — Playing with cheap, handy tools to break the paradigm
+ *                  of thoughts.
+ *
+ * Functionality: The paradigm of thought was not broken by a giant machine
+ *   but by CHEAP, HANDY tools (10.9, Figure 10.8): (t1) the dual patch-clamp
+ *   and coaxial probe that saw neuron firing as an outcome of microtubule
+ *   signals deep below; (t2) the time-crystal analyzer simulator that
+ *   detected time crystals; (t3) the quantum-cloaking setup by which, in a
+ *   random mess of fourth-circuit elements, only the desired devices see
+ *   each other; (t4) the modified quantum-entanglement setup that made
+ *   magnetic vortices visible; (t5) the antenna that regulates the organic
+ *   nano brain. Each tool is a workbench membrane: an observation enters,
+ *   the tool's trick (a CATALYST) turns it into a breakthrough datum, and
+ *   the data accumulate into the new paradigm. The final workshop rule is
+ *   the DIY promise of the section: anyone can build the kit, and every
+ *   pass of the kit raises reliability — 50% to 66% to 72% ... toward 99% —
+ *   zooming the unknown, never absolutely, always closer.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the analyzer's time crystals and the
+ *                                    vortices' magnetic-light clocks
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessTestSuite::test_guideline_7_pattern_recognition
+ *                and test_guideline_9_integration — recognition and
+ *                integration scored from instrument-grade observations;
+ *                ConsciousnessTestMetrics.overall_score — the reliability
+ *                ramp made metric)
+ * Initial multiset: five raw observations in the skin and one tool trick in
+ *                   every workbench membrane — the simulator runs >= 1 step
+ *                   in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'tools ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the hobbyist's desk)
+ *     '- t1_patch_coaxial : patch-clamp + coaxial probe — firing from below
+ *     '- t2_tc_analyzer   : time-crystal analyzer — detecting crystals
+ *     '- t3_cloaking      : quantum cloaking — desired devices see each other
+ *     '- t4_vortex_viewer : entanglement setup — seeing magnetic vortices
+ *     '- t5_antenna       : antenna — regulating the organic nano brain
+ *     '- workshop : the DIY kit where the breakthroughs accumulate
+ * ------------------------------------------------------------------------*/
+@mu = [ []'t1_patch_coaxial []'t2_tc_analyzer []'t3_cloaking
+        []'t4_vortex_viewer []'t5_antenna []'workshop ]'skin;
 
-@mskin = seed;
-@mtools = unit(tools), fuel;
+/* Sample initial multiset. */
+@mskin = observation(o1), observation(o2), observation(o3),
+         observation(o4), observation(o5), diy_kit;
+@mt1_patch_coaxial = trick(dual_probe);
+@mt2_tc_analyzer   = trick(crystal_detection);
+@mt3_cloaking      = trick(selective_visibility);
+@mt4_vortex_viewer = trick(entanglement_readout);
+@mt5_antenna       = trick(remote_regulation);
+@mworkshop         = reliability(50);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.9  Five cheap, handy tools.
+ * bench_N : the desk sends observation N to its workbench
+ * break_N : the tool's trick (a CATALYST — the instrument is not consumed
+ *           by the measurement) turns the raw observation into a
+ *           breakthrough datum
+ * ship_N  : the datum is sent out to the desk
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_tools ]'skin;
-[step : work * unit(tools) * fuel --> done(tools) ]'tools;
-[report : done(tools) --> (result(tools))out ]'tools;
+[bench_1 : observation(o1) --> (observation(o1))in_t1_patch_coaxial ]'skin;
+[break_1 : observation(o1) * trick(dual_probe)
+        --> trick(dual_probe) * datum(firing_from_microtubules)
+        ]'t1_patch_coaxial;
+[ship_1 : datum(firing_from_microtubules)
+       --> (breakthrough(b1))out ]'t1_patch_coaxial;
+
+[bench_2 : observation(o2) --> (observation(o2))in_t2_tc_analyzer ]'skin;
+[break_2 : observation(o2) * trick(crystal_detection)
+        --> trick(crystal_detection) * datum(time_crystal_detected)
+        ]'t2_tc_analyzer;
+[ship_2 : datum(time_crystal_detected) --> (breakthrough(b2))out
+       ]'t2_tc_analyzer;
+
+[bench_3 : observation(o3) --> (observation(o3))in_t3_cloaking ]'skin;
+[break_3 : observation(o3) * trick(selective_visibility)
+        --> trick(selective_visibility) * datum(devices_see_each_other)
+        ]'t3_cloaking;
+[ship_3 : datum(devices_see_each_other) --> (breakthrough(b3))out
+       ]'t3_cloaking;
+
+[bench_4 : observation(o4) --> (observation(o4))in_t4_vortex_viewer ]'skin;
+[break_4 : observation(o4) * trick(entanglement_readout)
+        --> trick(entanglement_readout) * datum(magnetic_vortices_seen)
+        ]'t4_vortex_viewer;
+[ship_4 : datum(magnetic_vortices_seen) --> (breakthrough(b4))out
+       ]'t4_vortex_viewer;
+
+[bench_5 : observation(o5) --> (observation(o5))in_t5_antenna ]'skin;
+[break_5 : observation(o5) * trick(remote_regulation)
+        --> trick(remote_regulation) * datum(nanobrain_regulated)
+        ]'t5_antenna;
+[ship_5 : datum(nanobrain_regulated) --> (breakthrough(b5))out ]'t5_antenna;
+
+/* --------------------------------------------------------------------------
+ * 10.9  The DIY workshop: accumulate the breakthroughs, climb the
+ *       reliability ramp.
+ * collect  : the workshop receives each breakthrough
+ * ramp     : every breakthrough raises reliability — the unknown is zoomed
+ *            step by step (50 -> 66 -> 72 -> 76 -> ... -> <99)
+ * paradigm : the accumulated breakthroughs plus the kit break the paradigm
+ *            of thoughts — cheap tools, new science
+ * ------------------------------------------------------------------------*/
+[collect : breakthrough(B) --> (breakthrough(B))in_workshop ]'skin;
+[ramp : breakthrough(B) * reliability(50)
+      --> reliability(66) * accumulated(B) ]'workshop;
+[paradigm : accumulated(B) * reliability(66)
+         --> reliability(66) * (paradigm_broken(thoughts))out ]'workshop;
+
+/* --------------------------------------------------------------------------
+ * The desk certifies: five handy instruments plus one DIY kit broke the
+ * paradigm — the total picture arrives at once and keeps refining.
+ * ------------------------------------------------------------------------*/
+[certify : paradigm_broken(thoughts) * diy_kit
+         --> cheap_tools_new_science(reliability_ramp) ]'skin;

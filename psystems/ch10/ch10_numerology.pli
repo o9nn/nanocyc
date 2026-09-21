@@ -1,30 +1,95 @@
 /* ============================================================================
  * psystems/ch10/ch10_numerology.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.10
- * Functionality: Numerology of human consciousness as prime-pattern correspondences.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.10 — Numerology of human consciousness.
+ *
+ * Functionality: The numbers that recur through the brain adventure are
+ *   PRIME-PATTERN correspondences (10.10): 23 tonal patterns in the 10552
+ *   verses of the Rig Veda; 47 notable sound frequencies (48 letters with
+ *   Om) carrying the Sanskrit matrix-vector word transforms; rhythm packets
+ *   of 7 notes sung low-to-high and high-to-low; 17-tune loops in 18-bit
+ *   cycles; every prime up to 47 of the form 6n +/- 1; the 2-3-5
+ *   arithmetic-geometric-harmonic series. In this model each numerological
+ *   token is REDUCED to its digital root (the consciousness number) and
+ *   then CORRESPONDED to its prime band: the coherence of all
+ *   correspondences is the numerological coherence of the conscious state.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — the prime bands the numbers fall into
+ *                                 (2, 3, 5, 7 ... 47)
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (BrainEvolutionSimulator::compute_consciousness_numbers,
+ *                reduce_to_single_digit, get_numerological_coherence;
+ *                EvolutionaryState.consciousness_numbers,
+ *                numerological_coherence)
+ * Initial multiset: the numerology tokens (23, 47, 7, 17, 2, 3, 5) in the
+ *                   skin, the reducer and the correspondence desk ready —
+ *                   the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'numerology ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the ledger of sacred numbers)
+ *     '- reducer : digital-root reducer — numbers to consciousness numbers
+ *     '- bands   : the prime-band correspondence desk
+ * ------------------------------------------------------------------------*/
+@mu = [ []'reducer []'bands ]'skin;
 
-@mskin = seed;
-@mnumerology = unit(numerology), fuel;
+/* Sample initial multiset. */
+@mskin    = token(23), token(47), token(7), token(17),
+            series(2,3,5), packet(6n_plus_minus_1);
+@mreducer = digit_sieve;
+@mbands   = band(2), band(3), band(5), band(7), band(11), band(13),
+            band(17), band(19), band(23);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.10  Reduction: every numerological token becomes a consciousness
+ *        number (digital root, as in reduce_to_single_digit).
+ * intake : a token enters the reducer
+ * reduce : the digit sieve reduces the token to its root number — the sieve
+ *          is a CATALYST (it reduces forever)
+ * emit   : the root number leaves for the band desk
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_numerology ]'skin;
-[step : work * unit(numerology) * fuel --> done(numerology) ]'numerology;
-[report : done(numerology) --> (result(numerology))out ]'numerology;
+[intake : token(N) --> (token(N))in_reducer ]'skin;
+[intake_s : series(A,B,C) --> (series(A,B,C))in_reducer ]'skin;
+[intake_p : packet(F) --> (packet(F))in_reducer ]'skin;
+
+[reduce_t : token(N) * digit_sieve
+         --> digit_sieve * root(N) ]'reducer;
+[reduce_s : series(A,B,C) * digit_sieve
+         --> digit_sieve * root(series_235) ]'reducer;
+[reduce_p : packet(F) * digit_sieve
+         --> digit_sieve * root(prime_form) ]'reducer;
+
+[emit_t : root(N) --> (number(N))out ]'reducer;
+[emit_s : root(series_235) --> (number(series_235))out ]'reducer;
+[emit_p : root(prime_form) --> (number(prime_form))out ]'reducer;
+
+/* --------------------------------------------------------------------------
+ * 10.10  Correspondence: every consciousness number is filed into its
+ *        prime band — the numerology is a prime-pattern correspondence.
+ * file    : the skin files a number into the band desk
+ * correspond: a number and a matching band correspond — the band is a
+ *          CATALYST (bands are never spent)
+ * cohere  : correspondences accumulate into numerological coherence
+ * ------------------------------------------------------------------------*/
+[file : number(N) --> (number(N))in_bands ]'skin;
+[correspond : number(N) * band(B)
+           --> band(B) * correspondence(N, B) ]'bands;
+[cohere : correspondence(N, B) * correspondence(M, C)
+        --> coherence(pair) ]'bands;
+[publish : coherence(pair) --> (coherence(pair))out ]'bands;
+
+/* --------------------------------------------------------------------------
+ * The ledger certifies: the sacred numbers of the tradition are the prime
+ * bands of the brain — numerology of human consciousness, coherent.
+ * ------------------------------------------------------------------------*/
+[certify : coherence(pair)
+         --> numerology_of_consciousness(prime_correspondence) ]'skin;

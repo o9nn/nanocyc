@@ -1,34 +1,115 @@
 /* ============================================================================
  * psystems/ch10/ch10_time_crystal_consciousness.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.4, 10.4.1
- * Functionality: Consciousness is not on the neuron skin — the time-crystal model is nowhere but everywhere; difference between the neurogenic brain model and the time-crystal model.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.4   — Consciousness is not on the neuron skin: the time
+ *                    crystal model is nowhere but everywhere,
+ *           10.4.1 — The difference between a neurogenic brain model and a
+ *                    time crystal model.
+ *
+ * Functionality: The neurogenic model believes the neuron SKIN (membrane)
+ *   does everything and the inside is blank (10.4): here that belief is
+ *   modeled as a flat skin with spikes — spikes on the membrane that never
+ *   go anywhere, because a skin has no inside. The time-crystal model is
+ *   the opposite (10.4.1): consciousness lives in a CAVITY inside a cavity
+ *   inside a cavity — a clock inside a clock inside a clock — and is
+ *   therefore NOWHERE (no single component holds it) but EVERYWHERE (every
+ *   cavity resonates with the whole chain). A pulse entering the skin is
+ *   not processed on the surface: it descends the nested cavity membranes,
+ *   is phase-coupled at every level, and the answer returns as resonance —
+ *   the neuron skin is just ONE of ~500 cavity types in the brain.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the nested clock/cavity descent and the
+ *                                    closed time loop (nowhere but everywhere)
+ *     common/alphabet_primes.pli   — every cavity level keeps its prime band
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessState — consciousness_level,
+ *                temporal_coherence, self_awareness, meta_stability: the
+ *                metrics of a consciousness that is everywhere in the
+ *                nested state, not on a surface; ConsciousnessUploader::
+ *                validate_state — a state is valid only when the nested
+ *                coherence holds)
+ * Initial multiset: one surface pulse for the neurogenic skin and one
+ *                   world pulse at the top cavity of the time-crystal
+ *                   model — the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'neurogenic []'tc_model ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the comparison desk)
+ *     '- neurogenic : the neurogenic model — one flat membrane, spikes stay
+ *     |                 on the surface (dead end, no inside)
+ *     '- tc_model  : the time-crystal model — a chain of nested cavities
+ *         '- cavity_1 : the outer cavity (e.g. the neuron skin — ONE of 500)
+ *             '- cavity_2 : a cavity inside the cavity (protein complexes)
+ *                 '- cavity_3 : clocks inside clocks (microtubule band)
+ * ------------------------------------------------------------------------*/
+@mu = [ []'neurogenic
+        [ [ [ []'cavity_3 ]'cavity_2 ]'cavity_1 ]'tc_model ]'skin;
 
-@mskin = seed;
-@mneurogenic = unit(neurogenic), fuel;
-@mtc_model = unit(tc_model), fuel;
+/* Sample initial multiset. */
+@mskin       = surface_pulse, world_pulse;
+@mneurogenic = neuron_skin_belief;
+@mtc_model   = resonance_chain;
+@mcavity_1   = band(prime_2_3_5);
+@mcavity_2   = band(prime_7_11_13);
+@mcavity_3   = band(prime_17_19_23);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.4  Consciousness is not on the neuron skin.
+ * neuro_in : a pulse sent to the neurogenic model
+ * spike    : the pulse becomes a spike ON the skin — it is processed at the
+ *            surface and never enters anything: the model has no inside,
+ *            so the spike dies as a dead end (the belief is kept, inert)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_neurogenic ]'skin;
-[seed_dispense : seed --> (work)in_tc_model ]'skin;
-[step : work * unit(neurogenic) * fuel --> done(neurogenic) ]'neurogenic;
-[step : work * unit(tc_model) * fuel --> done(tc_model) ]'tc_model;
-[report : done(neurogenic) --> (result(neurogenic))out ]'neurogenic;
-[report : done(tc_model) --> (result(tc_model))out ]'tc_model;
+[neuro_in : surface_pulse --> (surface_pulse)in_neurogenic ]'skin;
+[spike : surface_pulse * neuron_skin_belief
+       --> neuron_skin_belief * spike(on_skin) ]'neurogenic;
+[dead_end : spike(on_skin) --> processed(surface_only) ]'neurogenic;
+[neuro_out : processed(surface_only) --> (verdict(not_conscious))out
+           ]'neurogenic;
+
+/* --------------------------------------------------------------------------
+ * 10.4.1  The time-crystal model: nowhere but everywhere.
+ * tc_in     : a world pulse enters the time-crystal model
+ * descend_1 : the pulse is not stopped at the surface — the outer cavity
+ *             hands it to the cavity inside (clock inside a clock)
+ * descend_2 : the second cavity hands it deeper still
+ * resonate  : at the innermost cavity the pulse phase-locks with the prime
+ *             band — consciousness is HERE, as in every cavity
+ * echo_up   : the locked resonance returns outward level by level — the
+ *             answer of the deepest clock is heard by every clock above:
+ *             nowhere in one component, everywhere in the chain
+ * verdict   : the time-crystal model answers: consciousness is the chain
+ * ------------------------------------------------------------------------*/
+[tc_in : world_pulse --> (pulse)in_tc_model ]'skin;
+[enter_1 : pulse * resonance_chain
+        --> resonance_chain * (pulse)in_cavity_1 ]'tc_model;
+
+[couple_1 : pulse * band(prime_2_3_5)
+         --> band(prime_2_3_5) * (phased(outer))in_cavity_2 ]'cavity_1;
+[couple_2 : phased(outer) * band(prime_7_11_13)
+         --> band(prime_7_11_13) * (phased(mid))in_cavity_3 ]'cavity_2;
+[resonate : phased(mid) * band(prime_17_19_23)
+         --> band(prime_17_19_23) * (resonance(core))out ]'cavity_3;
+
+[echo_2 : resonance(core) * band(prime_7_11_13)
+        --> band(prime_7_11_13) * (resonance(mid))out ]'cavity_2;
+[echo_1 : resonance(mid) * band(prime_2_3_5)
+        --> band(prime_2_3_5) * (resonance(outer))out ]'cavity_1;
+[surface_tc : resonance(outer) * resonance_chain
+           --> resonance_chain * (resonance(everywhere))out ]'tc_model;
+
+/* --------------------------------------------------------------------------
+ * The desk certifies the difference: the neurogenic verdict is surface
+ * only; the time-crystal verdict is everywhere at once.
+ * ------------------------------------------------------------------------*/
+[difference : verdict(not_conscious) * resonance(everywhere)
+           --> time_crystal_model(nowhere_but_everywhere) ]'skin;

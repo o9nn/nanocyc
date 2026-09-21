@@ -1,34 +1,149 @@
 /* ============================================================================
  * psystems/ch10/ch10_carry_and_build.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.5
- * Functionality: When should we carry it, why do we make it: motivation and deployment decision rules.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.5 — When should we carry it, why do we make it.
+ *
+ * Functionality: Motivation and deployment decision rules (Figure 10.4).
+ *   WHEN to carry the artificial brain — ten situations in which a Turing
+ *   computer FAILS and non-computing is essential: (w1) information is not
+ *   sufficient or organized to frame logic; (w2) no time to find the rules
+ *   — an instant reply is urged; (w3) rejection of choices is not advisable
+ *   — rejected choices may take the lead anytime; (w4) the database is too
+ *   big to structure — search without searching; (w5) no megawatt supply —
+ *   thermal and electrical noise are the only energy sources; (w6) the
+ *   system speaks an unknown language; (w7) the real parameters must be
+ *   learned — the black-box approach is rejected; (w8) parameters are born,
+ *   disappear and redefine themselves chaotically; (w9) undefinable factors
+ *   govern — logic inside logic inside logic, endlessly; (w10) computing
+ *   reduces choices while morphing increases them — output exceeds input.
+ *   WHY we make it: to develop a science of NON-COMPUTING — decisions
+ *   where the architecture of confusion operates. Each situation is a
+ *   deployment membrane: a situation token admitted by its membrane votes
+ *   one unit of necessity; a single vote already justifies carrying the
+ *   brain, and the WHY membrane turns the votes into the deployment
+ *   decision.
+ *
+ *   Common modules inlined by convention:
+ *     common/ecan_attention.pli — the necessity votes behave like STI
+ *                                 tokens: paid by the situations, collected
+ *                                 by the decision membrane
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessUploader::is_upload_ready,
+ *                get_readiness_score — the carry/deploy decision and its
+ *                score; ConsciousnessStatus.Ready)
+ * Initial multiset: ten situation tokens in the skin and one gate object in
+ *                   every situation membrane — the simulator runs >= 1 step
+ *                   in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'when []'why ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the world that poses the situations)
+ *     '- w1_no_logic        : information too poor to frame logic
+ *     '- w2_no_time         : instant reply required
+ *     '- w3_no_rejection    : no choice may be rejected
+ *     '- w4_too_big         : database too big — search without searching
+ *     '- w5_no_power        : noise is the only energy source
+ *     '- w6_unknown_language: an unknown language is spoken
+ *     '- w7_no_blackbox     : real parameters must be learned
+ *     '- w8_chaos           : parameters are born and die chaotically
+ *     '- w9_undefinable     : logic inside logic inside logic
+ *     '- w10_morphing       : output more than input
+ *     '- why : the motivation — collects the votes, decides deployment
+ * ------------------------------------------------------------------------*/
+@mu = [ []'w1_no_logic []'w2_no_time []'w3_no_rejection []'w4_too_big
+        []'w5_no_power []'w6_unknown_language []'w7_no_blackbox []'w8_chaos
+        []'w9_undefinable []'w10_morphing []'why ]'skin;
 
-@mskin = seed;
-@mwhen = unit(when), fuel;
-@mwhy = unit(why), fuel;
+/* Sample initial multiset. */
+@mskin = situation(w1), situation(w2), situation(w3), situation(w4),
+         situation(w5), situation(w6), situation(w7), situation(w8),
+         situation(w9), situation(w10);
+@mw1_no_logic         = gate(logic_unframable);
+@mw2_no_time          = gate(instant_reply);
+@mw3_no_rejection     = gate(all_choices_kept);
+@mw4_too_big          = gate(search_without_searching);
+@mw5_no_power         = gate(noise_is_energy);
+@mw6_unknown_language = gate(unknown_tongue);
+@mw7_no_blackbox      = gate(learn_real_parameters);
+@mw8_chaos            = gate(born_die_redefine);
+@mw9_undefinable      = gate(endless_logic_nesting);
+@mw10_morphing        = gate(output_exceeds_input);
+@mwhy = motivation(non_computing_science);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.5  When should we carry it.
+ * admit_N : the skin admits situation N into its situation membrane
+ * vote_N  : the situation meets its gate — the gate is a CATALYST (the
+ *           condition persists) — and the situation becomes a necessity
+ *           vote for carrying the brain
+ * collect : the why membrane receives every vote
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_when ]'skin;
-[seed_dispense : seed --> (work)in_why ]'skin;
-[step : work * unit(when) * fuel --> done(when) ]'when;
-[step : work * unit(why) * fuel --> done(why) ]'why;
-[report : done(when) --> (result(when))out ]'when;
-[report : done(why) --> (result(why))out ]'why;
+[admit_1 : situation(w1) --> (situation(w1))in_w1_no_logic ]'skin;
+[vote_1 : situation(w1) * gate(logic_unframable)
+       --> gate(logic_unframable) * (necessity(w1))out ]'w1_no_logic;
+
+[admit_2 : situation(w2) --> (situation(w2))in_w2_no_time ]'skin;
+[vote_2 : situation(w2) * gate(instant_reply)
+       --> gate(instant_reply) * (necessity(w2))out ]'w2_no_time;
+
+[admit_3 : situation(w3) --> (situation(w3))in_w3_no_rejection ]'skin;
+[vote_3 : situation(w3) * gate(all_choices_kept)
+       --> gate(all_choices_kept) * (necessity(w3))out ]'w3_no_rejection;
+
+[admit_4 : situation(w4) --> (situation(w4))in_w4_too_big ]'skin;
+[vote_4 : situation(w4) * gate(search_without_searching)
+       --> gate(search_without_searching) * (necessity(w4))out ]'w4_too_big;
+
+[admit_5 : situation(w5) --> (situation(w5))in_w5_no_power ]'skin;
+[vote_5 : situation(w5) * gate(noise_is_energy)
+       --> gate(noise_is_energy) * (necessity(w5))out ]'w5_no_power;
+
+[admit_6 : situation(w6) --> (situation(w6))in_w6_unknown_language ]'skin;
+[vote_6 : situation(w6) * gate(unknown_tongue)
+       --> gate(unknown_tongue) * (necessity(w6))out ]'w6_unknown_language;
+
+[admit_7 : situation(w7) --> (situation(w7))in_w7_no_blackbox ]'skin;
+[vote_7 : situation(w7) * gate(learn_real_parameters)
+       --> gate(learn_real_parameters) * (necessity(w7))out
+       ]'w7_no_blackbox;
+
+[admit_8 : situation(w8) --> (situation(w8))in_w8_chaos ]'skin;
+[vote_8 : situation(w8) * gate(born_die_redefine)
+       --> gate(born_die_redefine) * (necessity(w8))out ]'w8_chaos;
+
+[admit_9 : situation(w9) --> (situation(w9))in_w9_undefinable ]'skin;
+[vote_9 : situation(w9) * gate(endless_logic_nesting)
+       --> gate(endless_logic_nesting) * (necessity(w9))out
+       ]'w9_undefinable;
+
+[admit_10 : situation(w10) --> (situation(w10))in_w10_morphing ]'skin;
+[vote_10 : situation(w10) * gate(output_exceeds_input)
+        --> gate(output_exceeds_input) * (necessity(w10))out
+        ]'w10_morphing;
+
+/* --------------------------------------------------------------------------
+ * 10.5  Why do we make it.
+ * collect : one necessity vote is enough reason to carry the brain — the
+ *           motivation turns votes into a carrying decision
+ * decide  : the decision surfaces — a computer-like brain is carried
+ *           because Turing computing fails in all ten situations
+ * ------------------------------------------------------------------------*/
+[collect : necessity(W) --> (necessity(W))in_why ]'skin;
+[decide : necessity(W) * motivation(non_computing_science)
+        --> motivation(non_computing_science)
+          * (carry_decision(brain_companion))out ]'why;
+
+/* --------------------------------------------------------------------------
+ * The skin certifies: we carry it when Turing fails; we make it to found
+ * the science of non-computing.
+ * ------------------------------------------------------------------------*/
+[deploy : carry_decision(brain_companion)
+        --> deploy(conscious_machine_where_logic_fails) ]'skin;

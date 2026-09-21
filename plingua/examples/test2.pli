@@ -1,0 +1,12 @@
+@include "transition_model.pli"
+@model<transition>
+
+def main()
+{
+  @mu = [ []'a []'b ]'skin;
+  @ms(skin) = seed;
+  @ms(a) = unit, fuel;
+  [unit * fuel --> done]'a;
+  [seed --> seed [work]'a]'skin;
+  [done [ ]'a --> [result]'a]'skin;
+}

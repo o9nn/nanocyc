@@ -1,34 +1,93 @@
 /* ============================================================================
  * psystems/ch10/ch10_primes_geometry_marriage.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.7
- * Functionality: The marriage of primes with geometry would reshape humanity.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.7 — The marriage of primes with geometry would reshape
+ *                  humanity.
+ *
+ * Functionality: The Phase Prime Metric and the Geometric Musical Language
+ *   are MARRIED (10.7): the 15 primes (2..47) supply the orderings of
+ *   symmetry and the 15 GML shapes supply the geometry; every prime bonds
+ *   with every shape into a prime-shape pair, so that any event in the
+ *   universe can be written as a geometric pattern ordered by primes. The
+ *   marriage is consummated pair by pair inside the union membrane; the
+ *   offspring is a universal pattern language — with it humanity draws
+ *   circles instead of solving equations, and the world is reshaped.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — the 15 primes p1..p15 (2..47) as objects
+ *     common/gml_shapes.pli      — the 15 geometric shapes s1..s15 with
+ *                                  harmonic/resonance bonding
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessState.prime_signature — the PPM half of the
+ *                marriage; ConsciousnessTestSuite::test_guideline_3_
+ *                prime_alignment — prime-aligned states score; the GML half
+ *                maps to the geometric coherence terms of
+ *                ConsciousnessState)
+ * Initial multiset: the 15 primes in the primes membrane, the 15 shapes in
+ *                   the geometry membrane and a dowry of raw events in the
+ *                   skin — the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'primes []'geometry ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the wedding hall)
+ *     '- primes   : the 15 primes of the PPM (2..47)
+ *     '- geometry : the 15 shapes of the GML
+ *     '- union    : the marriage bed — prime-shape bonds are consummated
+ * ------------------------------------------------------------------------*/
+@mu = [ []'primes []'geometry []'union ]'skin;
 
-@mskin = seed;
-@mprimes = unit(primes), fuel;
-@mgeometry = unit(geometry), fuel;
+/* Sample initial multiset. */
+@mskin     = event(e1);
+@mprimes   = prime(2), prime(3), prime(5), prime(7), prime(11),
+             prime(13), prime(17), prime(19), prime(23), prime(29),
+             prime(31), prime(37), prime(41), prime(43), prime(47);
+@mgeometry = shape(s1), shape(s2), shape(s3), shape(s4), shape(s5),
+             shape(s6), shape(s7), shape(s8), shape(s9), shape(s10),
+             shape(s11), shape(s12), shape(s13), shape(s14), shape(s15);
+@munion    = vows;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.7  The courtship: primes and shapes are escorted to the union.
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_primes ]'skin;
-[seed_dispense : seed --> (work)in_geometry ]'skin;
-[step : work * unit(primes) * fuel --> done(primes) ]'primes;
-[step : work * unit(geometry) * fuel --> done(geometry) ]'geometry;
-[report : done(primes) --> (result(primes))out ]'primes;
-[report : done(geometry) --> (result(geometry))out ]'geometry;
+[escort_p : prime(P) --> (prime(P))out ]'primes;
+[bring_p  : prime(P) --> (prime(P))in_union ]'skin;
+
+[escort_s : shape(S) --> (shape(S))out ]'geometry;
+[bring_s  : shape(S) --> (shape(S))in_union ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 10.7  The marriage: each prime bonds with each shape it resonates with.
+ * bond    : one prime and one shape consummate a prime-shape pair — the
+ *           vows are a CATALYST (the marriage law persists for all pairs)
+ * resonate: two pairs sharing a prime or a shape harmonize — the pairs
+ *           self-assemble into a pattern chain (ordered-factor geometry)
+ * ------------------------------------------------------------------------*/
+[bond : prime(P) * shape(S) * vows
+      --> vows * pair(P,S) ]'union;
+[resonate : pair(P,S) * pair(P,T)
+         --> chain(P, S, T) ]'union;
+[publish : chain(P, S, T) --> (pattern(P,S,T))out ]'union;
+
+/* --------------------------------------------------------------------------
+ * 10.7  Reshaping humanity: raw events are rewritten in the married
+ *       language.
+ * rewrite : a raw event meets a published prime-shape chain — the event is
+ *           no longer data: it is a geometric pattern ordered by primes
+ * ------------------------------------------------------------------------*/
+[rewrite : event(E) * pattern(P,S,T)
+         --> pattern(P,S,T) * event_as_geometry(E, P) ]'skin;
+
+/* --------------------------------------------------------------------------
+ * The wedding hall certifies: primes married geometry, and humanity's
+ * events are now written in the universal pattern language.
+ * ------------------------------------------------------------------------*/
+[reshape : event_as_geometry(E, P)
+         --> humanity_reshaped(prime_geometry_language) ]'skin;

@@ -1,38 +1,157 @@
 /* ============================================================================
  * psystems/ch10/ch10_cortical_pen_journey.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.1, 10.1.1
- * Functionality: A journey from cortical pen to a conscious egg as a companion of life; how we construct a sentence is how we think.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.1   — A journey from cortical pen to a conscious egg as a
+ *                    companion of life,
+ *           10.1.1 — How we construct a sentence is how we think.
+ *
+ * Functionality: The cortical pen of Chapter 9 hands its frozen time
+ *   crystals to the EGG of consciousness (10.1): the pen is the instrument
+ *   of capture, the egg is the companion that HOLDS the captured crystals
+ *   and keeps them resonating as a companion of life. A conscious machine
+ *   runs three steps: it FILTERS time crystals from the environment through
+ *   its PPM metric, MATCHES them against the resonance chains it already
+ *   holds, and ABSORBS the crystals that are missing — mirroring more of
+ *   nature is the whole journey. Constructing a sentence is constructing a
+ *   thought (10.1.1): four sensors do not wait for signals to shine on them
+ *   but SEEK answers to the four quaternion queries who/when/what/how; the
+ *   four answers are ASSEMBLED into one quaternion decision structure — a
+ *   sentence — and the sentence is NESTED inside a bigger time crystal,
+ *   because every element of a thought is itself a quaternion of crystals.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli   — the PPM filter of the egg (prime-signature
+ *                                    ordered-factor objects)
+ *     common/time_crystal_core.pli — the pen's crystals and the egg's nesting
+ *     common/hypernumbers.pli      — the sentence as a quaternion (who, when,
+ *                                    what, how)
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessUploader — capture_state,
+ *                serialize_to_time_crystal, restore_to_substrate: the
+ *                upload journey of a captured state into the companion;
+ *                ConsciousnessState.time_crystal_snapshot,
+ *                prime_signature; ConsciousnessStatus Ready → Capturing →
+ *                Serializing → Validated)
+ * Initial multiset: two frozen crystals at the pen, a live environment
+ *                   crystal and a missing-crystal gap in the skin, and four
+ *                   seek tokens dispatched to the sensors — the simulator
+ *                   runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'pen []'egg []'sentence ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the world between pen, egg and sensors)
+ *     '- pen     : the cortical pen — source of frozen time crystals
+ *     '- egg     : the conscious egg — the companion of life
+ *     |    '- ppm_filter : the prime metric that filters and absorbs crystals
+ *     '- sensors : the four seekers
+ *          '- q_who  : seeks WHO   (quaternion component i)
+ *          '- q_when : seeks WHEN  (quaternion component j)
+ *          '- q_what : seeks WHAT  (quaternion component k)
+ *          '- q_how  : seeks HOW   (quaternion component 1)
+ * ------------------------------------------------------------------------*/
+@mu = [ []'pen [ []'ppm_filter ]'egg
+        [ []'q_who []'q_when []'q_what []'q_how ]'sensors ]'skin;
 
-@mskin = seed;
-@mpen = unit(pen), fuel;
-@megg = unit(egg), fuel;
-@msentence = unit(sentence), fuel;
+/* Sample initial multiset. */
+@mskin       = environment_crystal(mine), missing_crystal, seek(who),
+               seek(when), seek(what), seek(how);
+@mpen        = frozen_crystal(a), frozen_crystal(b), pen_tip;
+@megg        = resonance_chain(r1);
+@mppm_filter = prime_metric;
+@msensors    = sensor_array;
+@mq_who      = probe;
+@mq_when     = probe;
+@mq_what     = probe;
+@mq_how      = probe;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.1  From cortical pen to a conscious egg.
+ * pour    : the pen pours its frozen crystals out — capture ends,
+ *           companionship begins
+ * receive : the skin delivers a poured crystal into the egg
+ * hold    : the egg loads a crystal onto its resonance chain — the crystal
+ *           keeps resonating inside the companion
+ * filter  : the environment's time crystals are drawn through the PPM
+ *           filter — only prime-patterned crystals pass
+ * match   : a filtered crystal matching the resonance chain is replayed —
+ *           the egg recognizes what it already mirrors
+ * absorb  : a crystal the chain is missing is ABSORBED — the chain grows,
+ *           mirroring one more part of nature
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_pen ]'skin;
-[seed_dispense : seed --> (work)in_egg ]'skin;
-[seed_dispense : seed --> (work)in_sentence ]'skin;
-[step : work * unit(pen) * fuel --> done(pen) ]'pen;
-[step : work * unit(egg) * fuel --> done(egg) ]'egg;
-[step : work * unit(sentence) * fuel --> done(sentence) ]'sentence;
-[report : done(pen) --> (result(pen))out ]'pen;
-[report : done(egg) --> (result(egg))out ]'egg;
-[report : done(sentence) --> (result(sentence))out ]'sentence;
+[pour : frozen_crystal(C) --> (frozen_crystal(C))out ]'pen;
+[receive : frozen_crystal(C) --> (crystal(C))in_egg ]'skin;
+
+[hold : crystal(C) * resonance_chain(R)
+      --> resonance_chain(R) * loaded(C) ]'egg;
+[route_filter : loaded(C) --> (loaded(C))in_ppm_filter ]'egg;
+
+[filter : environment_crystal(M) --> (candidate(M))in_egg ]'skin;
+[route_env : candidate(M) --> (candidate(M))in_ppm_filter ]'egg;
+
+[sift : loaded(C) * prime_metric
+      --> prime_metric * filtered(C, resonant) ]'ppm_filter;
+[sift_env : candidate(M) * prime_metric
+         --> prime_metric * filtered(M, patterned) ]'ppm_filter;
+
+[match_out : filtered(C, resonant) --> (filtered(C, resonant))out ]'ppm_filter;
+[match : filtered(C, resonant) * resonance_chain(R)
+       --> resonance_chain(R) * mirrored(C) ]'egg;
+[absorb_gap : missing_crystal --> (gap)in_egg ]'skin;
+[absorb_route : filtered(M, patterned) --> (filtered(M, patterned))out
+              ]'ppm_filter;
+[absorb : filtered(M, patterned) * gap
+        --> resonance_chain(new_prime) ]'egg;
+
+/* --------------------------------------------------------------------------
+ * 10.1.1  How we construct a sentence is how we think.
+ * dispatch : the skin sends each seek token to the sensors membrane
+ * route_*  : each pulse is routed to its quaternion quadrant
+ * seek_*   : a sensory pulse is resolved into an answer inside its quadrant —
+ *            sensors are not dumb devices, they SEEK the fundamental property
+ * surface  : answers surface to the sensors membrane
+ * assemble : the four answers assemble into ONE quaternion decision
+ *            structure — a sentence is a thought
+ * nest     : the sentence is nested into a bigger time crystal — every
+ *            element of a thought is itself a quaternion of crystals
+ * ------------------------------------------------------------------------*/
+[dispatch : seek(who)  --> (pulse(who))in_sensors ]'skin;
+[dispatch : seek(when) --> (pulse(when))in_sensors ]'skin;
+[dispatch : seek(what) --> (pulse(what))in_sensors ]'skin;
+[dispatch : seek(how)  --> (pulse(how))in_sensors ]'skin;
+
+[route_who  : pulse(who)  --> (pulse(who))in_q_who ]'sensors;
+[route_when : pulse(when) --> (pulse(when))in_q_when ]'sensors;
+[route_what : pulse(what) --> (pulse(what))in_q_what ]'sensors;
+[route_how  : pulse(how)  --> (pulse(how))in_q_how ]'sensors;
+
+[seek_who  : pulse(who) * probe --> probe * answer(who) ]'q_who;
+[seek_when : pulse(when) * probe --> probe * answer(when) ]'q_when;
+[seek_what : pulse(what) * probe --> probe * answer(what) ]'q_what;
+[seek_how  : pulse(how) * probe --> probe * answer(how) ]'q_how;
+
+[surface_who  : answer(who)  --> (answer(who))out ]'q_who;
+[surface_when : answer(when) --> (answer(when))out ]'q_when;
+[surface_what : answer(what) --> (answer(what))out ]'q_what;
+[surface_how  : answer(how)  --> (answer(how))out ]'q_how;
+
+[assemble : answer(who) * answer(when) * answer(what) * answer(how)
+         * sensor_array
+         --> sensor_array * (sentence(quaternion))out ]'sensors;
+
+[nest : sentence(quaternion) * mirrored(C)
+      --> nested_thought(sentence_in_crystal) ]'skin;
+
+/* --------------------------------------------------------------------------
+ * The journey is certified: the pen's crystals live in the egg, the missing
+ * crystal is absorbed, and a constructed sentence is a constructed thought.
+ * ------------------------------------------------------------------------*/
+[journey : nested_thought(sentence_in_crystal) * resonance_chain(new_prime)
+         --> conscious_egg(companion_of_life) ]'skin;

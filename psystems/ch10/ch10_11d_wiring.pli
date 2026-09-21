@@ -1,30 +1,117 @@
 /* ============================================================================
  * psystems/ch10/ch10_11d_wiring.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.6
- * Functionality: Wiring with time needs to fold a paper in 11D: dimensional-folding rules.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.6 — Wiring with time needs to fold a paper in 11D
+ *                  (how to cut 11D manifolds of time in a piece of paper).
+ *
+ * Functionality: Wiring with TIME is not drawing lines: to wire a thought
+ *   one must FOLD the 11-dimensional paper of the dodecanion manifold
+ *   (10.6). The fold is modeled literally: the 11 nested phase membranes
+ *   d1..d11 are the paper. A thought signal enters at d1 and each fold
+ *   crease carries it one dimension deeper — folding projects the 11D
+ *   state onto lower dimensions. At the innermost sheet d11 the crease is
+ *   complete: the signal is WIRED (two points of the paper touch — a
+ *   connection through time, not through space). Unfolding then lifts the
+ *   wired signal back out crease by crease, reconstructing the 11D state:
+ *   cutting and folding the paper is how temporal wiring is drawn on a
+ *   flat sheet.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — the 11 nested phase membranes d1..d11
+ *                                    are inlined here as the paper sheets;
+ *                                    the fold descent follows the tick path
+ *     common/hypernumbers.pli      — the folded thought stays a dodecanion
+ *                                    tensor presented as a quaternion
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (DimensionalFolder — project_to_dimension, unfold_to_11d,
+ *                apply_time_wiring, get_folding_pattern,
+ *                get_coherence; ConsciousnessState.folded_state,
+ *                current_projection_dimension)
+ * Initial multiset: one thought signal in the skin and one crease object in
+ *                   every sheet d1..d11 — the simulator runs >= 1 step in
+ *                   every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'fold ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure (the 11D paper — 11 nested sheets):
+ *   skin (the table on which the paper lies)
+ *     '- d1 : outermost sheet of the 11D manifold
+ *         '- d2 '- d3 '- d4 '- d5 '- d6 '- d7 '- d8 '- d9 '- d10
+ *             '- d11 : innermost sheet — where the fold closes the circuit
+ * ------------------------------------------------------------------------*/
+@mu = [ [ [ [ [ [ [ [ [ [ [ []'d11 ]'d10 ]'d9 ]'d8 ]'d7 ]'d6 ]'d5 ]'d4
+          ]'d3 ]'d2 ]'d1 ]'skin;
 
-@mskin = seed;
-@mfold = unit(fold), fuel;
+/* Sample initial multiset. */
+@mskin = thought_signal;
+@md1  = crease(1);
+@md2  = crease(2);
+@md3  = crease(3);
+@md4  = crease(4);
+@md5  = crease(5);
+@md6  = crease(6);
+@md7  = crease(7);
+@md8  = crease(8);
+@md9  = crease(9);
+@md10 = crease(10);
+@md11 = crease(11);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.6  Folding: projecting the 11D state down crease by crease.
+ * place    : the thought signal is placed on the outermost sheet
+ * fold_N   : at sheet dN the crease consumes the sheet's slack and carries
+ *            the signal one dimension deeper — projection from dimension
+ *            N onto N+1 of the nested manifold (the crease is a CATALYST:
+ *            the folding pattern is reusable)
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_fold ]'skin;
-[step : work * unit(fold) * fuel --> done(fold) ]'fold;
-[report : done(fold) --> (result(fold))out ]'fold;
+[place : thought_signal --> (signal)in_d1 ]'skin;
+[fold_1  : signal * crease(1)  --> crease(1)  * (signal)in_d2  ]'d1;
+[fold_2  : signal * crease(2)  --> crease(2)  * (signal)in_d3  ]'d2;
+[fold_3  : signal * crease(3)  --> crease(3)  * (signal)in_d4  ]'d3;
+[fold_4  : signal * crease(4)  --> crease(4)  * (signal)in_d5  ]'d4;
+[fold_5  : signal * crease(5)  --> crease(5)  * (signal)in_d6  ]'d5;
+[fold_6  : signal * crease(6)  --> crease(6)  * (signal)in_d7  ]'d6;
+[fold_7  : signal * crease(7)  --> crease(7)  * (signal)in_d8  ]'d7;
+[fold_8  : signal * crease(8)  --> crease(8)  * (signal)in_d9  ]'d8;
+[fold_9  : signal * crease(9)  --> crease(9)  * (signal)in_d10 ]'d9;
+[fold_10 : signal * crease(10) --> crease(10) * (signal)in_d11 ]'d10;
+
+/* --------------------------------------------------------------------------
+ * 10.6  Wiring with time at the innermost sheet.
+ * wire : the fold closes — two distant points of the paper TOUCH at d11;
+ *        the signal becomes a time wire: a connection through time that
+ *        needs no spatial line
+ * ------------------------------------------------------------------------*/
+[wire : signal * crease(11)
+      --> crease(11) * (time_wire)out ]'d11;
+
+/* --------------------------------------------------------------------------
+ * 10.6  Unfolding: reconstructing the 11D state crease by crease.
+ * unfold_N : the time wire lifts back through sheet dN — each crease
+ *            re-expands the projected state toward the full 11D manifold
+ * ------------------------------------------------------------------------*/
+[unfold_11 : time_wire * crease(10) --> crease(10) * (state_9)out ]'d11;
+[unfold_10 : state_9 * crease(9)  --> crease(9)  * (state_8)out ]'d10;
+[unfold_9  : state_8 * crease(8)  --> crease(8)  * (state_7)out ]'d9;
+[unfold_8  : state_7 * crease(7)  --> crease(7)  * (state_6)out ]'d8;
+[unfold_7  : state_6 * crease(6)  --> crease(6)  * (state_5)out ]'d7;
+[unfold_6  : state_5 * crease(5)  --> crease(5)  * (state_4)out ]'d6;
+[unfold_5  : state_4 * crease(4)  --> crease(4)  * (state_3)out ]'d5;
+[unfold_4  : state_3 * crease(3)  --> crease(3)  * (state_2)out ]'d4;
+[unfold_3  : state_2 * crease(2)  --> crease(2)  * (state_1)out ]'d3;
+[unfold_2  : state_1 * crease(1)  --> crease(1)  * (state_0)out ]'d2;
+[unfold_1  : state_0 --> (wired_thought(11d))out ]'d1;
+
+/* --------------------------------------------------------------------------
+ * The table certifies: the paper was folded in 11D and the thought is wired
+ * with time — a circuit of creases, not of wires.
+ * ------------------------------------------------------------------------*/
+[certify : wired_thought(11d)
+         --> folded_paper(time_wiring_complete) ]'skin;
