@@ -34,7 +34,7 @@ This implementation demonstrates how neural network algorithms can be expressed 
 - **Bayesian Layers**: Weight distributions, reparameterization trick, KL regularization, Monte-Carlo uncertainty estimates
 - **Transformer Decoder**: Causal masking, masked self-attention, cross-attention, decoder stacks, positional encodings, greedy decoding
 - **AtomSpace**: OpenCog-style hypergraph knowledge base — atoms as membranes, truth/attention values, ECAN attention spreading, Hebbian learning, pattern matching, attentional focus
-- **a9nn NNECCO Agent**: full cognitive architecture — Echo State Reservoir, 12-step EchoBeats loop, emotion processing, consciousness layers (L0–L3), episodic memory, parallel LLaMA pool, hardware-style registers
+- **a9nn NNECCO Agent**: full cognitive architecture — Echo State Reservoir, 12-step EchoBeats loop, emotion processing, consciousness layers (L0–L3), prioritised episodic memory, parallel LLaMA pool, personality trait tensor with momentum drift, RL policy (ε-greedy DQN core), cognitive-agent collective (spawn/delegate/vote), hardware-style registers
 - **PLN**: Probabilistic Logic Networks — deduction, induction, abduction, revision, conjunction, disjunction, negation, modus ponens over the AtomSpace (maximally-parallel forward chaining)
 - **OpenPsi**: Dörner Psi motivational system — demands/drives, goal hierarchy, modulators, action selection, satisfaction feedback that drives the a9nn emotion unit
 - **Unified Cognitive Cycle**: the a9nn EchoBeats spine with PLN (REASON), OpenPsi (EMOTE) and AtomSpace (RECALL/INTEGRATE) overlaid — an agent that *reasons, wants and remembers*
@@ -42,6 +42,7 @@ This implementation demonstrates how neural network algorithms can be expressed 
 - **P-Systems ↔ B-Series Bridge**: rooted trees and membrane nests are the same combinatorial object, so evolution and gradient descent run in one parallel step; elementary differentials get exact integer (Matula) expressions as the gradient basis; RK order conditions as finite tree sums; orbifold quotient = "natural selection as root selection"
 - **Closure Isomorphism**: `{circle ~ cycle ~ closure}` — one closure operator in spatial/temporal/causal frames, mapping `.mli`→CNN, `.gli`→RNN, `.nli`→GNN; the 3×3 ennead solves the frame problem; relevance flows like Ricci flow with the gauge field as the curvature lever
 - **Time Crystal Neurons**: feedforward networks of 11-dimensional time crystals — each neuron is an 11-deep nested phase membrane with a closed tick clock loop reseeded by a singularity point; weights carry PPM prime indices and the neuron's prime signature gates its output on resonant layer ticks; activations are phase-gated to the rim; backpropagation applies phase corrections around the closed time loop; loss is circular distance on the 11-cycle
+- **Time-Crystal Neural Net (TCNN)**: the a9nn NNECCO agent re-based on crystal neurons — a crystal echo reservoir whose leaky ticks land only on rim phases and whose prime-indexed recurrent edges resonate with the network tick; the 12 EchoBeats are PPM-gated (beat prime p_b | tick t) so the program counter orders the beats while the primes schedule them; the crystal readout fills R2 only on resonant ticks and REFLECT consumes a circular phase-error (temporal coherence) loss
 
 ## Installation
 
@@ -358,6 +359,10 @@ maximally-parallel rule system phase-locked by a program-counter register.
 @module episodic_memory(capacity) /* prioritised experience replay          */
 @module llama_pool(num_instances, base_port)  /* least-load dispatch, stub  */
 @module planner(action_size)  /* emotion-modulated argmax action selection  */
+@module personality(archetype) /* 12-trait tensor, momentum drift, blend    */
+@module agent_policy(action_size, gamma, eps0, eps_min, eps_decay)
+/* RL core: epsilon-greedy act, Q-learning LEARN, TD-error replay priority  */
+@module cognitive_agent(max_subs) /* division spawn, delegation, voting     */
 ```
 
 #### The Agent and the EchoBeats Cycle
@@ -371,6 +376,36 @@ maximally-parallel rule system phase-locked by a program-counter register.
 /* 1 PERCEIVE  2 FILTER  3 RESONATE  4 ENCODE              */
 /* 5 RECALL    6 REASON  7 EMOTE     8 PLAN                */
 /* 9 LEARN    10 REFLECT 11 EXPRESS  12 INTEGRATE          */
+```
+
+### Time-Crystal Neural Net (tcnn.pli)
+
+The nanobrain synthesis of `time_crystal.pli` and `a9nn.pli` (issue #34):
+the NNECCO agent re-based on 11-dimensional time crystal neurons, with the
+12 EchoBeats gated by Phase Prime Metric (PPM) resonance. The program
+counter says *which* beat; the beat prime says *when*.
+
+#### Crystal subsystems
+```plingua
+@module crystal_echo_reservoir(in_size, reservoir_n, spectral_radius, leak_rate)
+/* Leaky rim-gated crystal neurons; prime-indexed resonant synapses        */
+
+@module crystal_readout(reservoir_n, context_n)
+/* tc_linear_layer: prime-signature-gated ENCODE into register R2          */
+
+@module beat_primes          /* beats 1..12 -> PPM primes 2,3,5,...,37     */
+@module beat_resonance       /* beat_go / beat_hold: (t mod p_b) gating    */
+```
+
+#### The TCNN Agent
+```plingua
+@model tcnn_agent(state_size, action_size, reservoir_n,
+                  num_llama, base_port, consciousness0)
+/* Crystal reservoir + readout over the full a9nn spine;                  */
+/* REFLECT consumes the temporal-coherence (circular phase) loss          */
+
+@module tcnn_echobeats_driver
+/* beat_go-gated 12-beat loop; INTEGRATE strength = cycle coherence       */
 ```
 
 ### PLN (pln.pli)
@@ -689,12 +724,14 @@ plingua test_extensions.pli
 - ✅ Emotion update and consciousness REFLECT transitions
 - ✅ Episodic memory push/recall and LLaMA least-load dispatch
 - ✅ PLAN argmax action selection and INTEGRATE episode logging
+- ✅ a9nn completion: personality momentum drift/blend, ε-greedy policy, Q-learning targets with TD-error priority, cognitive-agent spawn/delegate/vote
 - ✅ PLN deduction, induction, modus ponens and negation truth values
 - ✅ OpenPsi demand urgency, action selection, satisfaction and emotion bridge
 - ✅ Unified cycle: RECALL premises, REASON conclusion, EMOTE bridge, LEARN revision, INTEGRATE persistence
 - ✅ Mixed-radix lane counts, Matula leaf/chain/product indexing, differential orders, partition selection
 - ✅ B-Series bridge: tree↔nest planting, elementary weights, gradient step, RK order-1, orbifold canonify
 - ✅ Closure isomorphism (spatial/temporal/causal), CNN/RNN/GNN maps, ennead balance, Ricci/gauge lever
+- ✅ TCNN: rim-gated crystal reservoir tick, prime-resonant recurrent edges, beat-prime gating, signature-gated readout, coherence EpisodeNode
 
 ## Running Demos
 
@@ -903,6 +940,7 @@ Completed extensions:
 - [x] Full transformer decoder with causal masking — `transformer_decoder.pli`
 - [x] AtomSpace hypergraph knowledge base (ECAN, Hebbian, matcher) — `atomspace.pli`
 - [x] a9nn NNECCO cognitive agent (reservoir, EchoBeats, emotion, LLaMA pool) — `a9nn.pli`
+- [x] a9nn completion (personality tensor with momentum drift, RL policy, cognitive-agent collective) — `a9nn.pli`
 - [x] PLN probabilistic inference (deduction/induction/abduction/modus-ponens) — `pln.pli`
 - [x] OpenPsi motivational system (demands, goals, action selection, emotion bridge) — `openpsi.pli`
 - [x] Unified cognitive cycle (PLN + OpenPsi + AtomSpace over the EchoBeats spine) — `unified.pli`
@@ -910,6 +948,7 @@ Completed extensions:
 - [x] P-Systems ↔ B-Series bridge (shared tree/nest topology, gradient descent as ODE flow, orbifold root selection) — `bseries.pli`
 - [x] Closure isomorphism across spatial/temporal/causal frames (`.mli`→CNN, `.gli`→RNN, `.nli`→GNN) + ennead frame resolution + Ricci-flow relevance — `closures.pli`
 - [x] Time crystal neurons (11-phase clock loops, prime-signature gating, temporal backprop) — `time_crystal.pli`
+- [x] Time-crystal neural net (crystal echo reservoir, beat-prime PPM gating of the EchoBeats, coherence loss) — `tcnn.pli`
 
 ## References
 
@@ -973,7 +1012,7 @@ The following modules extend the core implementation with advanced features:
 | Module | Description |
 |--------|-------------|
 | `atomspace.pli` | OpenCog-style hypergraph knowledge base: atom nodes/links as membranes (structural nesting), truth values with count-based revision, attention values (STI/LTI), ECAN attention spreading as conserved-currency antiport exchange, Hebbian learning, pattern matching, derived attentional focus. Mirrors `lang/a9nn/AtomSpace.lua`. |
-| `a9nn.pli` | NNECCO cognitive agent: Echo State Reservoir membrane (leaky-integrator neurons, spectral radius), 12-beat EchoBeats loop phase-locked by a PC register, emotion processing unit (8 channels), consciousness layers L0–L3 with loss-driven meta-cognition, prioritised episodic memory, parallel LLaMA pool (least-load antiport dispatch, stub mode), hardware-style registers R0–R4/PC/STA. Mirrors `lang/a9nn/NNECCOAgent.lua`. |
+| `a9nn.pli` | NNECCO cognitive agent: Echo State Reservoir membrane (leaky-integrator neurons, spectral radius), 12-beat EchoBeats loop phase-locked by a PC register, emotion processing unit (8 channels), consciousness layers L0–L3 with loss-driven meta-cognition, prioritised episodic memory, parallel LLaMA pool (least-load antiport dispatch, stub mode), personality trait tensor with momentum-damped drift and blending, RL policy (ε-greedy act, Q-learning LEARN, TD-error replay priorities), cognitive-agent collective (division spawn, least-queue delegation, majority vote), hardware-style registers R0–R4/PC/STA. Mirrors `lang/a9nn/NNECCOAgent.lua`, `Personality.lua`, `Agent.lua`, `CognitiveAgent.lua`. |
 
 ## Extensions (v2.4)
 
@@ -1006,6 +1045,12 @@ The following modules extend the core implementation with advanced features:
 | Module | Description |
 |--------|-------------|
 | `time_crystal.pli` | Time crystal neurons (issue #23): the nn.pli feedforward architecture adapted from standard neurons to 11-dimensional time crystals. `time_crystal_neuron` (11 nested phase membranes d1..d11, closed tick clock loop, singularity-reseeded clock — cf. `psystems/common/time_crystal_core.pli`), crystal activations (phase-gated sigmoid/tanh/relu + `phase_encoder` firing-phase code), `tc_linear_layer` (prime-indexed weights, PPM prime-signature gating against the layer broadcast tick — cf. `psystems/common/alphabet_primes.pli`), `resonance_coupling` (frequency match → in-phase tick exchange; mismatch → dissipation), `temporal_coherence_criterion` (circular-distance loss on the 11-cycle + coherence metric), `train_crystal_network` (phase-aligned updates, coherence-threshold early stop). Traceability: `src/cpp/nanobrain_time_crystal.h`. |
+
+## Extensions (v2.9)
+
+| Module | Description |
+|--------|-------------|
+| `tcnn.pli` | Time-crystal neural net (issue #34): the a9nn NNECCO agent re-based on crystal neurons, using the nanobrain framework. `crystal_echo_reservoir` (leaky rim-gated crystal neurons, prime-indexed recurrent edges resonant with the network tick), `crystal_readout` (prime-signature-gated ENCODE into R2), `beat_primes`/`beat_resonance` (the 12 EchoBeats PPM-gated: beat b fires when prime p_b divides tick t; off-resonance beats hold), `tcnn_agent` composite + `tcnn_echobeats_driver` (INTEGRATE strength = temporal coherence). Traceability: `src/cpp/nanobrain_time_crystal.h`. |
 
 ### Looking ahead: nD membranes and parallel ledgers
 

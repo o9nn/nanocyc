@@ -7,7 +7,11 @@
  *   v2.2 modules: GNN, neuroevolution, Bayesian layers and the
  *   transformer decoder with causal masking; the v2.8 time crystal
  *   neuron module: 11-phase clock loop, phase-gated activations, PPM
- *   prime-signature resonance gating, coherence loss, temporal backprop.
+ *   prime-signature resonance gating, coherence loss, temporal backprop;
+ *   the v2.9 tcnn module: crystal echo reservoir, beat-prime resonance
+ *   gating; and the a9nn completion: personality drift/blend, RL policy
+ *   (epsilon-greedy, Q-learning, priority replay), cognitive-agent
+ *   collective (spawn/delegate/vote).
  *
  * Uses the same test_framework as test_nn.pli.
  */
@@ -41,6 +45,7 @@
 @import "bseries.pli"
 @import "closures.pli"
 @import "time_crystal.pli"
+@import "tcnn.pli"
 @import "test_nn.pli"   /* reuse test_framework */
 
 /* ============================================================================
@@ -1340,6 +1345,195 @@
 }
 
 /* ============================================================================
+ * a9nn COMPLETION TESTS (personality, RL policy, cognitive agent)
+ * Mirrors of Personality.lua, Agent.lua and CognitiveAgent.lua.
+ * All continuous values are integers scaled by 100 (epsilon decay x1000).
+ * ============================================================================ */
+
+@test personality_drift_test
+{
+    @description "Personality: momentum-damped trait drift, clamped to [0,100]"
+
+    @setup
+    {
+        [test_pers
+            pcfg{1, 90}          /* drift_rate 0.01, momentum decay 0.9 */
+            trait{3, 95}         /* curiosity 0.95 */
+            mom{3, 100}          /* momentum 1.00 */
+            exp_scale{100}       /* experience scale 1.00 */
+        ]'main
+    }
+
+    @rules
+    {
+        /* v' = 95 + round(1*100*100/10000) = 95 + 1 = 96 */
+        [trait{3, 95}, mom{3, 100}, exp_scale{100}, pcfg{1, 90}]'test_pers ->
+            [trait{3, 96}, mom{3, 100}, pcfg{1, 90}]'test_pers
+
+        assert_equal("personality_drift_up", 96, trait{3})
+    }
+}
+
+@test personality_blend_test
+{
+    @description "Personality blend: b = (100-a)*v/100 + a*w/100"
+
+    @setup
+    {
+        [test_blend
+            blend_req{30}          /* alpha 0.30 */
+            trait{3, 95}           /* self curiosity (NeuroSama) */
+            other_trait{3, 90}     /* other curiosity (Analytical) */
+        ]'main
+    }
+
+    @rules
+    {
+        /* b = 70*95/100 + 30*90/100 = 66 + 27 = 93 */
+        [blend_req{30}, trait{3, 95}, other_trait{3, 90}]'test_blend ->
+            [blend_req{30}, trait{3, 95}, blended{3, 93}]'test_blend
+
+        assert_equal("personality_blend", 93, blended{3})
+    }
+}
+
+@test policy_epsilon_greedy_test
+{
+    @description "Agent.act: roll < eps explores (random), roll >= eps exploits"
+
+    @setup
+    {
+        [test_pol_lo pc{8} eps{10} roll{5}]'main    /* 0.05 < 0.10 -> explore */
+        [test_pol_hi pc{8} eps{10} roll{50}]'main   /* 0.50 >= 0.10 -> exploit */
+    }
+
+    @rules
+    {
+        [pc{8}, eps{10}, roll{5}]'test_pol_lo ->
+            [pc{8}, eps{10}, explore{1}]'test_pol_lo
+
+        [pc{8}, eps{10}, roll{50}]'test_pol_hi ->
+            [pc{8}, eps{10}, exploit{1}]'test_pol_hi
+
+        assert_equal("policy_explores_below_eps", 1, explore{1})
+        assert_equal("policy_exploits_above_eps", 1, exploit{1})
+    }
+}
+
+@test policy_qlearn_target_test
+{
+    @description "LEARN: target = r + gamma*maxQ(next) (not done); r (done)"
+
+    @setup
+    {
+        [test_learn
+            pc{9}
+            exp{1, s, a, 50, sp, 0}    /* reward 0.50, not done */
+            qmax_next{80}              /* max_a Q(next) = 0.80 */
+            exp{2, s, a, 50, sp, 1}    /* reward 0.50, done */
+        ]'main
+    }
+
+    @rules
+    {
+        /* tq = 50 + round(99*80/100) = 50 + 79 = 129 */
+        [pc{9}, exp{1, s, a, 50, sp, 0}, qmax_next{80}]'test_learn ->
+            [pc{9}, target_q{1, 129}]'test_learn
+
+        /* done: tq = 50 */
+        [pc{9}, exp{2, s, a, 50, sp, 1}]'test_learn ->
+            [pc{9}, target_q{2, 50}]'test_learn
+
+        assert_equal("qlearn_target_undiscounted_done", 50, target_q{2})
+        assert_equal("qlearn_target_bellman", 129, target_q{1})
+    }
+}
+
+@test policy_td_priority_test
+{
+    @description "LEARN: TD error refreshes replay priority (|td|) and loss = td^2/100"
+
+    @setup
+    {
+        [test_td
+            pc{9}
+            target_q{1, 129}
+            q_stored{1, 100}           /* stored Q 1.00 */
+            memcount{32}
+        ]'main
+    }
+
+    @rules
+    {
+        /* td = 129 - 100 = 29 -> priority update |29| */
+        [pc{9}, target_q{1, 129}, q_stored{1, 100}]'test_td ->
+            [pc{9}, td{1, 29}]'test_td
+            (prio_update{1, 29}, in_memory)
+
+        /* loss = round(29*29/100) = round(841/100) = 8 */
+        [pc{9}, td{1, 29}, memcount{32}]'test_td ->
+            [pc{10}, loss{8}]'test_td
+
+        assert_equal("qlearn_td_error", 29, td{1})
+        assert_equal("qlearn_loss_mse", 8, loss{1})
+    }
+}
+
+@test cognitive_spawn_delegate_test
+{
+    @description "CognitiveAgent: division spawn (cap) + least-queue delegation"
+
+    @setup
+    {
+        [test_coll
+            subcfg{4}
+            subcount{1}
+            next_id{2}
+            spawn_req{worker}
+            task{infer, p}
+            [sub{1} queue{3} ]'test_coll
+            [sub{2} queue{0} ]'test_coll
+        ]'main
+    }
+
+    @rules
+    {
+        /* Spawn: 1 < 4 -> subcount 2, next_id 3 */
+        [spawn_req{worker}, subcount{1}, next_id{2}, subcfg{4}]'test_coll ->
+            [subcount{2}, next_id{3}, subcfg{4}]'test_coll
+
+        /* Delegate: sub 2 has the smaller queue -> it takes the task */
+        [task{infer, p}]'test_coll [queue{0}]'sub{2} ->
+            [task{infer, p}]'test_coll [queue{1}]'sub{2}
+
+        assert_equal("cognitive_spawn_grows", 2, subcount{1})
+        assert_equal("cognitive_delegate_least_queue", 1, queue{2})
+    }
+}
+
+@test cognitive_vote_test
+{
+    @description "CognitiveAgent aggregateVote: majority tally -> argmax action"
+
+    @setup
+    {
+        [test_vote
+            votes{1, 1}
+            votes{2, 3}
+            votes{3, 1}
+        ]'main
+    }
+
+    @rules
+    {
+        [votes{1, 1}, votes{2, 3}, votes{3, 1}]'test_vote ->
+            [collective_action{2}]'test_vote
+
+        assert_equal("cognitive_majority_vote", 2, collective_action{1})
+    }
+}
+
+/* ============================================================================
  * PLN TESTS
  * Probabilistic inference over the AtomSpace.  Strength/confidence are
  * integers scaled by 100.
@@ -2314,6 +2508,150 @@
 }
 
 /* ============================================================================
+ * TCNN TESTS (v2.9)
+ * Time-crystal-neural-net: crystal echo reservoir (rim-gated leaky tick),
+ * beat-prime PPM resonance gating of the 12 EchoBeats, crystal readout
+ * signature gating, temporal-coherence EpisodeNode.
+ * ============================================================================ */
+
+@test tcnn_reservoir_rim_gated_test
+{
+    @description "Crystal reservoir tick lands on rim phase, holds off-rim"
+
+    @setup
+    {
+        [test_cr
+            pc{3}
+            rspec{90, 70}
+            x{1, 100} phase{i, 0} pre{1, 100}   /* rim: ticks */
+            x{2, 100} phase{j, 3} pre{2, 100}   /* off-rim: held */
+        ]'main
+    }
+
+    @rules
+    {
+        /* Rim: x' = 30*100/100 + 70*76/100 = 30 + 53 = 83 */
+        [pc{3}, x{1, 100}, phase{i, 0}, pre{1, 100}, rspec{90, 70}]'test_cr ->
+            [pc{3}, x{1, 83}, phase{i, 0}, rspec{90, 70}]'test_cr
+
+        /* Off-rim: the crystal holds the activation (nothing damps) */
+        [pc{3}, x{2, 100}, phase{j, 3}, pre{2, 100}]'test_cr ->
+            [pc{3}, x{2, 100}, held{2}, phase{j, 3}]'test_cr
+
+        assert_equal("tcnn_rim_tick", 83, x{1})
+        assert_equal("tcnn_offrim_held", 1, held{2})
+    }
+}
+
+@test tcnn_edge_resonance_test
+{
+    @description "Recurrent edge fires only when its prime divides the tick"
+
+    @setup
+    {
+        [test_edge
+            synapse{1, 2, 60, 5} tick{10}    /* 10 mod 5 == 0 -> fires */
+            synapse{3, 4, 60, 7} tick{10}    /* 10 mod 7 != 0 -> held  */
+        ]'main
+    }
+
+    @rules
+    {
+        [synapse{1, 2, 60, 5}, tick{10}]'test_edge ->
+            [synapse{1, 2, 60, 5}, edge_fire{1, 2}, tick{10}]'test_edge
+            where (10 mod 5) == 0
+
+        [synapse{3, 4, 60, 7}, tick{10}]'test_edge ->
+            [synapse{3, 4, 60, 7}, edge_held{3, 4}, tick{10}]'test_edge
+            where (10 mod 7) != 0
+
+        assert_equal("tcnn_edge_resonant", 1, edge_fire{1})
+        assert_equal("tcnn_edge_off_resonant", 1, edge_held{1})
+    }
+}
+
+@test tcnn_beat_prime_gate_test
+{
+    @description "Beat gating: prime 5 | tick 10 releases beat 3; tick 11 holds it"
+
+    @setup
+    {
+        [test_beat
+            pc{3} beat_prime{3, 5} tick{10}
+            pc2{3} beat_prime2{3, 5} tick2{11}
+        ]'main
+    }
+
+    @rules
+    {
+        /* 10 mod 5 == 0 -> beat_go */
+        [pc{3}, beat_prime{3, 5}, tick{10}]'test_beat ->
+            [pc{3}, beat_prime{3, 5}, tick{10}, beat_go{3}]'test_beat
+            where (10 mod 5) == 0
+
+        /* 11 mod 5 != 0 -> beat_hold */
+        [pc2{3}, beat_prime2{3, 5}, tick2{11}]'test_beat ->
+            [pc2{3}, beat_prime2{3, 5}, tick2{11}, beat_hold{3}]'test_beat
+            where (11 mod 5) != 0
+
+        assert_equal("tcnn_beat_go", 1, beat_go{3})
+        assert_equal("tcnn_beat_hold", 1, beat_hold{3})
+    }
+}
+
+@test tcnn_readout_signature_test
+{
+    @description "Crystal readout: signature-gated ENCODE fills R2 on resonance"
+
+    @setup
+    {
+        [test_ro
+            pc{4} output{1, 70} sig_acc{1, 11} layer_tick{22}   /* 22 mod 11 == 0 */
+            pc{4} output{2, 70} sig_acc{2, 11} layer_tick{23}   /* 23 mod 11 != 0 */
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{4}, output{1, 70}, sig_acc{1, 11}, layer_tick{22}]'test_ro ->
+            [pc{4}, context{1, 70}, sig_acc{1, 11}, layer_tick{22}]'test_ro
+            where (22 mod 11) == 0
+
+        [pc{4}, output{2, 70}, sig_acc{2, 11}, layer_tick{23}]'test_ro ->
+            [pc{4}, held{2, 70}, sig_acc{2, 11}, layer_tick{23}]'test_ro
+            where (23 mod 11) != 0
+
+        assert_equal("tcnn_readout_resonant", 70, context{1})
+        assert_equal("tcnn_readout_held", 70, held{2})
+    }
+}
+
+@test tcnn_integrate_coherence_test
+{
+    @description "INTEGRATE: EpisodeNode strength is the cycle temporal coherence"
+
+    @setup
+    {
+        [test_tci
+            pc{12}
+            beat_go{12}
+            cycle{7}
+            loss{9}      /* circular phase error 9 -> coherence 91 */
+        ]'main
+    }
+
+    @rules
+    {
+        [pc{12}, beat_go{12}, cycle{7}, loss{9}]'test_tci ->
+            [pc{1}, cycle{8}]'test_tci
+            (episode_node{8, 91}, out)
+
+        assert_equal("tcnn_episode_coherence", 91, episode_strength{1})
+        assert_equal("tcnn_cycle_bumped", 8, cycle{1})
+    }
+}
+
+/* ============================================================================
  * TEST RUNNER
  * ============================================================================ */
 
@@ -2403,6 +2741,15 @@
     planner_argmax_test
     integrate_episode_test
 
+    /* a9nn completion: personality, RL policy, cognitive agent */
+    personality_drift_test
+    personality_blend_test
+    policy_epsilon_greedy_test
+    policy_qlearn_target_test
+    policy_td_priority_test
+    cognitive_spawn_delegate_test
+    cognitive_vote_test
+
     /* PLN probabilistic inference */
     pln_deduction_test
     pln_induction_test
@@ -2455,6 +2802,13 @@
     tc_phase_correction_test
     tc_resonance_coupling_test
 
+    /* Time-crystal neural net (TCNN) */
+    tcnn_reservoir_rim_gated_test
+    tcnn_edge_resonance_test
+    tcnn_beat_prime_gate_test
+    tcnn_readout_signature_test
+    tcnn_integrate_coherence_test
+
     [test_suite
         total_tests{t}
         passed_tests{p}
@@ -2480,8 +2834,8 @@
 @expected_output
 {
     test_results{
-        "Total Tests": 84,
-        "Passed": 84,
+        "Total Tests": 96,
+        "Passed": 96,
         "Failed": 0,
         "Success Rate": "100%"
     }

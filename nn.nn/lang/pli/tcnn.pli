@@ -1,0 +1,360 @@
+/*
+ * tcnn.pli - Time-Crystal Neural Net (TCNN) in P-Systems
+ *
+ * The nanobrain-framework synthesis of the v2.8 time_crystal.pli neuron and
+ * the v2.3 a9nn.pli cognitive spine: a neural network whose units are
+ * 11-dimensional time crystals, driving an agent whose cognitive beats are
+ * gated by Phase Prime Metric (PPM) resonance.
+ *
+ * Where time_crystal.pli adapts the *feedforward* nn.pli stack, tcnn.pli
+ * crystallises the *agentic* a9nn.pli stack:
+ *
+ *   Crystal Echo Reservoir -> the a9nn echo_reservoir whose neurons are
+ *                             11-deep phase membranes (inlined from
+ *                             psystems/common/time_crystal_core.pli); the
+ *                             leaky-integrator tick only lands on rim
+ *                             phases, so the echo state is a closed time
+ *                             loop reseeded by singularity_point.
+ *   Crystal Readout        -> a tc_linear_layer (prime-indexed weights,
+ *                             PPM prime-signature gating) mapping the
+ *                             reservoir echo into the R2 context register;
+ *                             ENCODE is emitted per resonant tick.
+ *   Beat Resonance Gating  -> the 12 EchoBeats of a9nn fire only when the
+ *                             beat prime p_b (the first 12 PPM primes
+ *                             2..37, cf. psystems/common/alphabet_primes.pli)
+ *                             divides the network tick t: a beat that is
+ *                             off-resonance HELD its objects instead of
+ *                             consuming them -- sequencing is not imposed
+ *                             by a program counter alone but by temporal
+ *                             resonance (time crystals clock under noise).
+ *   Temporal Coherence     -> the cycle loss is the circular distance on
+ *                             the 11-cycle (temporal_coherence_criterion),
+ *                             so REFLECT reads a phase error, not a scalar.
+ *
+ * Traceability: src/cpp/nanobrain_time_crystal.h (TimeCrystalQuantumState,
+ *               TIME_CRYSTAL_DIMENSIONS = 11, prime_signature,
+ *               temporal_coherence, resonance_frequency, quantum_phase)
+ *               layered on the a9nn agent (lang/a9nn/NNECCOAgent.lua).
+ *
+ * Numerical convention (consistent with nn.pli / a9nn.pli / atomspace.pli):
+ *   all continuous values are integers scaled by 100; phases are integers
+ *   on the 11-cycle (0..10); the network tick t counts crystal revolutions.
+ */
+
+@model<membrane_computing>
+
+@import "nn.pli"
+@import "a9nn.pli"
+@import "time_crystal.pli"
+@import "integration.pli"   /* plingua_compat: antiport, prob_rule macros */
+
+/* ============================================================================
+ * BEAT PRIMES (PPM gating of the EchoBeats)
+ * The first 12 PPM primes assigned to the 12 beats; beat b is resonant when
+ * beat_prime{b, p} divides the network tick t.  (Cf. the 15-prime alphabet
+ * of psystems/common/alphabet_primes.pli; beats 1..12 take primes 1..12.)
+ *
+ *   1 PERCEIVE  2   2 FILTER   3    3 RESONATE  5    4 ENCODE    7
+ *   5 RECALL   11   6 REASON  13    7 EMOTE    17    8 PLAN      19
+ *   9 LEARN    23  10 REFLECT 29   11 EXPRESS  31   12 INTEGRATE 37
+ * ============================================================================ */
+
+@module beat_primes
+{
+    @initial
+    {
+        [beatclock
+            tick{0}
+            beat_prime{1, 2}    beat_prime{2, 3}    beat_prime{3, 5}
+            beat_prime{4, 7}    beat_prime{5, 11}   beat_prime{6, 13}
+            beat_prime{7, 17}   beat_prime{8, 19}   beat_prime{9, 23}
+            beat_prime{10, 29}  beat_prime{11, 31}  beat_prime{12, 37}
+        ]'agent
+    }
+
+    @rules clock
+    {
+        /* One revolution of the crystal clocks the whole network. */
+        [tick{t}]'beatclock -> [tick{t + 1}]'beatclock
+    }
+}
+
+/* ============================================================================
+ * CRYSTAL ECHO RESERVOIR
+ * The a9nn echo_reservoir re-based on time-crystal neurons: each of the N
+ * reservoir units carries the 11-deep phase nest d1..d11, the closed tick
+ * loop and the singularity reseed (inlined from time_crystal_neuron), and
+ * its leaky-integrator update is phase-gated -- the tick only lands when
+ * the unit's phase is at the rim (phase 0), so the echo state advances one
+ * step per revolution of the slowest crystal.  Recurrent edges are
+ * synapse{i, j, w, k} objects carrying a PPM prime index k, so the
+ * reservoir itself resonates: only edges whose prime divides the tick
+ * contribute to this revolution's pre-activation.
+ * ============================================================================ */
+
+@module crystal_echo_reservoir(in_size, reservoir_n, spectral_radius, leak_rate)
+{
+    @initial
+    {
+        [creservoir
+            rspec{spectral_radius, leak_rate}   /* x100 */
+            for (i = 1; i <= reservoir_n; i++)
+            {
+                [cr_neuron{i}
+                    [d1 [d2 [d3 [d4 [d5 [d6 [d7 [d8 [d9 [d10
+                        [d11 singularity_point ]'d11
+                    ]'d10 ]'d9 ]'d8 ]'d7 ]'d6 ]'d5 ]'d4 ]'d3 ]'d2 ]'d1
+                    tick
+                    phase{i, 0}
+                    period{11}
+                    x{i, 0}
+                    coherence{i, 100}
+                ]'creservoir
+            }
+            /* Sparse recurrent edges with prime indices: ~15% dense. */
+            for (i = 1; i <= reservoir_n; i++)
+            {
+                for (j = 1; j <= reservoir_n; j++)
+                {
+                    synapse{i, j, random(-100, 100), random(1, 15)}
+                        where random(0, 100) > 85
+                }
+            }
+            for (d = 1; d <= in_size; d++)
+            {
+                for (i = 1; i <= reservoir_n; i++)
+                {
+                    w_in{d, i, random(-100, 100)}
+                }
+            }
+        ]'agent
+    }
+
+    /* RESONATE beat: one crystal reservoir tick, gated by PC = 3 AND by the
+     * rim phase of each crystal neuron (maximally parallel). */
+    @rules resonate
+    {
+        /* Leaky integrate-and-activate, landing only on the rim phase:
+         * x'(i) = (1-a)*x(i) + a*tanh(pre(i))        (a = leak rate, x100) */
+        [pc{3}, x{i, xi}, pre{i, p}, phase{i, 0},
+         rspec{sr, a}]'creservoir ->
+            [pc{3}, x{i, round((100-a)*xi/100 + a*tanh_scaled(p)/100)},
+             phase{i, 0}, rspec{sr, a}]'creservoir
+
+        /* Recurrent edge contribution only on resonant ticks: edge prime k
+         * must divide the network tick t. */
+        [synapse{i, j, w, k}, tick{t}]'creservoir ->
+            [synapse{i, j, w, k}, edge_fire{i, j}]'creservoir
+            where (t mod k) == 0
+
+        /* Advance the beat when the tick completes; snapshot the echo state
+         * into register R1 (NNECCOAgent.registers.R1). */
+        [pc{3}]'creservoir -> [pc{4}]'creservoir (reservoir_state{1}, out)
+    }
+}
+
+/* ============================================================================
+ * CRYSTAL READOUT  (RESONATE -> ENCODE bridge)
+ * A tc_linear_layer mapping the reservoir echo into the R2 context register:
+ * each readout weight carries a PPM prime index, the neuron's prime
+ * signature (product of its synapse primes) gates emission against the
+ * layer broadcast tick, and off-resonance pre-activations are held in the
+ * crystal until the next resonant tick -- the context register is therefore
+ * updated only on resonance, not on every cycle.
+ * ============================================================================ */
+
+@module crystal_readout(reservoir_n, context_n)
+{
+    @initial
+    {
+        [readout
+            tc_linear_layer(reservoir_n, context_n)
+            layer_tick{11}
+        ]'agent
+    }
+
+    @rules encode
+    {
+        /* ENCODE beat: the resonant readout output becomes R2; the prime
+         * signature of neuron i gates the handover (t mod sig == 0). */
+        [pc{4}, output{i, v}, sig_acc{i, sig}, layer_tick{t}]'readout ->
+            [pc{4}, context{i, v}, sig_acc{i, sig}, layer_tick{t}]'readout
+            where (t mod sig) == 0
+
+        /* Off-resonance: the context is held (nothing damps). */
+        [pc{4}, output{i, v}, sig_acc{i, sig}, layer_tick{t}]'readout ->
+            [pc{4}, held{i, v}, sig_acc{i, sig}, layer_tick{t}]'readout
+            where (t mod sig) != 0
+    }
+}
+
+/* ============================================================================
+ * BEAT RESONANCE GATING
+ * The PPM overlay on the a9nn EchoBeats: a PC-gated beat rule fires only
+ * when the beat's prime divides the network tick.  Off-resonance beats hold
+ * their objects, so the 12-beat cycle phase-locks to the crystal clocks --
+ * the program counter says WHICH beat, the primes say WHEN.
+ * ============================================================================ */
+
+@module beat_resonance
+{
+    @rules gate
+    {
+        /* Resonant beat: p_b | t releases the beat gate. */
+        [pc{b}, beat_prime{b, p}, tick{t}]'agent ->
+            [pc{b}, beat_prime{b, p}, tick{t}, beat_go{b}]'agent
+            where (t mod p) == 0
+
+        /* Off-resonance: the beat holds until the next resonant tick. */
+        [pc{b}, beat_prime{b, p}, tick{t}]'agent ->
+            [pc{b}, beat_prime{b, p}, tick{t}, beat_hold{b}]'agent
+            where (t mod p) != 0
+    }
+}
+
+/* ============================================================================
+ * TCNN AGENT  (top-level composite)
+ * The nnecco_agent re-based on crystal subsystems: crystal echo reservoir,
+ * crystal readout, beat primes and resonance gating, plus the a9nn spine
+ * (emotion, consciousness, episodic memory, LLaMA pool, planner,
+ * personality, RL policy, collective) and the v2.3 AtomSpace for INTEGRATE.
+ * REFLECT consumes the temporal-coherence loss (circular phase error).
+ * ============================================================================ */
+
+@model tcnn_agent(state_size, action_size, reservoir_n,
+                  num_llama, base_port, consciousness0)
+{
+    @model<membrane_computing>
+
+    [agent
+        /* Hardware-style virtual registers */
+        reg{r0, 0}
+        reg{r1, 0}
+        reg{r2, 0}
+        reg{r3, 0}
+        reg{r4, 0}
+        pc{1}                 /* EchoBeats program counter: 1..12 */
+        sta{0}                /* status flags */
+        cycle{0}
+
+        layer{consciousness0}
+
+        /* Crystal subsystems (this module) */
+        beat_primes
+        beat_resonance
+        crystal_echo_reservoir(state_size, reservoir_n, 90, 70)
+        crystal_readout(reservoir_n, 128)
+        temporal_coherence_criterion
+
+        /* a9nn spine */
+        emotion_unit
+        consciousness(consciousness0)
+        episodic_memory(1000)
+        llama_pool(num_llama, base_port)
+        planner(action_size)
+        personality(neurosama)
+        agent_policy(action_size, 99, 10, 1, 995)
+        cognitive_agent(4)
+
+        /* v2.3 knowledge base for the INTEGRATE beat */
+        atomspace_system(50, 10)
+    ]'main
+}
+
+/* ============================================================================
+ * TCNN ECHOBEATS DRIVER
+ * The 12 phases of a9nn, with the resonance overlay: each handoff consumes
+ * the beat_go{b} token produced by beat_resonance, so the phase sequence is
+ * PC-ordered AND PPM-locked.  INTEGRATE writes an EpisodeNode whose
+ * strength is the temporal coherence 100 - circular_error.
+ *
+ *   1 PERCEIVE   2 FILTER   3 RESONATE   4 ENCODE
+ *   5 RECALL     6 REASON   7 EMOTE      8 PLAN
+ *   9 LEARN     10 REFLECT 11 EXPRESS   12 INTEGRATE
+ * ============================================================================ */
+
+@module tcnn_echobeats_driver
+{
+    @rules beat_handoff
+    {
+        /* PERCEIVE -> FILTER (resonant on prime 2) */
+        [pc{1}, beat_go{1}, raw_input{U}]'agent -> [pc{2}, reg{r0, U}]'agent
+
+        /* FILTER -> RESONATE (resonant on prime 3) */
+        [pc{2}, beat_go{2}, reg{r0, U}]'agent -> [pc{3}, filtered{U}]'agent
+
+        /* RESONATE (3 -> 4) by crystal_echo_reservoir.
+         * ENCODE: the resonant crystal readout fills R2. */
+        [pc{4}, beat_go{4}, context{i, v}]'agent -> [pc{5}, reg{r2, v}]'agent
+
+        /* RECALL (5->6), REASON (6->7), EMOTE (7->8), PLAN (8->9)
+         * are advanced by their a9nn modules under beat_go gating. */
+
+        /* LEARN: TD update + phase correction; loss is circular error. */
+        [pc{9}, beat_go{9}]'agent -> [pc{10}, loss{0}]'agent
+
+        /* REFLECT (10->11) by consciousness, reading the coherence loss. */
+
+        /* EXPRESS: package the output (LLaMA text if present). */
+        [pc{11}, beat_go{11}, llama_resp{P, T, K}, best_action{A}]'agent ->
+            [pc{12}, output{P, A}]'agent
+
+        /* INTEGRATE: EpisodeNode strength = temporal coherence of the cycle,
+         * cycle bumps, PC resets to 1 for the next revolution. */
+        [pc{12}, beat_go{12}, cycle{n}, loss{lo}]'agent ->
+            [pc{1}, cycle{n + 1}]'agent
+            (episode_node{n + 1, max(0, 100 - lo)}, out)
+    }
+}
+
+/* ============================================================================
+ * DOCUMENTATION AND METADATA
+ * ============================================================================ */
+
+@info
+{
+    name: "Time-Crystal Neural Net (TCNN) in PLingua"
+    version: "1.0.0"
+    description: "P-Systems time-crystal neural net: a9nn NNECCO agent re-based on 11-dimensional time crystal neurons with PPM resonance-gated EchoBeats"
+    author: "nn.nn project"
+    depends: ["nn.pli", "a9nn.pli", "time_crystal.pli", "integration.pli"]
+
+    features: [
+        "Crystal echo reservoir: 11-phase crystal neurons with leaky rim-gated ticks",
+        "Prime-indexed recurrent edges resonating with the network tick",
+        "Crystal readout: prime-signature-gated ENCODE into register R2",
+        "Beat primes: the 12 EchoBeats PPM-gated (2,3,5,...,37)",
+        "Resonance-gated beat handoffs: beat_go/beat_hold tokens",
+        "Temporal coherence loss: circular phase error drives REFLECT",
+        "Full a9nn spine: emotion, consciousness, memory, LLaMA, planner, personality, RL policy, collective"
+    ]
+
+    models: [
+        "TCNN agent (tcnn_agent)"
+    ]
+}
+
+/*
+ * USAGE NOTES:
+ *
+ * 1. Where a9nn.pli sequences the 12 EchoBeats with the PC register alone,
+ *    tcnn.pli adds a temporal constraint: beat b fires only when its PPM
+ *    prime divides the network tick.  Two constraints, one cycle: the
+ *    program counter orders the beats, the primes schedule them.
+ * 2. The reservoir is no longer a bag of leaky integrators but a lattice of
+ *    11-dimensional time crystals; the echo state advances one step per
+ *    closed-time-loop revolution and never damps (singularity reseed).
+ * 3. The cycle loss is a PHASE error (circular distance on the 11-cycle),
+ *    so the REFLECT beat's consciousness transitions measure temporal --
+ *    not just scalar -- surprise.
+ * 4. Everything else (emotion unit, episodic memory, LLaMA pool, planner,
+ *    personality, RL policy, collective, AtomSpace integration) is the
+ *    a9nn spine, reused unmodified.
+ *
+ * Shared time-crystal skin and prime alphabet are inlined by convention from
+ * psystems/common/time_crystal_core.pli and psystems/common/alphabet_primes.pli
+ * (P-Lingua has no import of those files; see psystems/README.md).
+ *
+ * This is a conceptual implementation showing how a time-crystal neural
+ * net can be expressed in membrane computing formalism.
+ */
