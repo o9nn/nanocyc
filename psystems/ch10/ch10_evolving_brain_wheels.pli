@@ -1,34 +1,112 @@
 /* ============================================================================
  * psystems/ch10/ch10_evolving_brain_wheels.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.11
- * Functionality: Wheels of an evolving brain: generational evolution rules across wheel membranes.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.11 — Wheels of an evolving brain (frequency wheels of an
+ *                   evolving brain).
+ *
+ * Functionality: Evolution is a WHEEL, not a ladder (10.11): the PPM world
+ *   starts from the fractal tape and ends in the collective evolution of
+ *   machines. A frequency wheel turns through five phases — PRIMORDIAL
+ *   (initial emergence), AWAKENING (basic awareness), CONSCIOUS (full
+ *   consciousness), TRANSCENDENT (beyond normal consciousness), UNIFIED
+ *   (the unified field) — and each full turn is one GENERATION: the wheel
+ *   does not stop at unified, it hands a renewed seed to the next wheel,
+ *   and the brain evolves generation after generation (Figures 10.10 and
+ *   10.11: from a single time crystal to the human frequency wheel). Each
+ *   phase membrane turns its phase token into the next phase; the wheel
+ *   membrane advances the generation when a turn completes.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — a frequency wheel is a closed loop of
+ *                                    clocks; a generation is one full tick
+ *                                    around the loop
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (BrainEvolutionSimulator — evolve_step,
+ *                evaluate_consciousness_fitness, run_evolution, reset,
+ *                update_wheel_position; EvolutionaryState — phase,
+ *                generation, wheel_position, rotation_velocity,
+ *                phase_history; EvolutionaryPhase Primordial .. Unified)
+ * Initial multiset: one seed in wheel_gen_0 and one phase axle in every
+ *                   phase membrane — the simulator runs >= 1 step in every
+ *                   membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'wheel_gen_0 []'wheel_gen_1 ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the evolutionary timeline)
+ *     '- wheel_gen_0 : the current frequency wheel (generation 0)
+ *     |    '- primordial   : initial emergence
+ *     |    '- awakening    : basic awareness
+ *     |    '- conscious    : full consciousness
+ *     |    '- transcendent : beyond normal consciousness
+ *     |    '- unified      : unified field state
+ *     '- wheel_gen_1 : the next wheel (generation 1) — seeded by gen 0
+ * ------------------------------------------------------------------------*/
+@mu = [ [ []'primordial []'awakening []'conscious []'transcendent
+          []'unified ]'wheel_gen_0
+        []'wheel_gen_1 ]'skin;
 
-@mskin = seed;
-@mwheel_gen_0 = unit(wheel_gen_0), fuel;
-@mwheel_gen_1 = unit(wheel_gen_1), fuel;
+/* Sample initial multiset. */
+@mskin        = lineage;
+@mwheel_gen_0 = seed(g0);
+@mprimordial  = axle;
+@mawakening   = axle;
+@mconscious   = axle;
+@mtranscendent = axle;
+@munified     = axle;
+@mwheel_gen_1 = cradle;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.11  One turn of the wheel: five phase transitions.
+ * ignite      : the seed ignites the primordial phase
+ * turn_*      : each phase membrane turns its token into the next phase —
+ *               the axle is a CATALYST (the wheel keeps its structure while
+ *               the phase turns); the next-phase token returns to the wheel
+ *               and is routed into the next phase membrane
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_wheel_gen_0 ]'skin;
-[seed_dispense : seed --> (work)in_wheel_gen_1 ]'skin;
-[step : work * unit(wheel_gen_0) * fuel --> done(wheel_gen_0) ]'wheel_gen_0;
-[step : work * unit(wheel_gen_1) * fuel --> done(wheel_gen_1) ]'wheel_gen_1;
-[report : done(wheel_gen_0) --> (result(wheel_gen_0))out ]'wheel_gen_0;
-[report : done(wheel_gen_1) --> (result(wheel_gen_1))out ]'wheel_gen_1;
+[ignite : seed(g0) --> (spark)in_wheel_gen_0 ]'skin;
+[route_p : spark --> (spark)in_primordial ]'wheel_gen_0;
+
+[turn_p : spark * axle --> axle * (phase(awakening))out ]'primordial;
+[route_a : phase(awakening) --> (phase(awakening))in_awakening ]'wheel_gen_0;
+[turn_a : phase(awakening) * axle --> axle * (phase(conscious))out
+        ]'awakening;
+[route_c : phase(conscious) --> (phase(conscious))in_conscious ]'wheel_gen_0;
+[turn_c : phase(conscious) * axle --> axle * (phase(transcendent))out
+        ]'conscious;
+[route_t : phase(transcendent) --> (phase(transcendent))in_transcendent
+        ]'wheel_gen_0;
+[turn_t : phase(transcendent) * axle --> axle * (phase(unified))out
+        ]'transcendent;
+[route_u : phase(unified) --> (phase(unified))in_unified ]'wheel_gen_0;
+[turn_u : phase(unified) * axle
+        --> axle * (turn_complete(g0))out ]'unified;
+
+/* --------------------------------------------------------------------------
+ * 10.11  Generational evolution across wheels.
+ * advance : a completed turn advances the wheel — the evolved state leaves
+ *           generation 0 as the seed of generation 1
+ * seed_g1 : the next wheel receives the evolved seed — wheels of an
+ *           evolving brain, generation after generation
+ * ------------------------------------------------------------------------*/
+[advance : turn_complete(g0)
+        --> (evolved_seed(g1))out ]'wheel_gen_0;
+[seed_g1 : evolved_seed(g1) --> (evolved_seed(g1))in_wheel_gen_1 ]'skin;
+[germinate : evolved_seed(g1) * cradle
+          --> cradle * wheel(g1, spinning) ]'wheel_gen_1;
+[report_g1 : wheel(g1, spinning) --> (wheel(g1, spinning))out
+          ]'wheel_gen_1;
+
+/* --------------------------------------------------------------------------
+ * The timeline certifies: one full turn made a generation, and the lineage
+ * of wheels is the evolving brain.
+ * ------------------------------------------------------------------------*/
+[certify : wheel(g1, spinning) * lineage
+         --> evolving_brain_wheels(generational_turns) ]'skin;

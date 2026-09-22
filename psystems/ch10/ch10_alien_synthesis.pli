@@ -1,30 +1,96 @@
 /* ============================================================================
  * psystems/ch10/ch10_alien_synthesis.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.12
- * Functionality: Synthesis of aliens before meeting them: speculative mind-space exploration membranes.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.12 — Synthesis of aliens before meeting them.
+ *
+ * Functionality: If mathematics is the basis of human consciousness, it is
+ *   not the ONLY consciousness (10.12, Figure 10.12): the human brain is
+ *   the integer 12 factored as 2x2x3 (twelve components, three ways to
+ *   write the higher-level geometry), but the same consciousness power is
+ *   achieved by 2x2x5, by 3x3x3, and beyond — the table of minds
+ *   extrapolates human consciousness along an infinite journey. The ALIEN
+ *   is synthesized BEFORE any meeting: the seed geometry 2x3x5 (the
+ *   tridecanion, elementary tensor not 2x2 but triplet 3x3 / 5x5) defines a
+ *   mind humans cannot even understand. Each mind-space membrane takes an
+ *   integer mind-spec, factors it into its tensor seed, and assembles the
+ *   speculative mind — exploration of possible consciousness by pure
+ *   factorization.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli — a mind is an ordered-factor object; the
+ *                                  tensor seed is its prime factorization
+ *     common/hypernumbers.pli    — quaternion (2x2), octonion (2x2x2),
+ *                                  dodecanion (2x2x3) and beyond: the
+ *                                  multnion ladder of the table
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessState — CONSCIOUSNESS_DIMENSIONS and the
+ *                time_crystal_snapshot: the dimension count IS the mind
+ *                spec; CreativeGenerationInterface — synthesizing
+ *                never-seen mind patterns),
+ *               src/cpp/nanobrain_ontogenesis.h
+ *               (OntogenesisEngine::create_random_genome,
+ *                self_generate — speculative genomes of unmet minds)
+ * Initial multiset: three mind specs (12 human, 20 beyond, 30 alien) in the
+ *                   skin and a factor bench in every mind-space membrane —
+ *                   the simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'alien_space ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the observatory that synthesizes before contact)
+ *     '- human_mind  : spec 12 = 2x2x3 — the dodecanion human brain
+ *     '- higher_mind : spec 20 = 2x2x5 — higher-than-human consciousness
+ *     '- alien_mind  : spec 30 = 2x3x5 — the alien, hexanary linguistics,
+ *                       tridecanion hardware
+ * ------------------------------------------------------------------------*/
+@mu = [ []'human_mind []'higher_mind []'alien_mind ]'skin;
 
-@mskin = seed;
-@malien_space = unit(alien_space), fuel;
+/* Sample initial multiset. */
+@mskin       = mind_spec(12), mind_spec(20), mind_spec(30);
+@mhuman_mind = factor_bench;
+@mhigher_mind = factor_bench;
+@malien_mind = factor_bench;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.12  Speculative mind-space exploration.
+ * admit_* : the observatory admits each mind spec into its exploration
+ *           membrane
+ * factor_*: the factor bench (a CATALYST) resolves the spec into its
+ *           tensor seed — the prime factorization of a consciousness
+ * assemble_*: the seed assembles the speculative mind — synthesized before
+ *           any meeting
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_alien_space ]'skin;
-[step : work * unit(alien_space) * fuel --> done(alien_space) ]'alien_space;
-[report : done(alien_space) --> (result(alien_space))out ]'alien_space;
+[admit_h : mind_spec(12) --> (mind_spec(12))in_human_mind ]'skin;
+[factor_h : mind_spec(12) * factor_bench
+         --> factor_bench * seed(2,2,3) ]'human_mind;
+[assemble_h : seed(2,2,3)
+           --> (speculative_mind(human, dodecanion))out ]'human_mind;
+
+[admit_g : mind_spec(20) --> (mind_spec(20))in_higher_mind ]'skin;
+[factor_g : mind_spec(20) * factor_bench
+         --> factor_bench * seed(2,2,5) ]'higher_mind;
+[assemble_g : seed(2,2,5)
+           --> (speculative_mind(higher, qua_di_deca))out ]'higher_mind;
+
+[admit_a : mind_spec(30) --> (mind_spec(30))in_alien_mind ]'skin;
+[factor_a : mind_spec(30) * factor_bench
+         --> factor_bench * seed(2,3,5) ]'alien_mind;
+[assemble_a : seed(2,3,5)
+           --> (speculative_mind(alien, tridecanion))out ]'alien_mind;
+
+/* --------------------------------------------------------------------------
+ * 10.12  The observatory compares the synthesized minds: the human mind is
+ *        one point in an infinite mind-space — the alien is already here,
+ *        as mathematics.
+ * ------------------------------------------------------------------------*/
+[compare : speculative_mind(human, dodecanion)
+        * speculative_mind(higher, qua_di_deca)
+        * speculative_mind(alien, tridecanion)
+        --> mind_space_catalog(synthesis_before_meeting) ]'skin;

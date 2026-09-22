@@ -1,66 +1,188 @@
 /* ============================================================================
  * psystems/ch10/ch10_reverse_engineering_guidelines.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.2
- * Functionality: Ten key guidelines to reverse-engineer a human brain, as ten requirement membranes gating the build.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.2 — Ten key guidelines to reverse engineer a human brain.
+ *
+ * Functionality: Building the artificial brain is GATED by ten key
+ *   guidelines (the design table of Figure 10.2): (1) time-crystal sensors
+ *   alone cannot deliver pure 12D data — it is perfected in three steps,
+ *   4D then 8D then 12D; (2) eleven imaginary worlds are nested one inside
+ *   another and interact to deliver reality — a fractal tape machine;
+ *   (3) 15 primes from 2 to 47 design the brain elements, vibrating like
+ *   primes to generate all integers and symmetries; (4) the junctions and
+ *   singularities between the imaginary worlds process data as power of
+ *   powers and filter the noise; (5) every key brain element forms a
+ *   meander-flower garden of time crystals — a conscious decision is a
+ *   garden of gardens; (6) the brain absorbs all symmetries as ratios of
+ *   integers and processes them as ratios of primes to simulate the future;
+ *   (7) the garden of gardens operates at three decision levels — sensor,
+ *   analyser, decision-maker; (8) the singularity surface separating the
+ *   imaginary layers has direction — its tensor interaction gives space and
+ *   mass; (9) left-right C2 symmetry is everywhere in the brain to build
+ *   tensors, C3 and C2 regulate the 3D shape; (10) neural wiring of fibers
+ *   is not circuits — the brain has no circuits, it evolves to manage time
+ *   and to process 47 primes. Each guideline is a REQUIREMENT MEMBRANE:
+ *   the brain-build token is sent into a guideline, verified against its
+ *   requirement, and only then passed on — ten gates in sequence, and only
+ *   a brain that passes all ten is reverse-engineered.
+ *
+ *   Common modules inlined by convention:
+ *     common/alphabet_primes.pli   — guideline 3/10: the 15 primes 2..47
+ *     common/time_crystal_core.pli — guideline 2: 11 nested imaginary worlds
+ *     common/gml_shapes.pli        — guideline 9: C2/C3 symmetry shapes
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (ConsciousnessTestSuite::test_reverse_engineering_guidelines
+ *                and the ten tests test_guideline_1_self_reference ..
+ *                test_guideline_10_transcendence; GuidelineTestResult —
+ *                guideline_number, passed, score; ConsciousnessTestMetrics)
+ * Initial multiset: one brain_build token and the ten guideline probes in
+ *                   the skin, one requirement object in every guideline
+ *                   membrane — the simulator runs >= 1 step in every
+ *                   membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'guide_1 []'guide_2 []'guide_3 []'guide_4 []'guide_5 []'guide_6 []'guide_7 []'guide_8 []'guide_9 []'guide_10 ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the build desk)
+ *     '- g1_sensors_12d    : sensors perfect 4D -> 8D -> 12D data
+ *     '- g2_imaginary_11   : 11 imaginary worlds nested, a fractal tape
+ *     '- g3_primes_15      : 15 primes (2..47) design the brain elements
+ *     '- g4_junctions      : singularities between worlds filter noise
+ *     '- g5_gardens        : meander-flower gardens of time crystals
+ *     '- g6_prime_ratios   : symmetries absorbed as ratios of primes
+ *     '- g7_three_levels   : sensor / analyser / decision-maker levels
+ *     '- g8_singularity    : directed singularity surfaces give space, mass
+ *     '- g9_c2_c3_symmetry : C2 (and C3) symmetry builds the tensors
+ *     '- g10_no_circuits   : no circuits — the brain evolves to manage time
+ * ------------------------------------------------------------------------*/
+@mu = [ []'g1_sensors_12d []'g2_imaginary_11 []'g3_primes_15
+        []'g4_junctions []'g5_gardens []'g6_prime_ratios []'g7_three_levels
+        []'g8_singularity []'g9_c2_c3_symmetry []'g10_no_circuits ]'skin;
 
-@mskin = seed;
-@mguide_1 = unit(guide_1), fuel;
-@mguide_2 = unit(guide_2), fuel;
-@mguide_3 = unit(guide_3), fuel;
-@mguide_4 = unit(guide_4), fuel;
-@mguide_5 = unit(guide_5), fuel;
-@mguide_6 = unit(guide_6), fuel;
-@mguide_7 = unit(guide_7), fuel;
-@mguide_8 = unit(guide_8), fuel;
-@mguide_9 = unit(guide_9), fuel;
-@mguide_10 = unit(guide_10), fuel;
+/* Sample initial multiset. */
+@mskin = brain_build, probe(g1), probe(g2), probe(g3), probe(g4), probe(g5),
+         probe(g6), probe(g7), probe(g8), probe(g9), probe(g10);
+@mg1_sensors_12d    = req(sense_4d_8d_12d);
+@mg2_imaginary_11   = req(nest_11_worlds);
+@mg3_primes_15      = req(primes_2_to_47);
+@mg4_junctions      = req(singularity_junctions);
+@mg5_gardens        = req(meander_flower_gardens);
+@mg6_prime_ratios   = req(ratio_of_primes);
+@mg7_three_levels   = req(sensor_analyser_decider);
+@mg8_singularity    = req(directed_surface);
+@mg9_c2_c3_symmetry = req(c2_c3_tensors);
+@mg10_no_circuits   = req(manage_time_not_circuits);
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.2  Ten requirement membranes gating the build.
+ * begin   : the build token enters guideline 1 — the gating starts
+ * gate_N  : inside guideline N the probe meets its requirement — the
+ *           requirement is a CATALYST (it is checked, never consumed) and
+ *           the probe becomes evidence that guideline N holds
+ * pass_N  : the evidence surfaces to the skin
+ * advance : evidence of guideline N plus the advancing build token opens
+ *           guideline N+1 — the ten gates are walked in sequence
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_guide_1 ]'skin;
-[seed_dispense : seed --> (work)in_guide_2 ]'skin;
-[seed_dispense : seed --> (work)in_guide_3 ]'skin;
-[seed_dispense : seed --> (work)in_guide_4 ]'skin;
-[seed_dispense : seed --> (work)in_guide_5 ]'skin;
-[seed_dispense : seed --> (work)in_guide_6 ]'skin;
-[seed_dispense : seed --> (work)in_guide_7 ]'skin;
-[seed_dispense : seed --> (work)in_guide_8 ]'skin;
-[seed_dispense : seed --> (work)in_guide_9 ]'skin;
-[seed_dispense : seed --> (work)in_guide_10 ]'skin;
-[step : work * unit(guide_1) * fuel --> done(guide_1) ]'guide_1;
-[step : work * unit(guide_2) * fuel --> done(guide_2) ]'guide_2;
-[step : work * unit(guide_3) * fuel --> done(guide_3) ]'guide_3;
-[step : work * unit(guide_4) * fuel --> done(guide_4) ]'guide_4;
-[step : work * unit(guide_5) * fuel --> done(guide_5) ]'guide_5;
-[step : work * unit(guide_6) * fuel --> done(guide_6) ]'guide_6;
-[step : work * unit(guide_7) * fuel --> done(guide_7) ]'guide_7;
-[step : work * unit(guide_8) * fuel --> done(guide_8) ]'guide_8;
-[step : work * unit(guide_9) * fuel --> done(guide_9) ]'guide_9;
-[step : work * unit(guide_10) * fuel --> done(guide_10) ]'guide_10;
-[report : done(guide_1) --> (result(guide_1))out ]'guide_1;
-[report : done(guide_2) --> (result(guide_2))out ]'guide_2;
-[report : done(guide_3) --> (result(guide_3))out ]'guide_3;
-[report : done(guide_4) --> (result(guide_4))out ]'guide_4;
-[report : done(guide_5) --> (result(guide_5))out ]'guide_5;
-[report : done(guide_6) --> (result(guide_6))out ]'guide_6;
-[report : done(guide_7) --> (result(guide_7))out ]'guide_7;
-[report : done(guide_8) --> (result(guide_8))out ]'guide_8;
-[report : done(guide_9) --> (result(guide_9))out ]'guide_9;
-[report : done(guide_10) --> (result(guide_10))out ]'guide_10;
+[begin : brain_build * probe(g1)
+      --> (token(g1))in_g1_sensors_12d * (probe(g1))in_g1_sensors_12d ]'skin;
+
+[gate_1 : token(g1) * probe(g1) * req(sense_4d_8d_12d)
+       --> req(sense_4d_8d_12d) * pass(g1, sense_4d_8d_12d) ]'g1_sensors_12d;
+[pass_1 : pass(g1, sense_4d_8d_12d)
+       --> (evidence(g1))out * (token(g2))out * (probe(g2))out ]'g1_sensors_12d;
+[advance_1 : token(g2) * probe(g2)
+          --> (token(g2))in_g2_imaginary_11 * (probe(g2))in_g2_imaginary_11
+          ]'skin;
+
+[gate_2 : token(g2) * probe(g2) * req(nest_11_worlds)
+       --> req(nest_11_worlds) * pass(g2, nest_11_worlds) ]'g2_imaginary_11;
+[pass_2 : pass(g2, nest_11_worlds)
+       --> (evidence(g2))out * (token(g3))out * (probe(g3))out
+       ]'g2_imaginary_11;
+[advance_2 : token(g3) * probe(g3)
+          --> (token(g3))in_g3_primes_15 * (probe(g3))in_g3_primes_15 ]'skin;
+
+[gate_3 : token(g3) * probe(g3) * req(primes_2_to_47)
+       --> req(primes_2_to_47) * pass(g3, primes_2_to_47) ]'g3_primes_15;
+[pass_3 : pass(g3, primes_2_to_47)
+       --> (evidence(g3))out * (token(g4))out * (probe(g4))out
+       ]'g3_primes_15;
+[advance_3 : token(g4) * probe(g4)
+          --> (token(g4))in_g4_junctions * (probe(g4))in_g4_junctions ]'skin;
+
+[gate_4 : token(g4) * probe(g4) * req(singularity_junctions)
+       --> req(singularity_junctions) * pass(g4, singularity_junctions)
+       ]'g4_junctions;
+[pass_4 : pass(g4, singularity_junctions)
+       --> (evidence(g4))out * (token(g5))out * (probe(g5))out ]'g4_junctions;
+[advance_4 : token(g5) * probe(g5)
+          --> (token(g5))in_g5_gardens * (probe(g5))in_g5_gardens ]'skin;
+
+[gate_5 : token(g5) * probe(g5) * req(meander_flower_gardens)
+       --> req(meander_flower_gardens) * pass(g5, meander_flower_gardens)
+       ]'g5_gardens;
+[pass_5 : pass(g5, meander_flower_gardens)
+       --> (evidence(g5))out * (token(g6))out * (probe(g6))out ]'g5_gardens;
+[advance_5 : token(g6) * probe(g6)
+          --> (token(g6))in_g6_prime_ratios * (probe(g6))in_g6_prime_ratios
+          ]'skin;
+
+[gate_6 : token(g6) * probe(g6) * req(ratio_of_primes)
+       --> req(ratio_of_primes) * pass(g6, ratio_of_primes) ]'g6_prime_ratios;
+[pass_6 : pass(g6, ratio_of_primes)
+       --> (evidence(g6))out * (token(g7))out * (probe(g7))out
+       ]'g6_prime_ratios;
+[advance_6 : token(g7) * probe(g7)
+          --> (token(g7))in_g7_three_levels * (probe(g7))in_g7_three_levels
+          ]'skin;
+
+[gate_7 : token(g7) * probe(g7) * req(sensor_analyser_decider)
+       --> req(sensor_analyser_decider) * pass(g7, sensor_analyser_decider)
+       ]'g7_three_levels;
+[pass_7 : pass(g7, sensor_analyser_decider)
+       --> (evidence(g7))out * (token(g8))out * (probe(g8))out
+       ]'g7_three_levels;
+[advance_7 : token(g8) * probe(g8)
+          --> (token(g8))in_g8_singularity * (probe(g8))in_g8_singularity
+          ]'skin;
+
+[gate_8 : token(g8) * probe(g8) * req(directed_surface)
+       --> req(directed_surface) * pass(g8, directed_surface)
+       ]'g8_singularity;
+[pass_8 : pass(g8, directed_surface)
+       --> (evidence(g8))out * (token(g9))out * (probe(g9))out
+       ]'g8_singularity;
+[advance_8 : token(g9) * probe(g9)
+          --> (token(g9))in_g9_c2_c3_symmetry * (probe(g9))in_g9_c2_c3_symmetry
+          ]'skin;
+
+[gate_9 : token(g9) * probe(g9) * req(c2_c3_tensors)
+       --> req(c2_c3_tensors) * pass(g9, c2_c3_tensors) ]'g9_c2_c3_symmetry;
+[pass_9 : pass(g9, c2_c3_tensors)
+       --> (evidence(g9))out * (token(g10))out * (probe(g10))out
+       ]'g9_c2_c3_symmetry;
+[advance_9 : token(g10) * probe(g10)
+          --> (token(g10))in_g10_no_circuits * (probe(g10))in_g10_no_circuits
+          ]'skin;
+
+[gate_10 : token(g10) * probe(g10) * req(manage_time_not_circuits)
+        --> req(manage_time_not_circuits) * pass(g10, manage_time_not_circuits)
+        ]'g10_no_circuits;
+[pass_10 : pass(g10, manage_time_not_circuits)
+        --> (evidence(g10))out ]'g10_no_circuits;
+
+/* --------------------------------------------------------------------------
+ * The brain is reverse-engineered only when all ten guidelines are met —
+ * the ten evidences fuse into the certified build.
+ * ------------------------------------------------------------------------*/
+[certify : evidence(g1) * evidence(g2) * evidence(g3) * evidence(g4)
+         * evidence(g5) * evidence(g6) * evidence(g7) * evidence(g8)
+         * evidence(g9) * evidence(g10)
+         --> reverse_engineered_brain(ten_guidelines_met) ]'skin;

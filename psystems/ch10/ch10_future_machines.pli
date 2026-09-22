@@ -1,38 +1,126 @@
 /* ============================================================================
  * psystems/ch10/ch10_future_machines.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.8, 10.8.1-10.8.2
- * Functionality: Machines of the future: circuits of wires vs circuits of time; future applications.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.8   — Machines of the future,
+ *           10.8.1 — The difference between circuits of wires and circuits
+ *                    of time,
+ *           10.8.2 — Future applications.
+ *
+ * Functionality: Two kinds of circuit are contrasted (10.8.1). A circuit
+ *   of WIRES connects components in space: the signal travels wire by wire
+ *   and every node is a switch — events are linearized into a series of
+ *   sub-events. A circuit of TIME connects CLOCKS and singularities: the
+ *   signal does not travel, it PHASE-LOCKS; events are linked by phase in
+ *   1D/2D/3D geometries, intricately, neither in series nor in parallel.
+ *   The future machines are time circuits (10.8, 10.8.2): a DIAGNOSIS
+ *   interface that reads a consciousness state and reports its faults, a
+ *   DECISION-SUPPORT interface that answers when no logic can be framed,
+ *   and a CREATIVE-GENERATION interface that composes new patterns —
+ *   applications of the brain-jelly human brain.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — a time circuit is a closed loop of
+ *                                    clocks; signals phase-lock instead of
+ *                                    traveling
+ *     common/ecan_attention.pli    — interface readiness is an attention
+ *                                    budget paid in STI-like tokens
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (TimeCircuit — process_input, generate_output, is_ready;
+ *                DiagnosisInterface::diagnose; DecisionSupportInterface;
+ *                CreativeGenerationInterface — the three future machine
+ *                applications)
+ * Initial multiset: one wire signal for the wire circuit, one temporal
+ *                   signal for the time circuit, and one request for each
+ *                   future interface — the simulator runs >= 1 step in
+ *                   every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'wire_circuit []'time_circuit []'apps ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the expo hall of future machines)
+ *     '- wire_circuit : the old paradigm — spatial wires, switches, series
+ *     '- time_circuit : the new paradigm — temporal clocks, phase-locking
+ *     '- diagnosis    : future application 1 — diagnose consciousness states
+ *     '- decision     : future application 2 — decide without logic
+ *     '- creative     : future application 3 — generate new patterns
+ * ------------------------------------------------------------------------*/
+@mu = [ []'wire_circuit []'time_circuit
+        []'diagnosis []'decision []'creative ]'skin;
 
-@mskin = seed;
-@mwire_circuit = unit(wire_circuit), fuel;
-@mtime_circuit = unit(time_circuit), fuel;
-@mapps = unit(apps), fuel;
+/* Sample initial multiset. */
+@mskin        = wire_signal, temporal_signal, patient_state,
+                open_question, seed_pattern;
+@mwire_circuit = switch(s1), wire(w1);
+@mtime_circuit = clock(c1), singularity_point;
+@mdiagnosis   = symptom_reader;
+@mdecision    = option_space;
+@mcreative    = muse;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.8.1  Circuit of wires: the signal travels switch by switch in series.
+ * wire_in  : the wire signal enters the old circuit
+ * hop      : the switch passes the signal along the wire — spatial
+ *            transmission, one hop at a time, events in series
+ * wire_out : the series answer leaves — correct but linearized
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_wire_circuit ]'skin;
-[seed_dispense : seed --> (work)in_time_circuit ]'skin;
-[seed_dispense : seed --> (work)in_apps ]'skin;
-[step : work * unit(wire_circuit) * fuel --> done(wire_circuit) ]'wire_circuit;
-[step : work * unit(time_circuit) * fuel --> done(time_circuit) ]'time_circuit;
-[step : work * unit(apps) * fuel --> done(apps) ]'apps;
-[report : done(wire_circuit) --> (result(wire_circuit))out ]'wire_circuit;
-[report : done(time_circuit) --> (result(time_circuit))out ]'time_circuit;
-[report : done(apps) --> (result(apps))out ]'apps;
+[wire_in : wire_signal --> (wire_signal)in_wire_circuit ]'skin;
+[hop : wire_signal * switch(S) * wire(W)
+     --> switch(S) * wire(W) * series_answer ]'wire_circuit;
+[wire_out : series_answer --> (linearized(events))out ]'wire_circuit;
+
+/* --------------------------------------------------------------------------
+ * 10.8.1  Circuit of time: the signal does not travel — it phase-locks.
+ * time_in : the temporal signal enters the time circuit
+ * lock    : the clock and the singularity phase-lock the signal — all
+ *           sub-events connect at once, by phase, in no series
+ * time_out: the phase answer leaves — intricate 1D/2D/3D wiring of events
+ * ------------------------------------------------------------------------*/
+[time_in : temporal_signal --> (temporal_signal)in_time_circuit ]'skin;
+[lock : temporal_signal * clock(C) * singularity_point
+      --> clock(C) * singularity_point * phase_locked ]'time_circuit;
+[time_out : phase_locked --> (phased(events))out ]'time_circuit;
+
+/* --------------------------------------------------------------------------
+ * The expo certifies the difference (10.8.1): wires give a series, time
+ * gives a phase-locked whole.
+ * ------------------------------------------------------------------------*/
+[contrast : linearized(events) * phased(events)
+         --> circuits_compared(time_replaces_wire) ]'skin;
+
+/* --------------------------------------------------------------------------
+ * 10.8.2  Future applications — three time-circuit interfaces.
+ * admit_d/c/r : a request enters its interface
+ * diagnose    : the patient's consciousness state is read — faults reported
+ * support     : the open question is answered inside the option space —
+ *               decision support when no logic can be framed
+ * create      : the muse unfolds the seed pattern into a new composition
+ * ship_*      : the three applications ship to the world
+ * ------------------------------------------------------------------------*/
+[admit_d : patient_state --> (patient_state)in_diagnosis ]'skin;
+[diagnose : patient_state * symptom_reader
+         --> symptom_reader * diagnostic_report ]'diagnosis;
+[ship_d : diagnostic_report --> (health_report)out ]'diagnosis;
+
+[admit_c : open_question --> (open_question)in_decision ]'skin;
+[support : open_question * option_space
+        --> option_space * supported_decision ]'decision;
+[ship_c : supported_decision --> (decision_made)out ]'decision;
+
+[admit_r : seed_pattern --> (seed_pattern)in_creative ]'skin;
+[create : seed_pattern * muse
+       --> muse * new_composition ]'creative;
+[ship_r : new_composition --> (novel_pattern)out ]'creative;
+
+/* --------------------------------------------------------------------------
+ * The machines of the future ship: diagnosis, decision support and
+ * creative generation — all running on circuits of time.
+ * ------------------------------------------------------------------------*/
+[future : health_report * decision_made * novel_pattern
+        --> machines_of_the_future(time_circuit_applications) ]'skin;

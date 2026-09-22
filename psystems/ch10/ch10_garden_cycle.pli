@@ -1,38 +1,106 @@
 /* ============================================================================
  * psystems/ch10/ch10_garden_cycle.pli
  *
- * NanoBrain CH10: Uploading consciousness: the evolution of conscious machines of the future
- * Issue #15 — P-Lingua specification (see psystems/README.md).
+ * NanoBrain CH10: Uploading consciousness — the evolution of conscious
+ * machines of the future. Issue #15 — P-Lingua specification
+ * (see psystems/README.md).
  *
- * Sections: 10.13
- * Functionality: A cycle of the garden to flower to a petal: full GOG life-cycle rules closing the book.
- * Traceability: src/cpp/nanobrain_consciousness.h, nanobrain_ontogenesis.h
- * Initial multiset: sample objects in each membrane so the simulator can run
- *                   at least one evolution step.
+ * Sections: 10.13 — A cycle of the garden to flower to a petal.
+ *
+ * Functionality: The book closes on the meander-flower garden of gardens
+ *   (10.13): the universe takes a set of petals from multiple gardens of
+ *   gardens and builds ANOTHER garden of meander flowers — one's garden of
+ *   gardens is another's petal of a flower. The cycle is modeled as full
+ *   life-cycle rules: the GARDEN holds beds of time crystals; a bed blooms
+ *   into a FLOWER; a flower sheds PETALS; and a petal — carried out to the
+ *   skin — is itself planted as the SEED OF A NEW GARDEN. Garden to flower
+ *   to petal to garden: when every part of the system grows simultaneously
+ *   and spontaneously, the cycle has no boundary and no end — the full GOG
+ *   life cycle that closes the book.
+ *
+ *   Common modules inlined by convention:
+ *     common/time_crystal_core.pli — every bed is a self-assembled time
+ *                                    crystal; blooming is a phase event on
+ *                                    the nested clock lattice
+ *     common/gml_shapes.pli        — the meander-flower geometry of the
+ *                                    petals (GML shape objects)
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ *               (BrainEvolutionSimulator::run_evolution — the life cycle
+ *                iterated; EvolutionaryState.phase_history — the record of
+ *                the cycle),
+ *               src/cpp/nanobrain_ontogenesis.h
+ *               (OntogenesisEngine — self_generate, self_reproduce:
+ *                petals seeding new gardens is kernel self-reproduction;
+ *                GenerationStats — one bloom per generation)
+ * Initial multiset: one seed crystal in the garden and the cycle
+ *                   catalysts in garden, flower and petal membranes — the
+ *                   simulator runs >= 1 step in every membrane.
  * ==========================================================================*/
 
 @model<psystems_basic>
 
-/* Membrane structure: skin with one membrane per functional unit. */
-@mu = [ []'garden []'flower []'petal ]'skin;
+/* --------------------------------------------------------------------------
+ * Membrane structure:
+ *   skin (the universe between gardens)
+ *     '- garden : the garden of gardens — beds of time crystals
+ *     |    '- flower : a meander flower bloomed from a bed
+ *     |         '- petal : one petal of the flower — a whole GOG in seed
+ *     '- nursery : where a petal is planted as the next garden
+ * ------------------------------------------------------------------------*/
+@mu = [ [ [ []'petal ]'flower ]'garden []'nursery ]'skin;
 
-@mskin = seed;
-@mgarden = unit(garden), fuel;
-@mflower = unit(flower), fuel;
-@mpetal = unit(petal), fuel;
+/* Sample initial multiset. */
+@mskin   = season(spring);
+@mgarden = seed_crystal, gardener;
+@mflower = blossom_law;
+@mpetal  = petal_law;
+@mnursery = soil;
 
 /* --------------------------------------------------------------------------
- * Evolution rules
- * seed_dispense : the skin injects a work token into each functional membrane
- * step_%s-local : each membrane transforms its unit object and consumes fuel
- * report        : finished results are sent out to the skin
+ * 10.13  Garden -> flower: simultaneous, spontaneous growth.
+ * plant   : the universe plants the season into the garden
+ * sprout  : the seed crystal, tended by the gardener (a CATALYST), sprouts
+ *           into a bed of time crystals — every part grows at once
+ * bloom   : the bed is sent into the flower membrane and blooms — one's
+ *           garden is about to become another's flower
  * ------------------------------------------------------------------------*/
-[seed_dispense : seed --> (work)in_garden ]'skin;
-[seed_dispense : seed --> (work)in_flower ]'skin;
-[seed_dispense : seed --> (work)in_petal ]'skin;
-[step : work * unit(garden) * fuel --> done(garden) ]'garden;
-[step : work * unit(flower) * fuel --> done(flower) ]'flower;
-[step : work * unit(petal) * fuel --> done(petal) ]'petal;
-[report : done(garden) --> (result(garden))out ]'garden;
-[report : done(flower) --> (result(flower))out ]'flower;
-[report : done(petal) --> (result(petal))out ]'petal;
+[plant : season(S) --> (season(S))in_garden ]'skin;
+[sprout : seed_crystal * gardener * season(S)
+       --> gardener * bed(time_crystals) ]'garden;
+[to_flower : bed(time_crystals) --> (bed(time_crystals))in_flower ]'garden;
+
+/* --------------------------------------------------------------------------
+ * 10.13  Flower -> petal.
+ * bloom    : under the blossom law (a CATALYST) the bed opens as a meander
+ *            flower
+ * to_petal : the bloom is sent into the petal membrane
+ * shed     : under the petal law the flower sheds a petal — a petal that
+ *            holds the whole garden of gardens in miniature
+ * ------------------------------------------------------------------------*/
+[bloom : bed(time_crystals) * blossom_law
+      --> blossom_law * meander_flower(open) ]'flower;
+[to_petal : meander_flower(open) --> (meander_flower(open))in_petal ]'flower;
+[shed : meander_flower(open) * petal_law
+      --> petal_law * (petal(gog_seed))out ]'petal;
+
+/* --------------------------------------------------------------------------
+ * 10.13  Petal -> garden: the cycle closes.
+ * release  : the flower releases the petal to the universe
+ * sow      : the universe sows the petal into the nursery — one's garden
+ *            of gardens becomes another's petal of a flower
+ * regrow   : in the soil (a CATALYST) the petal regrows a whole garden —
+ *            the cycle from garden to flower to petal begins again
+ * ------------------------------------------------------------------------*/
+[release : petal(gog_seed) --> (petal(gog_seed))out ]'flower;
+[sow : petal(gog_seed) --> (petal(gog_seed))in_nursery ]'skin;
+[regrow : petal(gog_seed) * soil
+       --> soil * (new_garden(cycle_complete))out ]'nursery;
+
+/* --------------------------------------------------------------------------
+ * The universe certifies the closing of the book: garden to flower to
+ * petal to garden — the full GOG life cycle, without boundary, without
+ * end.
+ * ------------------------------------------------------------------------*/
+[certify : new_garden(cycle_complete)
+         --> gog_life_cycle(garden_flower_petal_forever) ]'skin;

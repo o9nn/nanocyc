@@ -1,0 +1,238 @@
+{
+    "file": {
+        "time": 5,
+        "environment": [],
+        "membranes": [
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 8
+                    }
+                ],
+                "multiset": [],
+                "parent": -1,
+                "children": [
+                    1,
+                    2,
+                    4
+                ]
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 1
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 8
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    },
+                    {
+                        "key": {
+                            "id": 19
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 0,
+                "children": []
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 0
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 26
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 0,
+                "children": [
+                    3
+                ]
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 2
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 6
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    },
+                    {
+                        "key": {
+                            "id": 20
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 2,
+                "children": []
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 7
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 31
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 0,
+                "children": [
+                    5,
+                    6,
+                    7,
+                    8
+                ]
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 6
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 3
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    },
+                    {
+                        "key": {
+                            "id": 21
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 4,
+                "children": []
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 5
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 2
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    },
+                    {
+                        "key": {
+                            "id": 21
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 4,
+                "children": []
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 4
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 1
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    },
+                    {
+                        "key": {
+                            "id": 21
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 4,
+                "children": []
+            },
+            {
+                "charge": 0,
+                "label": [
+                    {
+                        "id": 3
+                    }
+                ],
+                "multiset": [
+                    {
+                        "key": {
+                            "id": 0
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    },
+                    {
+                        "key": {
+                            "id": 21
+                        },
+                        "value": {
+                            "multiplicity": 1
+                        }
+                    }
+                ],
+                "parent": 4,
+                "children": []
+            }
+        ]
+    }
+}
