@@ -3,8 +3,8 @@
  *
  * A membrane-computing port of lang/a9nn/NNECCOAgent.lua and its supporting
  * cognitive modules (EchoReservoir, Personality, EpisodicMemory,
- * LLaMAOrchestrator, CognitiveAgent), layered on the v2.3 atomspace.pli
- * knowledge base.
+ * LLaMAOrchestrator, CognitiveAgent, Agent), layered on the v2.3
+ * atomspace.pli knowledge base.
  *
  * NNECCO = Neural Network Embodied Cognitive Coprocessor Orchestrator.
  * It fuses deep learning with a cognitive architecture; in this port each
@@ -24,6 +24,15 @@
  *   LLaMA Orchestration    -> a pool of 1-9 instance membranes; least-load
  *                             dispatch is an antiport exchange, and in
  *                             stub mode each instance echoes its prompt.
+ *   Personality            -> a membrane of 12 trait objects with momentum
+ *                             objects; experiences nudge traits via a
+ *                             damped drift rule (momentum-decay averaging).
+ *   RL Policy (Agent)      -> the LEARN beat: epsilon-greedy action choice,
+ *                             Q-learning target r + gamma*max Q(next), and
+ *                             TD-error-driven replay priority updates.
+ *   CognitiveAgent         -> sub-agent membranes created by division,
+ *                             least-queue delegation and majority voting
+ *                             across the agent collective.
  *   AtomSpace integration  -> the INTEGRATE beat writes an EpisodeNode per
  *                             cycle into the atomspace.pli hypergraph.
  *   Hardware registers     -> R0..R4, PC, STA objects in the agent membrane.
@@ -93,8 +102,9 @@
             [pc{3}, x{i, round((100-a)*xi/100 + a*tanh_scaled(p)/100)},
              rspec{sr, a}]'reservoir
 
-        /* Advance the beat when the tick completes. */
-        [pc{3}]'reservoir -> [pc{4}]'reservoir
+        /* Advance the beat when the tick completes; snapshot the reservoir
+         * activation into register R1 (NNECCOAgent.registers.R1). */
+        [pc{3}]'reservoir -> [pc{4}]'reservoir (reservoir_state{1}, out)
     }
 }
 
@@ -141,8 +151,11 @@
             [pc{7}, emo{3, min(100, max(0, abs(nov)*50/100))},
              novelty{nov}]'agent
 
-        /* Snapshot the emotion vector into register R3, then advance. */
-        [pc{7}]'agent -> [pc{8}]'agent
+        /* Snapshot the emotion vector into register R3 (NNECCOAgent
+         * registers.R3 = emotions:clone()); the scalar packing c + j is the
+         * curiosity/joy projection logged by the Lua verbose dump. */
+        [pc{7}, emo{1, c}, emo{2, j}]'agent ->
+            [pc{8}, emo{1, c}, emo{2, j}, reg{r3, c + j}]'agent
     }
 }
 
@@ -199,11 +212,12 @@
     {
         /* Store an experience at the head slot with a priority. */
         [store_exp{state, action, reward, next, done}, head{h},
-         memcount{n}, memcount{cap}]'memory ->
+         memcount{n}, memcfg{cap}]'memory ->
             [exp{h, state, action, reward, next, done},
              prio{h, 100},
              head{(h mod cap) + 1},
-             memcount{min(n + 1, cap)}]'memory
+             memcount{min(n + 1, cap)},
+             memcfg{cap}]'memory
     }
 
     @rules recall
@@ -273,16 +287,195 @@
     @rules plan
     {
         /* Combine encoded context + emotion vector, then score actions. */
-        [pc{8}, r2{c}, emo{1, cur}]'agent ->
-            [pc{8}, q{a, round((c + cur) * a / 100)}]'agent
+        [pc{8}, reg{r2, c}, emo{1, cur}]'agent ->
+            [pc{8}, reg{r2, c}, emo{1, cur},
+             q{a, round((c + cur) * a / 100)}]'agent
             for (a = 1; a <= action_size; a++)
 
-        /* Greedy argmax over q-values. */
+        /* Greedy argmax over q-values (PLAN's non-training branch). */
         [pc{8}, q{a, v}]'agent ->
             [pc{8}, best_action{a}]'agent
             where forall_max q{a}
 
-        [pc{8}]'agent -> [pc{9}]'agent
+        /* Snapshot the winning Q-value into register R4, then advance. */
+        [pc{8}, q{a, v}]'agent -> [pc{9}, reg{r4, v}]'agent
+            where forall_max q{a}
+    }
+}
+
+/* ============================================================================
+ * PERSONALITY (trait tensor with momentum drift)
+ * Port of lang/a9nn/Personality.lua: 12 trait objects trait{t, v} in [0,100]
+ *   1 intelligence   2 creativity   3 curiosity   4 focus
+ *   5 empathy        6 warmth       7 playfulness 8 assertiveness
+ *   9 stability     10 openness    11 conscientiousness 12 resilience
+ * plus momentum objects mom{t, m}.  An experience object exp_delta{t, d}
+ * nudges trait t: momentum is damped (decay 90/100) then the trait drifts
+ * by drift_rate * scale * momentum (clamped to [0,100]).  Archetypes are
+ * the NeuroSama/Analytical presets of the Lua module.
+ * ============================================================================ */
+
+@module personality(archetype)
+{
+    @initial
+    {
+        [personality
+            pcfg{1, 90}                 /* drift_rate x100, momentum decay x100 */
+            /* NeuroSama archetype (default; Analytical swaps the multiset) */
+            trait{1, 85}                /* intelligence    */
+            trait{2, 90}                /* creativity      */
+            trait{3, 95}                /* curiosity       */
+            trait{4, 70}                /* focus           */
+            trait{5, 80}                /* empathy         */
+            trait{6, 95}                /* warmth          */
+            trait{7, 95}                /* playfulness     */
+            trait{8, 75}                /* assertiveness   */
+            trait{9, 65}                /* stability       */
+            trait{10, 90}               /* openness        */
+            trait{11, 55}               /* conscientiousness */
+            trait{12, 80}               /* resilience      */
+            for (t = 1; t <= 12; t++)
+            {
+                mom{t, 0}
+            }
+        ]'agent
+    }
+
+    @rules experience
+    {
+        /* Momentum update: m' = decay*m + (100-decay)*d/100  (decay = 90). */
+        [exp_delta{t, d}, mom{t, m}, pcfg{dr, dec}]'personality ->
+            [mom{t, round(dec*m/100 + (100-dec)*d/100)}, pcfg{dr, dec}]'personality
+
+        /* Trait drift: v' = clamp(0, 100, v + dr*scale*m/10000). */
+        [trait{t, v}, mom{t, m}, exp_scale{s}, pcfg{dr, dec}]'personality ->
+            [trait{t, min(100, max(0, v + round(dr*s*m/10000)))},
+             mom{t, m}, pcfg{dr, dec}]'personality
+    }
+
+    @rules blend
+    {
+        /* Blend two personalities: b{t,v} = (100-alpha)*v/100 + alpha*w/100. */
+        [blend_req{alpha}, trait{t, v}, other_trait{t, w}]'personality ->
+            [blend_req{alpha}, trait{t, v},
+             blended{t, round((100-alpha)*v/100 + alpha*w/100)}]'personality
+    }
+}
+
+/* ============================================================================
+ * RL POLICY (the Agent core behind CognitiveAgent/NNECCOAgent)
+ * Port of lang/a9nn/Agent.lua: an epsilon-greedy policy over the planner's
+ * q{a, v} objects, and a Q-learning LEARN beat.  The target for the taken
+ * action is r + gamma*max_a Q(next) (done transitions keep r); the TD error
+ * is the mean squared loss and also refreshes the replay priorities
+ * (EpisodicMemory:updatePriorities).  Epsilon decays x995/1000 per learning
+ * step, floored at epsilon_min.
+ * ============================================================================ */
+
+@module agent_policy(action_size, gamma, epsilon0, epsilon_min, epsilon_decay)
+{
+    @initial
+    {
+        [policy
+            polcfg{gamma, epsilon0, epsilon_min, epsilon_decay}   /* x100/x1000 */
+            eps{epsilon0}
+            steps{0}
+        ]'agent
+    }
+
+    @rules act
+    {
+        /* Training-mode action choice: explore with probability epsilon
+         * (roll < eps -> uniform random action), else exploit the argmax. */
+        [pc{8}, eps{e}, roll{r}]'policy ->
+            [pc{8}, eps{e}, explore{random(1, action_size)}]'policy
+            where r < e
+
+        [pc{8}, eps{e}, roll{r}]'policy ->
+            [pc{8}, eps{e}, exploit{1}]'policy
+            where r >= e
+    }
+
+    @rules learn
+    {
+        /* Q-learning target for the stored transition. */
+        [pc{9}, exp{i, s, a, r, sp, 0}, qmax_next{mq}]'agent ->
+            [pc{9}, target_q{i, r + round(gamma*mq/100)}]'agent
+
+        [pc{9}, exp{i, s, a, r, sp, 1}]'agent ->
+            [pc{9}, target_q{i, r}]'agent
+
+        /* TD error against the stored Q estimate; |td| refreshes the replay
+         * priority of slot i (prioritised experience replay). */
+        [pc{9}, target_q{i, tq}, q_stored{i, sq}]'agent ->
+            [pc{9}, td{i, tq - sq}]'agent
+            (prio_update{i, abs(tq - sq)}, in_memory)
+
+        /* Mean squared TD error is the cycle loss consumed by REFLECT. */
+        [pc{9}, td{i, d}, memcount{n}]'agent ->
+            [pc{10}, loss{round(d*d/100)}]'agent
+
+        /* Epsilon decay: e' = max(e_min, e*995/1000), one step counted. */
+        [pc{9}, eps{e}, steps{n},
+         polcfg{gamma, e0, emin, edec}]'policy ->
+            [pc{9}, eps{max(emin, round(e*edec/1000))}, steps{n + 1},
+             polcfg{gamma, e0, emin, edec}]'policy
+    }
+}
+
+/* ============================================================================
+ * COGNITIVE AGENT COLLECTIVE (multi-agent orchestration)
+ * Port of lang/a9nn/CognitiveAgent.lua: sub-agent membranes created by
+ * membrane division, least-queue delegation (the same guard style the LLaMA
+ * pool uses), broadcast, and majority-vote aggregation.  Each sub membrane
+ * carries id/role/parent objects and a queue counter; votes collect per
+ * action and the argmax becomes the collective action.
+ * ============================================================================ */
+
+@module cognitive_agent(max_subs)
+{
+    @initial
+    {
+        [collective
+            subcfg{max_subs}
+            subcount{0}
+            next_id{1}
+        ]'agent
+    }
+
+    @rules spawn
+    {
+        /* spawn_subordinate divides the collective membrane: the new sub
+         * inherits state/action sizes and records its parent id. */
+        [spawn_req{role}, subcount{n}, next_id{k}, subcfg{mx}]'collective ->
+            [subcount{n + 1}, next_id{k + 1}, subcfg{mx}
+             [sub{k} role{role} parent{self} queue{0} ]'collective
+            ]'collective
+            where n < mx
+    }
+
+    @rules delegate
+    {
+        /* Least-queue dispatch: the guard picks the sub whose queue is
+         * minimal among the collective. */
+        [task{T, P}]'agent [queue{q}]'sub{k} ->
+            [task{T, P}]'agent [queue{q + 1}]'sub{k}
+            where forall_min queue{k}
+
+        /* Handled tasks enqueue a result object back in the agent. */
+        [queue{q}]'sub{k} [task{T, P}]'agent ->
+            [queue{q - 1}]'sub{k} [result{T, k}]'agent
+    }
+
+    @rules vote
+    {
+        /* Majority vote: each sub's chosen action adds one vote. */
+        [vote_req{s}, sub_action{k, a}]'collective ->
+            [vote_req{s}, votes{a, n + 1}]'collective
+
+        /* Argmax over the tally elects the collective action. */
+        [votes{a, n}]'collective -> [collective_action{a}]'collective
+            where forall_max votes{a}
     }
 }
 
@@ -319,6 +512,9 @@
         episodic_memory(1000)
         llama_pool(num_llama, base_port)
         planner(action_size)
+        personality(neurosama)
+        agent_policy(action_size, 99, 10, 1, 995)
+        cognitive_agent(4)
 
         /* v2.3 knowledge base for the INTEGRATE beat */
         atomspace_system(50, 10)
@@ -346,9 +542,12 @@
         /* FILTER -> RESONATE (attenuate sub-threshold features) */
         [pc{2}, reg{r0, U}]'agent -> [pc{3}, filtered{U}]'agent
 
-        /* RESONATE handled by echo_reservoir (3 -> 4).
-         * ENCODE: compress reservoir state into context register R2. */
+        /* RESONATE handled by echo_reservoir (3 -> 4, emits
+         * reservoir_state{1}).
+         * ENCODE: compress reservoir state into context register R2;
+         * the reservoir snapshot lands in register R1. */
         [pc{4}, reg{r1, S}]'agent -> [pc{5}, reg{r2, S}]'agent
+        [pc{4}, reservoir_state{1}]'agent -> [pc{4}, reg{r1, 1}]'agent
 
         /* RECALL (5->6), REASON (6->7), EMOTE (7->8), PLAN (8->9)
          * are advanced by their own modules above. */
