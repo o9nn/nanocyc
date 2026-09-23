@@ -71,13 +71,18 @@ Complexity levels: **L1 = introductory**, **L2 = intermediate**, **L3 = advanced
 | Probabilistic / PDP | `todo_pdp_market_microdynamics.pli` | ✅ L3 |
 | Spiking neural P systems | `todo_snp_large_dense_topology.pli` | ✅ L3 |
 | Tissue-like | `todo_tissue_multichannel_transport.pli` | ✅ L3 |
+| Kernel P systems | `todo_kp_flame_agent_coordination.pli` | ✅ L3 |
+| Numerical / enzymatic | `todo_enps_navigation_controller.pli` | ✅ L3 |
 
-## 5) Remaining backlog (not yet implemented)
+## 5) Remaining backlog (all implemented)
 
-| P-system type | Example file | Reason pending |
+The backlog from section 2 is now fully implemented.  The final two examples
+required new P-Lingua model definitions, which are provided alongside them:
+
+| P-system type | Example file | Model file |
 |---|---|---|
-| Kernel P systems | `todo_kp_flame_agent_coordination.pli` | No kP model in P-Lingua yet |
-| Numerical / enzymatic | `todo_enps_navigation_controller.pli` | No ENPS model in P-Lingua yet |
+| Kernel P systems | `todo_kp_flame_agent_coordination.pli` | `kp_model.pli` (kP rewriting, link communication, restricted structure rules) |
+| Numerical / enzymatic | `todo_enps_navigation_controller.pli` | `enps_model.pli` (unary-encoded variables, program tokens, enzyme rate gating) |
 
 ---
 

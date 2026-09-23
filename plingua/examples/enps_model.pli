@@ -1,0 +1,54 @@
+/*
+ * enps_model.pli
+ * Enzymatic Numerical P system (ENPS) model definition.
+ *
+ * Numerical P systems (Paun & Paun, 2006) place numerical variables inside a
+ * hierarchical membrane structure; programs "production(x1..xk) -> repartition"
+ * consume value from variables and redistribute it.  The enzymatic variant
+ * (Pavel, Vasile & Dumitrache, 2010) attaches an enzyme variable to a program:
+ * the program only executes (once per step) while the enzyme condition holds.
+ *
+ * This P-Lingua encoding discretizes ENPS with a unary encoding discipline:
+ *
+ *   variable value  -- multiplicity of its object (value of x = copies of x)
+ *
+ *   enps_program    -- production + repartition inside compartment h:
+ *       [u -> v]'h        u = consumed variable units (production function
+ *                          arguments), v = produced units (repartition).
+ *       Once-per-step programs carry a singleton program token p{j} on both
+ *       sides; enzymatic programs carry enzyme copies e{j} on both sides
+ *       (consume-and-restore), so the number of applications per step is
+ *       bounded by the enzyme multiplicity: rate <= |e{j}| -- the discrete
+ *       analogue of the enzymatic speed limit.
+ *
+ *   enps_send_in    -- repartition to an inner compartment:
+ *       a ?[ ]'h -> ?[b]'h   one unit a in the parent becomes unit b in h
+ *
+ *   enps_send_out   -- repartition to the parent compartment:
+ *       ?[a]'h -> b ?[ ]'h   one unit a in h becomes unit b in the parent
+ *
+ * All rules run with maximal parallelism, so unit transfers (send in/out)
+ * move whole variable values in a single step, while program tokens and
+ * enzymes bound program application rates, reproducing the ENPS execution
+ * semantics on unary-encoded values.
+ */
+
+!enps_program
+{
+        [u -> v]'h;
+    (?) [u -> v]'h;
+}
+
+!enps_send_in
+{
+        a ?[ ]'h -> ?[b]'h;
+    (?) a ?[ ]'h -> ?[b]'h;
+}
+
+!enps_send_out
+{
+        ?[a]'h -> b ?[ ]'h;
+    (?) ?[a]'h -> b ?[ ]'h;
+}
+
+@model(enps) = enps_program, enps_send_in, enps_send_out;

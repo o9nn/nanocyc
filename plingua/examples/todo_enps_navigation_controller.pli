@@ -1,0 +1,97 @@
+/*
+ * todo_enps_navigation_controller.pli
+ * Enzymatic Numerical P system: mobile robot obstacle-avoidance controller.
+ * P-system type: Numerical / enzymatic (ENPS)
+ * Category: Robotics / navigation
+ * Complexity: L3 (advanced/research-grade)
+ *
+ * Inspired by the ENPS mobile-robot controllers of Pavel & Buiu (2011),
+ * where membranes compute differential-drive wheel speeds from proximity
+ * sensors:  leftSpeed  = cruise + sum(wl[i] * s[i])
+ *           rightSpeed = cruise + sum(wr[i] * s[i])
+ *
+ * Numerical variables are unary-encoded (value = object multiplicity, see
+ * enps_model.pli).  Compartments:
+ *   robot body (label 1)  -- holds sensor readings and integrates the wheel
+ *                            speed commands produced by the controller.
+ *   controller (label 2)  -- ENPS membrane with one cruise program and two
+ *                            enzymatic steering programs.
+ *
+ * Variables:
+ *   sl, sr  left/right proximity sensor readings   (body)
+ *   xl, xr  sensor values acquired by the controller
+ *   c       cruise budget (one unit per control step)
+ *   vl, vr  computed wheel-speed units (controller output buffer)
+ *   ml, mr  integrated left/right motor commands   (body)
+ *
+ * Programs (controller membrane):
+ *   P1 cruise      [p{1}, c --> p{1}, vl, vr]
+ *       Program token p{1} is a singleton, so P1 executes exactly once per
+ *       step while cruise budget c remains: +1 unit to each wheel.
+ *   P2 avoid-right [e{1}, xr --> e{1}, vr*2]   (enzymatic, gain 2)
+ *       Each right-sensor unit adds 2 right-wheel units (the robot veers
+ *       left, away from the obstacle).  Enzyme e{1}*2 bounds the program to
+ *       at most 2 sensor units metabolised per step (enzymatic speed limit).
+ *   P3 avoid-left  [e{2}, xl --> e{2}, vl*2]   (enzymatic, gain 2)
+ *       Symmetric steering program for the left sensor, enzyme e{2}*2.
+ *
+ * Repartition across the membrane hierarchy:
+ *   acquisition   sl [ ]'2 --> [xl]'2   and   sr [ ]'2 --> [xr]'2
+ *       sensor values flow from the body into the controller.
+ *   actuation     [vl]'2 --> ml [ ]'2   and   [vr]'2 --> mr [ ]'2
+ *       computed speed units flow back to the body's motor integrators.
+ *
+ * Initial state: obstacle close on the right (sr = 6, sl = 2), cruise
+ * budget c = 4 (four control steps):
+ *   body (1):       sl*2, sr*6
+ *   controller (2): p{1}, c*4, e{1}*2, e{2}*2
+ *
+ * Deterministic trace (maximal parallelism, no -r flag):
+ *   step 1: sensors acquired (xl*2, xr*6); cruise +1/+1
+ *   step 2: cruise; steering metabolises xl*2 and xr*2 (enzyme-limited);
+ *           first speed units drain to the body
+ *   step 3: cruise; steering metabolises xr*2; body reaches ml*6, mr*6
+ *   step 4: cruise budget exhausted; steering metabolises final xr*2
+ *   step 5: remaining speed units drain to the body
+ *   step 6: halt (no rule applicable)
+ *
+ * Expected final configuration (ENPS arithmetic check):
+ *   ml = c + 2*sl = 4 + 4  = 8
+ *   mr = c + 2*sr = 4 + 12 = 16
+ *   body (1):       ml*8, mr*16      (mr > ml: the robot turns left,
+ *                                     away from the right-hand obstacle)
+ *   controller (2): p{1}, e{1}*2, e{2}*2   (tokens and enzymes conserved)
+ *
+ * To simulate: ./bin/plingua examples/todo_enps_navigation_controller.pli
+ *              -o enps.json -n  &&  ./bin/psim enps.json -v 2
+ */
+@model<enps>
+@include "enps_model.pli"
+
+def main()
+{
+  @mu = [ [ ]'2 ]'1;
+
+  /* Body: proximity readings (obstacle on the right) */
+  @ms(1) = sl*2, sr*6;
+
+  /* Controller: program token, cruise budget, steering enzymes */
+  @ms(2) = p{1}, c*4, e{1}*2, e{2}*2;
+
+  /* Acquisition: sensor units flow into the controller */
+  sl [ ]'2 --> [xl]'2;
+  sr [ ]'2 --> [xr]'2;
+
+  /* P1 cruise: once per step (singleton token), +1 unit per wheel */
+  [p{1}, c --> p{1}, vl, vr]'2;
+
+  /* P2 avoid-right: enzymatic, rate <= |e{1}| sensor units per step */
+  [e{1}, xr --> e{1}, vr*2]'2;
+
+  /* P3 avoid-left: enzymatic, rate <= |e{2}| sensor units per step */
+  [e{2}, xl --> e{2}, vl*2]'2;
+
+  /* Actuation: speed units drain to the body's motor integrators */
+  [vl]'2 --> ml [ ]'2;
+  [vr]'2 --> mr [ ]'2;
+}

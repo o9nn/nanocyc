@@ -1,0 +1,107 @@
+/*
+ * todo_kp_flame_agent_coordination.pli
+ * Kernel P system: FLAME-style multi-agent task coordination.
+ * P-system type: Kernel P systems (kP)
+ * Category: Multi-agent systems
+ * Complexity: L3 (advanced/research-grade)
+ *
+ * Inspired by the kPWorkbench + FLAME workflow, where kP-system compartments
+ * play the role of FLAME agents (communicating stream X-machines) and rule
+ * applications play the role of X-machine transition functions.  Agents
+ * synchronise exclusively through a shared message-board compartment, the
+ * FLAME coordination idiom.
+ *
+ * Compartment types (kP membrane types):
+ *   board (label 9)     -- shared message board: publishes task messages,
+ *                          collects availability + result messages and
+ *                          issues acknowledgments.
+ *   agent (labels 1..4) -- worker agents running the X-machine lifecycle
+ *                          idle -> task -> work -> result -> ack -> idle.
+ *   skin  (label 0)     -- inert enclosing environment.
+ *
+ * X-machine transition functions:
+ *
+ *   claim   [idle]'k <--> [task]'9    agent posts an "available" message
+ *                                     (idle) on the board and receives a
+ *                                     task message in exchange (antiport
+ *                                     over the agent-board link).
+ *   process [task --> work]'k         internal state transition.
+ *   finish  [work --> result]'k       internal state transition.
+ *   report  [result]'k <--> [ack]'9   agent posts its result message on the
+ *                                     board and receives an acknowledgment.
+ *   reset   [ack --> idle]'k          agent becomes available again.
+ *
+ * Board bookkeeping:
+ *   log     [result --> done]'9       board converts each posted result
+ *                                     message into a completion record.
+ *
+ * Structure-changing rule (kP division, at most one per compartment/step):
+ *   recruit [grow]'4 --> [idle]'4 [idle]'4
+ *                                     the spawner agent divides into two
+ *                                     idle workers (population growth in
+ *                                     FLAME agent pools).
+ *
+ * Initial state:
+ *   board (9):  task*5, ack*5     five task messages, five acknowledgments
+ *   agents 1-3: idle              three ready workers
+ *   agent  4:   grow              one spawner (recruits two more workers)
+ *
+ * Deterministic trace (maximal parallelism, no -r flag):
+ *   step 1: agents 1-3 claim tasks; spawner divides into two idle agents
+ *   step 2: agents 1-3 process; the two recruits claim the remaining tasks
+ *   step 3: agents 1-3 finish; recruits process
+ *   step 4: agents 1-3 report (receive acks); recruits finish
+ *   step 5: agents 1-3 reset; recruits report; board logs 3 results
+ *   step 6: recruits reset; board logs 2 results
+ *   step 7: halt (no rule applicable; all tasks depleted)
+ *
+ * Expected final configuration:
+ *   board (9): idle*5, done*5     (all 5 tasks completed and logged;
+ *                                  5 availability messages archived)
+ *   agents:    idle in each of the 5 worker compartments (3 + 2 recruited)
+ *
+ * Verification hook (kPWorkbench-style queries, see
+ * todo_kp_queries_safety_liveness.md):
+ *   liveness: F (done = 5)        all tasks eventually completed
+ *   safety:   G (task + done <= 5) no task duplication
+ *
+ * To simulate: ./bin/plingua examples/todo_kp_flame_agent_coordination.pli
+ *              -o kp.json -n  &&  ./bin/psim kp.json -v 2
+ */
+@model<kp>
+@include "kp_model.pli"
+
+def main()
+{
+  @mu = [ []'9 []'1 []'2 []'3 []'4 ]'0;
+
+  /* Message board: five task messages and five acknowledgments */
+  @ms(9) = task*5, ack*5;
+
+  /* Worker agents 1-3 start available */
+  @ms(1) = idle;
+  @ms(2) = idle;
+  @ms(3) = idle;
+
+  /* Agent 4 is a spawner: it recruits two workers by division */
+  @ms(4) = grow;
+
+  /* recruit: kP division rule (at most one per compartment per step) */
+  [grow]'4 --> [idle]'4 [idle]'4;
+
+  /* claim: exchange an availability message for a task message */
+  [idle]'{k} <--> [task]'9 : 1 <= k <= 4;
+
+  /* process / finish: internal X-machine state transitions */
+  [task --> work]'{k}   : 1 <= k <= 4;
+  [work --> result]'{k} : 1 <= k <= 4;
+
+  /* report: post the result on the board, receive an acknowledgment */
+  [result]'{k} <--> [ack]'9 : 1 <= k <= 4;
+
+  /* reset: acknowledged agents become available again */
+  [ack --> idle]'{k} : 1 <= k <= 4;
+
+  /* log: the board records each posted result as a completion */
+  [result --> done]'9;
+}
