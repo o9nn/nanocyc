@@ -26,6 +26,11 @@ In contrast, standard P-Lingua models use specific model families
 with fixed rule templates.  kP systems generalize across these by treating
 membrane type as a first-class design parameter.
 
+This repository now ships a kP-flavoured P-Lingua model (`kp_model.pli`,
+selected with `@model<kp>`) combining rewriting, link communication and
+structure-changing rule templates; see
+`todo_kp_flame_agent_coordination.pli` for a multi-agent example.
+
 ---
 
 ## Formal Verification with kPWorkbench

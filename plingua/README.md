@@ -51,7 +51,7 @@ sudo make install
 
 ## P-Lingua Core
 
-Standard membrane computing models: transition, active membranes, tissue, SAT, PDP, SNP.
+Standard membrane computing models: transition, active membranes, tissue, SAT, PDP, SNP, kernel P (kP), enzymatic numerical (ENPS).
 
 ### Examples
 
