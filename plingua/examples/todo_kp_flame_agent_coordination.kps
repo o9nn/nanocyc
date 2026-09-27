@@ -138,9 +138,12 @@ main {
 //   LTL:  F (b1.done = 5)
 //   CTL:  AF (b1.done = 5)
 //
-// safety    -- no task is duplicated or lost at any point:
-//   LTL:  G (b1.task + b1.done <= 5)
-//   CTL:  AG (b1.task + b1.done <= 5)
+// safety    -- no task is duplicated or lost at any point.  A task on the
+//   board is `task` before dispatch, `hired` while in flight (its `job`,
+//   `res` and reset are agent-side; `hired` is the board's in-flight
+//   marker), and `done` once logged, so the tracked total is conserved:
+//   LTL:  G (b1.task + b1.hired + b1.done = 5)
+//   CTL:  AG (b1.task + b1.hired + b1.done = 5)
 //
 // reachability -- the fully-archived halting state is reachable:
 //   CTL:  EF (b1.avail = 5 & b1.done = 5)
