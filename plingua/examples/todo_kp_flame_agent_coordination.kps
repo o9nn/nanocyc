@@ -42,9 +42,13 @@
 //       Consequently the exported board carries NO ack objects at all: the
 //       .pli board's initial ack*5 pool exists only to route resets, a job
 //       this translation performs locally, so it has no counterpart here by
-//       design.  The counters the documented properties quantify over
-//       (task, done, avail) are designed to evolve identically (see the
-//       invariance caveat below).
+//       design.  The exact board-side invariant is the conserved lifecycle
+//       sum task + hired + done = 5 (each task is pending, in flight, or
+//       logged).  Note the difference from the .pli board: there the
+//       archived idle count grows monotonically, whereas here avail dips
+//       while a job is in flight (avail -> hired) and is restored on
+//       completion, so avail itself is NOT monotone -- only its final
+//       value (5) matches the .pli board's archived idle*5.
 //   * The board therefore ends with avail(5), done(5) -- the counterpart
 //     of the .pli board's archived idle*5, done*5 -- and each dispatched
 //     job returns exactly one agent compartment to idle.  Because dispatch

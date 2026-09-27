@@ -59,10 +59,14 @@ check-examples: compiler simulator
 	echo "   OK: c1 halts with wa{1},wb{1}"
 	@echo "== todo_enps_navigation_controller (ml = c+2*sl = 8, mr = c+2*sr = 16)"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_enps_navigation_controller.pli -o $(ODIR)/examples/enps.json -n || exit 1; \
-	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/enps.json -v 1 -o $(ODIR)/examples/enps_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
+	trace=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/enps.json -v 1 -o $(ODIR)/examples/enps_out.json); \
+	fin=$$(echo "$$trace" | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
 	got=$$(echo "$$fin" | awk -v L="Label: 1," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
 	test "$$got" = "ml*8,mr*16" || { echo "FAIL: body = '$$got', expected ml*8,mr*16"; echo "$$fin"; exit 1; }; \
-	echo "   OK: body halts with ml*8,mr*16"
+	mid=$$(echo "$$trace" | awk '/^CONFIGURATION: 2$$/{f=1} /^CONFIGURATION: 3$$/{f=0} f'); \
+	got=$$(echo "$$mid" | awk -v L="Label: 2," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "c*2,e{1}*2,e{2}*2,p{1},vl*5,vr*5,xr*4" || { echo "FAIL: controller at step 2 = '$$got' (enzyme/token rate bounds violated)"; echo "$$mid"; exit 1; }; \
+	echo "   OK: body halts with ml*8,mr*16; step-2 controller shows xr*4 (enzyme-bounded 2/step)"
 	@echo "== todo_kp_flame_agent_coordination (board archives idle*5, logs done*5)"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_kp_flame_agent_coordination.pli -o $(ODIR)/examples/kp.json -n || exit 1; \
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/kp.json -v 1 -o $(ODIR)/examples/kp_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
