@@ -17,22 +17,37 @@
 // in sync with the .pli source; it has not been machine-checked here.
 //
 // Translation notes (P-Lingua antiport -> kP one-way communication):
-//   * The .pli antiport exchanges [idle]'k <--> [task]'9 and
-//     [result]'k <--> [ack]'9 are decomposed into guarded one-way
-//     communication rules: agents post messages to the board; the board
-//     matches them with task/ack messages and dispatches to a linked agent
-//     compartment (chosen nondeterministically, the FLAME board idiom).
-//   * Acknowledgments are anonymous messages: any waiting agent may be
-//     reset by any ack.  Board-level counters (task, done) are unaffected,
-//     so the documented safety/liveness properties are preserved across
-//     all interleavings explored by the model checker.
+//   * kP communication is one-way and type-targeted, so the .pli antiport
+//     exchanges cannot be reproduced atomically.  This export uses a
+//     quotient translation that preserves the board-side counters the
+//     documented properties quantify over:
+//     - claim: [idle]'k <--> [task]'9 becomes a one-shot availability post
+//       (slot, idle -> avail{board}) followed by a board-side dispatch
+//       (avail, task -> hired, job{agent}).  The one-shot slot token stops
+//       reset agents from re-claiming (in the .pli the empty task pool
+//       plays this role); hired records the engaged worker so the archived
+//       availability can be restored on completion.
+//     - report/ack: [result]'k <--> [ack]'9 becomes a LOCAL report-and-
+//       reset rule (result -> res{board}, idle): the reporting agent and
+//       the reset agent are the same compartment by construction, so no
+//       acknowledgment message needs to be routed back and no ack can ever
+//       reach a non-reporting agent.  The board logs the completion and
+//       re-archives the availability (hired, res -> avail, done).
+//   * The board therefore ends with avail(5), done(5) -- the counterpart
+//     of the .pli board's archived idle*5, done*5 -- and each dispatched
+//     job returns exactly one agent compartment to idle.  Because dispatch
+//     targets a nondeterministically chosen linked agent, the model checker
+//     explores interleavings where jobs are distributed unevenly across
+//     agent compartments (a permutation/multiplicity quotient of the
+//     deterministic psim trace); all board-side counters and the documented
+//     properties are invariant under this quotient.
 //   * The spawner's division rule uses the kP structure-changing schema
 //     [a]_t -> [b]_t1 [c]_t2 (division into two agent-typed compartments).
 //     Per the kP division semantics (Gheorghe et al. 2013), the compartments
 //     created by division replace the divided compartment in the membrane
 //     graph and INHERIT its links: both recruits are therefore connected to
-//     b1 through the declared b1 - a4 link and can exchange task/ack
-//     messages with the board exactly as the pre-existing agents do.
+//     b1 through the declared b1 - a4 link and can exchange messages with
+//     the board exactly as the pre-existing agents do.
 
 // -------------------------------------------------------------------------
 // Compartment types
@@ -40,40 +55,42 @@
 
 type board {
 	max {
-		// dispatch: match one availability message with one task and
-		// send the task to a linked agent compartment
-		avail, task -> task{agent} .
+		// dispatch: match one availability message with one task,
+		// record the engaged worker (hired) and send the job to a
+		// linked agent compartment
+		avail, task -> hired, job{agent} .
 
 		// log: convert a posted result into a completion record and
-		// acknowledge some waiting agent
-		res -> done, ack{agent} .
+		// restore the archived availability message
+		hired, res -> avail, done .
 	}
 }
 
 type agent {
 	choice {
-		// claim: post an availability message on the board
-		idle -> avail{board} .
+		// claim: post an availability message on the board; the
+		// one-shot slot token prevents re-claiming after reset
+		slot, idle -> avail{board} .
 
 		// process: internal X-machine transition
-		task -> work .
+		job -> work .
 
 		// finish: internal X-machine transition
 		work -> result .
 
-		// report: post the result message on the board
-		result -> res{board} .
-
-		// reset: an acknowledgment makes the agent available again
-		ack -> idle .
+		// report + reset: post the result message on the board and
+		// return to idle in the same (local) transition -- the kP
+		// counterpart of the .pli report/ack antiport handshake
+		result -> res{board}, idle .
 	}
 }
 
 type spawner {
 	choice {
-		// recruit: divide into two idle worker agents
+		// recruit: divide into two idle worker agents, each with a
+		// fresh one-shot claim slot
 		// (kP division schema [grow]_spawner -> [idle]_agent [idle]_agent)
-		grow -> [ idle ]{agent} [ idle ]{agent} .
+		grow -> [ idle, slot ]{agent} [ idle, slot ]{agent} .
 	}
 }
 
@@ -82,10 +99,10 @@ type spawner {
 // -------------------------------------------------------------------------
 
 main {
-	b1 (5task, 5ack) : board ;
-	a1 (idle) : agent ;
-	a2 (idle) : agent ;
-	a3 (idle) : agent ;
+	b1 (5task) : board ;
+	a1 (idle, slot) : agent ;
+	a2 (idle, slot) : agent ;
+	a3 (idle, slot) : agent ;
 	a4 (grow) : spawner ;
 
 	b1 - a1 ;
@@ -110,5 +127,5 @@ main {
 //   LTL:  G (b1.task + b1.done <= 5)
 //   CTL:  AG (b1.task + b1.done <= 5)
 //
-// reachability -- the fully-idle archived state is reachable:
+// reachability -- the fully-archived halting state is reachable:
 //   CTL:  EF (b1.avail = 5 & b1.done = 5)

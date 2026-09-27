@@ -31,6 +31,18 @@
  * move whole variable values in a single step, while program tokens and
  * enzymes bound program application rates, reproducing the ENPS execution
  * semantics on unary-encoded values.
+ *
+ * Semantics note (why consume-and-restore bounds the per-step rate): in
+ * P-system maximal parallelism as implemented by this repository's psim,
+ * the multiset of rule applications chosen in a step must be jointly
+ * fundable from the configuration at the START of the step; right-hand
+ * sides only materialize when the step commits.  A rule that consumes and
+ * restores a token t therefore admits at most |t| parallel applications
+ * per step -- the restored copies cannot fund further applications within
+ * the same step.  (Empirically checkable with -v 2 on
+ * todo_enps_navigation_controller.pli: [c,p{1} -> p{1},vl,vr] fires exactly
+ * once per step for 4 steps despite c*4, and [e{1},xr -> e{1},vr*2] fires
+ * exactly twice per step over 3 steps despite xr*6.)
  */
 
 !enps_program
