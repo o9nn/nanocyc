@@ -28,8 +28,11 @@ membrane type as a first-class design parameter.
 
 This repository now ships a kP-flavoured P-Lingua model (`kp_model.pli`,
 selected with `@model<kp>`) combining rewriting, link communication and
-structure-changing rule templates; see
-`todo_kp_flame_agent_coordination.pli` for a multi-agent example.
+structure-changing rule templates.  Two artifacts demonstrate the workflow:
+`todo_kp_flame_agent_coordination.pli` is the runnable multi-agent example
+(compiled and simulated with the in-repo `plingua`/`psim` toolchain), and
+`todo_kp_flame_agent_coordination.kps` is its hand-translated kP-Lingua
+export for the kPWorkbench verification step described below.
 
 ---
 
