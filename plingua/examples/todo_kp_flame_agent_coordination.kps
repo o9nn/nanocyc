@@ -44,8 +44,11 @@
 //     targets a nondeterministically chosen linked agent, the model checker
 //     explores interleavings where jobs are distributed unevenly across
 //     agent compartments (a permutation/multiplicity quotient of the
-//     deterministic psim trace); all board-side counters and the documented
-//     properties are invariant under this quotient.
+//     deterministic psim trace); the translation is designed so that all
+//     board-side counters the properties quantify over are invariant under
+//     this quotient -- pending the kPWorkbench machine check tracked in
+//     TODO_EXAMPLES_CATALOG.md section 8, this remains an intended property
+//     of the translation, not an established verification result.
 //   * The spawner's division rule uses the kP structure-changing schema
 //     [a]_t -> [b]_t1 [c]_t2 (division into two agent-typed compartments).
 //     Per the kP division semantics (Gheorghe et al. 2013), the compartments

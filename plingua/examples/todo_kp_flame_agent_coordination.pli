@@ -58,7 +58,11 @@
  * Expected final configuration:
  *   board (9): idle*5, done*5     (all 5 tasks completed and logged;
  *                                  5 availability messages archived)
- *   agents:    idle in each of the 5 worker compartments (3 + 2 recruited)
+ *   agents:    idle in each of the 5 worker compartments (3 + 2 recruited;
+ *              the two recruits are distinct membranes that share label 4,
+ *              since P-Lingua division copies the parent label -- rules are
+ *              applied per membrane instance, so each of the five
+ *              compartments still acts as an independent worker)
  *
  * Verification hook (kPWorkbench-style queries, see
  * todo_kp_queries_safety_liveness.md):
