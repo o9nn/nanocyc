@@ -1,0 +1,107 @@
+// todo_kp_flame_agent_coordination.kps
+// kPWorkbench (kP-Lingua) export of the P-Lingua model
+// todo_kp_flame_agent_coordination.pli -- FLAME-style multi-agent task
+// coordination on a shared message board.
+//
+// This file completes step 3 of the P-Lingua -> kPWorkbench workflow
+// documented in todo_kp_queries_safety_liveness.md:
+//   1. prototype in P-Lingua        (todo_kp_flame_agent_coordination.pli)
+//   2. simulate with plingua/psim   (verified halting configuration)
+//   3. translate to kP notation     (this file)
+//   4. verify LTL/CTL properties with kPWorkbench + NuSMV/Spin
+//
+// Notation follows kP-Lingua as defined in Gheorghe et al. (2013),
+// "Kernel P systems", 11th BWMC, and the kPWorkbench distribution
+// (https://github.com/Kernel-P-Systems/kPWorkbench).  kPWorkbench is not
+// bundled with this repository, so this export is a hand translation kept
+// in sync with the .pli source; it has not been machine-checked here.
+//
+// Translation notes (P-Lingua antiport -> kP one-way communication):
+//   * The .pli antiport exchanges [idle]'k <--> [task]'9 and
+//     [result]'k <--> [ack]'9 are decomposed into guarded one-way
+//     communication rules: agents post messages to the board; the board
+//     matches them with task/ack messages and dispatches to a linked agent
+//     compartment (chosen nondeterministically, the FLAME board idiom).
+//   * Acknowledgments are anonymous messages: any waiting agent may be
+//     reset by any ack.  Board-level counters (task, done) are unaffected,
+//     so the documented safety/liveness properties are preserved across
+//     all interleavings explored by the model checker.
+//   * The spawner's division rule uses the kP structure-changing schema
+//     [a]_t -> [b]_t1 [c]_t2 (division into two agent-typed compartments).
+
+// -------------------------------------------------------------------------
+// Compartment types
+// -------------------------------------------------------------------------
+
+type board {
+	max {
+		// dispatch: match one availability message with one task and
+		// send the task to a linked agent compartment
+		avail, task -> task{agent} .
+
+		// log: convert a posted result into a completion record and
+		// acknowledge some waiting agent
+		res -> done, ack{agent} .
+	}
+}
+
+type agent {
+	choice {
+		// claim: post an availability message on the board
+		idle -> avail{board} .
+
+		// process: internal X-machine transition
+		task -> work .
+
+		// finish: internal X-machine transition
+		work -> result .
+
+		// report: post the result message on the board
+		result -> res{board} .
+
+		// reset: an acknowledgment makes the agent available again
+		ack -> idle .
+	}
+}
+
+type spawner {
+	choice {
+		// recruit: divide into two idle worker agents
+		// (kP division schema [grow]_spawner -> [idle]_agent [idle]_agent)
+		grow -> [ idle ]{agent} [ idle ]{agent} .
+	}
+}
+
+// -------------------------------------------------------------------------
+// Instantiation (mirrors @mu / @ms of the .pli source)
+// -------------------------------------------------------------------------
+
+main {
+	b1 (5task, 5ack) : board ;
+	a1 (idle) : agent ;
+	a2 (idle) : agent ;
+	a3 (idle) : agent ;
+	a4 (grow) : spawner ;
+
+	b1 - a1 ;
+	b1 - a2 ;
+	b1 - a3 ;
+	b1 - a4 ;
+}
+
+// -------------------------------------------------------------------------
+// Properties (kPWorkbench property language; NuSMV/Spin backends)
+// -------------------------------------------------------------------------
+//
+// Variables refer to object counters in compartment b1 (type board).
+//
+// liveness  -- all five tasks are eventually completed and logged:
+//   LTL:  F (b1.done = 5)
+//   CTL:  AF (b1.done = 5)
+//
+// safety    -- no task is duplicated or lost at any point:
+//   LTL:  G (b1.task + b1.done <= 5)
+//   CTL:  AG (b1.task + b1.done <= 5)
+//
+// reachability -- the fully-idle archived state is reachable:
+//   CTL:  EF (b1.avail = 5 & b1.done = 5)

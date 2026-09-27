@@ -193,6 +193,11 @@ def main() {
 
 See `docs/RLINGUA_SPEC.md` for the full R-Lingua language specification.
 
+See `docs/GSYSTEMS_SPEC.md` for the draft **G-systems** specification, which
+derives a gauge-invariant generalization of the (P,M,R) dialect triad for
+parallel transport of n-forms over membrane complexes (runnable prototype:
+`examples/todo_g_gauge_parallel_transport.pli`).
+
 ### Migration: Existing RR Code → R-Lingua
 
 | Old construct | R-Lingua equivalent |

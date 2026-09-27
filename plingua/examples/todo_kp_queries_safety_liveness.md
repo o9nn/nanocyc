@@ -82,6 +82,11 @@ levels of the P-systems ecosystem:
    - Query safety/liveness properties in LTL or CTL.
    - Export counterexamples for debugging.
 
+Steps 1–3 are realized in this repository for the FLAME coordination
+example: `todo_kp_flame_agent_coordination.pli` (simulated design) and
+`todo_kp_flame_agent_coordination.kps` (hand-translated kP-Lingua export
+with the liveness/safety properties below ready for step 4).
+
 ---
 
 ## Example Query Workflow (kPWorkbench)

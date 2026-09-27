@@ -1,0 +1,111 @@
+/*
+ * todo_g_gauge_parallel_transport.pli
+ * G-system prototype: gauge-invariant parallel transport with Z_3 holonomy.
+ * P-system type: Cell-like (active membranes, communication rules only)
+ * Category: G-systems / gauge theory on membrane complexes
+ * Complexity: L3 (advanced/research-grade)
+ *
+ * First runnable example of the G-systems derivation in
+ * docs/GSYSTEMS_SPEC.md: a degree-1 G-system with abelian gauge group
+ * G = Z_3 = {0,1,2} (addition mod 3) over the membrane cycle
+ *
+ *     c1 --e1--> c2 --e2--> c3 --e3--> c1        (loop l = e1 e2 e3)
+ *
+ * realized as three sibling membranes routed through their parent (skin).
+ * A probe object p{g} carries a fiber index g; crossing edge e multiplies
+ * the index by the link element: g |-> g + U(e) (mod 3).  The probe returns
+ * to c1 as a Wilson token w{Hol(l)} where Hol(l) = U(e1)+U(e2)+U(e3) mod 3.
+ *
+ * Two sectors run side by side on the same membranes:
+ *
+ *   sector a (link field U):    U(e1)=1, U(e2)=2, U(e3)=1
+ *                               Hol(l) = 1+2+1 = 4 = 1 (mod 3)
+ *   sector b (gauge twin U'):   gauge transformation lambda = (0,2,0) at
+ *                               (c1,c2,c3), U'(e) = U(e) + lambda(head)
+ *                               - lambda(tail):
+ *                               U'(e1) = 1+2-0 = 0 (mod 3)
+ *                               U'(e2) = 2+0-2 = 0 (mod 3)
+ *                               U'(e3) = 1+0-0 = 1 (mod 3)
+ *                               Hol'(l) = 0+0+1 = 1 (mod 3)
+ *
+ * Gauge invariance: the two link fields differ everywhere, yet both probes
+ * halt with the SAME Wilson class w?{1} -- the observable is independent
+ * of the local trivialization, as required by @capability gauge_invariance
+ * (docs/MLINGUA_SPEC.md) and the R-Lingua re-description stability of grip.
+ *
+ * Rule schema (covariant transport, docs/GSYSTEMS_SPEC.md):
+ *   departure  [p?{g}]'ci  --> [] q?ij{g+U(ei) mod 3}   send-out multiplies
+ *                                                       the fiber index
+ *   arrival    q?ij{g} []'cj --> [p?{g}]                send-in routes the
+ *                                                       transit token
+ *   measure    q?31{g} []'c1 --> [w?{g}]                returning probe is
+ *                                                       projected onto the
+ *                                                       Wilson observable
+ *
+ * Journey (per sector; 6 legs, one membrane crossing per leg):
+ *   sector a: p{0} -e1-> p{1} -e2-> p{0} -e3-> w{1}
+ *   sector b: p{0} -e1-> p{0} -e2-> p{0} -e3-> w{1}
+ *   (The model's @1 semantics group allows one structural communication per
+ *   membrane per step, so the two sectors interleave; the halting
+ *   configuration is unaffected.)
+ *
+ * Expected final configuration (halting):
+ *   c1:   wa{1}, wb{1}      equal Wilson classes ==> gauge invariant
+ *   c2:   empty             c3: empty            skin: empty
+ *
+ * To simulate: ./bin/plingua examples/todo_g_gauge_parallel_transport.pli
+ *              -o gauge.json -n  &&  ./bin/psim gauge.json -v 2
+ */
+@model<membrane_division>
+@include "membrane_division_model.pli"
+
+def main()
+{
+  /* Membrane cycle c1 -> c2 -> c3 -> c1 routed through the skin */
+  @mu = [ []'c1 []'c2 []'c3 ]'skin;
+
+  /* Both probes start over c1 with fiber index 0 (lambda(c1) = 0, so the
+     gauge twin's initial index is unchanged: 0 + lambda(c1) = 0) */
+  @ms(c1) = pa{0}, pb{0};
+
+  /* ---------------- sector a : link field U = (1, 2, 1) --------------- */
+
+  /* departure e1 = c1->c2, U(e1)=1: g |-> g+1 (mod 3) */
+  [pa{0}]'c1 --> []qa12{1};
+  [pa{1}]'c1 --> []qa12{2};
+  [pa{2}]'c1 --> []qa12{0};
+
+  /* departure e2 = c2->c3, U(e2)=2: g |-> g+2 (mod 3) */
+  [pa{0}]'c2 --> []qa23{2};
+  [pa{1}]'c2 --> []qa23{0};
+  [pa{2}]'c2 --> []qa23{1};
+
+  /* departure e3 = c3->c1, U(e3)=1: g |-> g+1 (mod 3) */
+  [pa{0}]'c3 --> []qa31{1};
+  [pa{1}]'c3 --> []qa31{2};
+  [pa{2}]'c3 --> []qa31{0};
+
+  /* arrivals: route transit tokens into the target cell (index unchanged);
+     the returning e3 token is measured as the Wilson observable wa */
+  qa12{g} []'c2 --> [pa{g}] : 0 <= g <= 2;
+  qa23{g} []'c3 --> [pa{g}] : 0 <= g <= 2;
+  qa31{g} []'c1 --> [wa{g}] : 0 <= g <= 2;
+
+  /* ------------- sector b : gauge twin U' = (0, 0, 1) ----------------- */
+
+  /* departure e1 = c1->c2, U'(e1)=0: index unchanged */
+  [pb{g}]'c1 --> []qb12{g} : 0 <= g <= 2;
+
+  /* departure e2 = c2->c3, U'(e2)=0: index unchanged */
+  [pb{g}]'c2 --> []qb23{g} : 0 <= g <= 2;
+
+  /* departure e3 = c3->c1, U'(e3)=1: g |-> g+1 (mod 3) */
+  [pb{0}]'c3 --> []qb31{1};
+  [pb{1}]'c3 --> []qb31{2};
+  [pb{2}]'c3 --> []qb31{0};
+
+  /* arrivals and Wilson measurement for the gauge twin */
+  qb12{g} []'c2 --> [pb{g}] : 0 <= g <= 2;
+  qb23{g} []'c3 --> [pb{g}] : 0 <= g <= 2;
+  qb31{g} []'c1 --> [wb{g}] : 0 <= g <= 2;
+}
