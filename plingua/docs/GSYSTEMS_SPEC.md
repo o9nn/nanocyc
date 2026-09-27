@@ -20,7 +20,7 @@ all observable results are independent of arbitrary local labeling choices.
 This document derives the G-system definition from the (P,M,R) triad and
 maps every ingredient to constructs that already exist in the toolchain, so
 that G-models can be prototyped today in plain P-Lingua (see
-`examples/gsystems/gauge_z3_holonomy.pli`) before dedicated syntax lands.
+`examples/todo_g_gauge_parallel_transport.pli`) before dedicated syntax lands.
 
 ## Derivation from (P,M,R)
 
@@ -74,7 +74,7 @@ the link element:
 
 In plain P-Lingua the group product is precomputed per edge, giving one
 concrete rule per `(g, e)` pair — exactly the encoding used in
-`gauge_z3_holonomy.pli`.
+`todo_g_gauge_parallel_transport.pli`.
 
 ### Gauge transformation
 
@@ -151,7 +151,7 @@ is expressible in the `transition` model:
 - gauge checking by re-running with a transformed link field and comparing
   the `wilson` output.
 
-`examples/gsystems/gauge_z3_holonomy.pli` implements exactly this: a
+`examples/todo_g_gauge_parallel_transport.pli` implements exactly this: a
 3-membrane cycle with `Z_3` links `U = (1, 2, 1)`, total holonomy
 `1+2+1 = 4 ≡ 1 (mod 3)`, and a gauge-transformed twin field
 `U' = (0, 0, 1)` (gauge `λ = (0, 2, 0)` applied at the three cells) whose
@@ -174,7 +174,7 @@ probe provably returns the **same** Wilson class `1`.
 4. Include a gauge-transformed twin (or gauge-fixing rules) in tests and
    assert observables are unchanged.
 5. Document the loop, expected holonomy class, and halting configuration in
-   the file header, as done in `examples/gsystems/gauge_z3_holonomy.pli`.
+   the file header, as done in `examples/todo_g_gauge_parallel_transport.pli`.
 
 ## References
 

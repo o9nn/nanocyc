@@ -28,6 +28,11 @@
 //     all interleavings explored by the model checker.
 //   * The spawner's division rule uses the kP structure-changing schema
 //     [a]_t -> [b]_t1 [c]_t2 (division into two agent-typed compartments).
+//     Per the kP division semantics (Gheorghe et al. 2013), the compartments
+//     created by division replace the divided compartment in the membrane
+//     graph and INHERIT its links: both recruits are therefore connected to
+//     b1 through the declared b1 - a4 link and can exchange task/ack
+//     messages with the board exactly as the pre-existing agents do.
 
 // -------------------------------------------------------------------------
 // Compartment types
@@ -87,6 +92,8 @@ main {
 	b1 - a2 ;
 	b1 - a3 ;
 	b1 - a4 ;
+	// on division of a4, its two agent-typed children inherit the b1 link
+	// (kP division semantics; see translation notes above)
 }
 
 // -------------------------------------------------------------------------
