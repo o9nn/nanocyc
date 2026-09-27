@@ -33,6 +33,11 @@
 //       acknowledgment message needs to be routed back and no ack can ever
 //       reach a non-reporting agent.  The board logs the completion and
 //       re-archives the availability (hired, res -> avail, done).
+//       Consequently the exported board carries NO ack objects at all: the
+//       .pli board's initial ack*5 pool exists only to route resets, a job
+//       this translation performs locally, so it has no counterpart here by
+//       design.  The counters the documented properties quantify over
+//       (task, done, avail) are maintained identically.
 //   * The board therefore ends with avail(5), done(5) -- the counterpart
 //     of the .pli board's archived idle*5, done*5 -- and each dispatched
 //     job returns exactly one agent compartment to idle.  Because dispatch

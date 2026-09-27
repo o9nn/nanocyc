@@ -37,7 +37,11 @@
  *
  * Repartition across the membrane hierarchy:
  *   acquisition   sl [ ]'2 --> [xl]'2   and   sr [ ]'2 --> [xr]'2
- *       sensor values flow from the body into the controller.
+ *       sensor values flow from the body into the controller: a one-shot
+ *       transfer of the initial readings in step 1 (maximal parallelism
+ *       moves the whole multiset); the enzymes then meter the acquired
+ *       values over the following steps.  Fresh readings would enter as
+ *       new sl/sr objects in later configurations.
  *   actuation     [vl]'2 --> ml [ ]'2   and   [vr]'2 --> mr [ ]'2
  *       computed speed units flow back to the body's motor integrators.
  *
