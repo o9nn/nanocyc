@@ -67,7 +67,7 @@ check-examples: compiler simulator
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/kp.json -v 1 -o $(ODIR)/examples/kp_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
 	got=$$(echo "$$fin" | grep -A1 "Label: 9," | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
 	test "$$got" = "done*5,idle*5" || { echo "FAIL: board = '$$got', expected done*5,idle*5"; echo "$$fin"; exit 1; }; \
-	test "$$(echo "$$fin" | grep -E -A1 "Label: [1-4]," | grep -c "^Multiset: idle$$")" = 5 || { echo "FAIL: expected 5 idle worker compartments (labels 1-4)"; echo "$$fin"; exit 1; }; \
+	test "$$(echo "$$fin" | awk '/^MEMBRANE ID: .*Label: [1-4],/{w=1;next} w{if($$0=="Multiset: idle") n++; w=0} END{print n+0}')" = 5 || { echo "FAIL: expected 5 idle worker membrane instances (labels 1-4)"; echo "$$fin"; exit 1; }; \
 	echo "   OK: board halts with done*5,idle*5 and 5 idle workers"
 
 grammar: y.tab.c lex.yy.c
