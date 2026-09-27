@@ -45,23 +45,28 @@ check-finops: compiler simulator
 
 # Regression checks: catalog examples with documented halting configurations.
 # Each run asserts the exact final multisets the example headers promise
-# (only the last CONFIGURATION block of the psim trace is inspected).
+# (only the last CONFIGURATION block of the psim trace is inspected; the
+# multiset line is normalized by sorting its comma-separated entries so the
+# assertions do not depend on the serializer's print order).
 check-examples: compiler simulator
 	@mkdir -p $(ODIR)/examples
 	@echo "== todo_g_gauge_parallel_transport (gauge invariance: wa{1} = wb{1})"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_g_gauge_parallel_transport.pli -o $(ODIR)/examples/gauge.json -n || exit 1; \
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/gauge.json -v 1 -o $(ODIR)/examples/gauge_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
-	echo "$$fin" | grep -A1 "Label: c1" | grep -q "^Multiset: wa{1},wb{1}$$" || { echo "FAIL: c1 != wa{1},wb{1}"; echo "$$fin"; exit 1; }; \
+	got=$$(echo "$$fin" | grep -A1 "Label: c1" | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "wa{1},wb{1}" || { echo "FAIL: c1 = '$$got', expected wa{1},wb{1}"; echo "$$fin"; exit 1; }; \
 	echo "   OK: c1 halts with wa{1},wb{1}"
 	@echo "== todo_enps_navigation_controller (ml = c+2*sl = 8, mr = c+2*sr = 16)"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_enps_navigation_controller.pli -o $(ODIR)/examples/enps.json -n || exit 1; \
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/enps.json -v 1 -o $(ODIR)/examples/enps_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
-	echo "$$fin" | grep -A1 "Label: 1," | grep -q "^Multiset: ml\*8,mr\*16$$" || { echo "FAIL: body != ml*8,mr*16"; echo "$$fin"; exit 1; }; \
+	got=$$(echo "$$fin" | grep -A1 "Label: 1," | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "ml*8,mr*16" || { echo "FAIL: body = '$$got', expected ml*8,mr*16"; echo "$$fin"; exit 1; }; \
 	echo "   OK: body halts with ml*8,mr*16"
 	@echo "== todo_kp_flame_agent_coordination (board archives idle*5, logs done*5)"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_kp_flame_agent_coordination.pli -o $(ODIR)/examples/kp.json -n || exit 1; \
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/kp.json -v 1 -o $(ODIR)/examples/kp_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
-	echo "$$fin" | grep -A1 "Label: 9" | grep -q "^Multiset: done\*5,idle\*5$$" || { echo "FAIL: board != done*5,idle*5"; echo "$$fin"; exit 1; }; \
+	got=$$(echo "$$fin" | grep -A1 "Label: 9" | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "done*5,idle*5" || { echo "FAIL: board = '$$got', expected done*5,idle*5"; echo "$$fin"; exit 1; }; \
 	test "$$(echo "$$fin" | grep -c "^Multiset: idle$$")" = 5 || { echo "FAIL: expected 5 idle worker compartments"; echo "$$fin"; exit 1; }; \
 	echo "   OK: board halts with done*5,idle*5 and 5 idle workers"
 
