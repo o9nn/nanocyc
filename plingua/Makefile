@@ -68,7 +68,7 @@ check-examples: compiler simulator
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/kp.json -v 1 -o $(ODIR)/examples/kp_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
 	got=$$(echo "$$fin" | awk -v L="Label: 9," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
 	test "$$got" = "done*5,idle*5" || { echo "FAIL: board = '$$got', expected done*5,idle*5"; echo "$$fin"; exit 1; }; \
-	test "$$(echo "$$fin" | awk '/MEMBRANE ID:/{w=($$0~/Label: [1-4],/)} w&&/^Multiset: /{if($$0=="Multiset: idle")n++; w=0} END{print n+0}')" = 5 || { echo "FAIL: expected 5 idle worker membrane instances (labels 1-4)"; echo "$$fin"; exit 1; }; \
+	test "$$(echo "$$fin" | awk '/MEMBRANE ID:/{w=($$0~/Label: [1-4],/); if(w)t++} w&&/^Multiset: /{if($$0=="Multiset: idle")n++; w=0} END{print t "/" n}')" = "5/5" || { echo "FAIL: expected exactly 5 worker membrane instances (labels 1-4), all idle"; echo "$$fin"; exit 1; }; \
 	echo "   OK: board halts with done*5,idle*5 and 5 idle workers"
 
 grammar: y.tab.c lex.yy.c
