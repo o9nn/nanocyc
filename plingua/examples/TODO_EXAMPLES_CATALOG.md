@@ -145,10 +145,10 @@ M-Lingua geometry, R-Lingua agent–arena relations).
 
 | Thread | Target | Status | Evidence |
 |---|---|---|---|
-| kPWorkbench round-trip | `todo_kp_flame_agent_coordination.kps` — kP-Lingua export of the FLAME example with LTL/CTL safety/liveness properties (workflow steps 1–3 of `todo_kp_queries_safety_liveness.md`) | ✅ implemented | Gheorghe et al. 2013; https://github.com/Kernel-P-Systems/kPWorkbench |
+| kPWorkbench round-trip | `todo_kp_flame_agent_coordination.kps` — kP-Lingua quotient translation of the FLAME example (behavioural, not state-for-state) with LTL/CTL safety/liveness properties (workflow steps 1–3 of `todo_kp_queries_safety_liveness.md`) | ✅ implemented | Gheorghe et al. 2013; https://github.com/Kernel-P-Systems/kPWorkbench |
 | G-systems derivation | `docs/GSYSTEMS_SPEC.md` — formal definition `G = (Γ, G, U, Ω, R, i)`: link fields on membrane complexes, covariant transport rules, holonomy/Wilson observables, n-form transport; keywords staged on M-Lingua `@connection` / `@capability gauge_invariance` | ✅ drafted (spec marked draft) | Wilson 1974; Desbrun et al. 2005 (DEC); `docs/MLINGUA_SPEC.md` |
 | G-systems runnable prototype | `todo_g_gauge_parallel_transport.pli` — Z₃ link field on a 3-membrane cycle; probe and gauge-twin both halt with Wilson class `w{1}` (L3, verified with `plingua`/`psim`) | ✅ implemented | `docs/GSYSTEMS_SPEC.md` §Prototyping |
-| kPWorkbench machine check | Run the `.kps` export through kPWorkbench + NuSMV; record verification output | ⬜ todo (kPWorkbench not bundled in-repo) | `todo_kp_queries_safety_liveness.md` §Example Query Workflow |
+| kPWorkbench machine check | Run the `.kps` translation through kPWorkbench + NuSMV; record verification output | ⬜ todo (kPWorkbench not bundled in-repo) | `todo_kp_queries_safety_liveness.md` §Example Query Workflow |
 | Non-abelian G-systems | `todo_g_gauge_s3_nonabelian.pli` — S₃ link field where holonomy classes are conjugacy classes | ⬜ todo | `docs/GSYSTEMS_SPEC.md` §Formal Definition |
 | Curvature / 2-forms | `todo_g_curvature_plaquette.pli` — facet holonomy ≠ 1 producing curvature markers (discrete field strength) | ⬜ todo | `docs/GSYSTEMS_SPEC.md` §Rule Types |
 | M-Lingua gauge semantics | Simulator semantics for `@gauge_group`, `@link`, `@holonomy` metadata (currently parse-only geometry directives) | ⬜ todo | `docs/MLINGUA_SPEC.md` §Geometry & Advanced Topology Directives |

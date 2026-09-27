@@ -1,7 +1,13 @@
 // todo_kp_flame_agent_coordination.kps
-// kPWorkbench (kP-Lingua) export of the P-Lingua model
+// kPWorkbench (kP-Lingua) translation of the P-Lingua model
 // todo_kp_flame_agent_coordination.pli -- FLAME-style multi-agent task
 // coordination on a shared message board.
+//
+// This is a behavioural quotient translation, NOT a state-for-state export:
+// the .pli antiport handshakes (and the ack*5 routing pool that serves
+// them) are re-encoded as local rules, so initial and intermediate
+// configurations differ while the board-side counters the properties
+// quantify over are preserved (see translation notes below).
 //
 // This file completes step 3 of the P-Lingua -> kPWorkbench workflow
 // documented in todo_kp_queries_safety_liveness.md:
@@ -37,7 +43,8 @@
 //       .pli board's initial ack*5 pool exists only to route resets, a job
 //       this translation performs locally, so it has no counterpart here by
 //       design.  The counters the documented properties quantify over
-//       (task, done, avail) are maintained identically.
+//       (task, done, avail) are designed to evolve identically (see the
+//       invariance caveat below).
 //   * The board therefore ends with avail(5), done(5) -- the counterpart
 //     of the .pli board's archived idle*5, done*5 -- and each dispatched
 //     job returns exactly one agent compartment to idle.  Because dispatch

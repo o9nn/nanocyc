@@ -87,7 +87,7 @@ levels of the P-systems ecosystem:
 
 Steps 1–3 are realized in this repository for the FLAME coordination
 example: `todo_kp_flame_agent_coordination.pli` (simulated design) and
-`todo_kp_flame_agent_coordination.kps` (hand-translated kP-Lingua export
+`todo_kp_flame_agent_coordination.kps` (hand-translated kP-Lingua quotient translation
 with the liveness/safety properties below ready for step 4).
 
 ---

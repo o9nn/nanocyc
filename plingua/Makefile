@@ -53,7 +53,7 @@ check-examples: compiler simulator
 	@echo "== todo_g_gauge_parallel_transport (gauge invariance: wa{1} = wb{1})"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_g_gauge_parallel_transport.pli -o $(ODIR)/examples/gauge.json -n || exit 1; \
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/gauge.json -v 1 -o $(ODIR)/examples/gauge_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
-	got=$$(echo "$$fin" | grep -A1 "Label: c1" | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
+	got=$$(echo "$$fin" | grep -A1 "Label: c1," | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
 	test "$$got" = "wa{1},wb{1}" || { echo "FAIL: c1 = '$$got', expected wa{1},wb{1}"; echo "$$fin"; exit 1; }; \
 	echo "   OK: c1 halts with wa{1},wb{1}"
 	@echo "== todo_enps_navigation_controller (ml = c+2*sl = 8, mr = c+2*sr = 16)"; \
@@ -65,9 +65,9 @@ check-examples: compiler simulator
 	@echo "== todo_kp_flame_agent_coordination (board archives idle*5, logs done*5)"; \
 	$(BDIR)/$(BIN_PLINGUA) examples/todo_kp_flame_agent_coordination.pli -o $(ODIR)/examples/kp.json -n || exit 1; \
 	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/kp.json -v 1 -o $(ODIR)/examples/kp_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
-	got=$$(echo "$$fin" | grep -A1 "Label: 9" | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
+	got=$$(echo "$$fin" | grep -A1 "Label: 9," | sed -n 's/^Multiset: //p' | tr ',' '\n' | sort | paste -sd,); \
 	test "$$got" = "done*5,idle*5" || { echo "FAIL: board = '$$got', expected done*5,idle*5"; echo "$$fin"; exit 1; }; \
-	test "$$(echo "$$fin" | grep -A1 "Label: [1-4]," | grep -c "^Multiset: idle$$")" = 5 || { echo "FAIL: expected 5 idle worker compartments (labels 1-4)"; echo "$$fin"; exit 1; }; \
+	test "$$(echo "$$fin" | grep -E -A1 "Label: [1-4]," | grep -c "^Multiset: idle$$")" = 5 || { echo "FAIL: expected 5 idle worker compartments (labels 1-4)"; echo "$$fin"; exit 1; }; \
 	echo "   OK: board halts with done*5,idle*5 and 5 idle workers"
 
 grammar: y.tab.c lex.yy.c
