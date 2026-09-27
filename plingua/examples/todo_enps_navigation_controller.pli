@@ -68,6 +68,7 @@
  *
  * To simulate: ./bin/plingua examples/todo_enps_navigation_controller.pli
  *              -o enps.json -n  &&  ./bin/psim enps.json -v 2
+ *   Regression: `make check-examples` asserts the halting configuration above.
  */
 @model<enps>
 @include "enps_model.pli"

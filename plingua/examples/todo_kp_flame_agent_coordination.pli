@@ -71,6 +71,7 @@
  *
  * To simulate: ./bin/plingua examples/todo_kp_flame_agent_coordination.pli
  *              -o kp.json -n  &&  ./bin/psim kp.json -v 2
+ *   Regression: `make check-examples` asserts the halting configuration above.
  */
 @model<kp>
 @include "kp_model.pli"

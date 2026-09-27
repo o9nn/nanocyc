@@ -198,6 +198,11 @@ derives a gauge-invariant generalization of the (P,M,R) dialect triad for
 parallel transport of n-forms over membrane complexes (runnable prototype:
 `examples/todo_g_gauge_parallel_transport.pli`).
 
+```bash
+make check-examples   # regression-check the catalog examples with documented
+                      # halting configurations (gauge transport, ENPS, kP/FLAME)
+```
+
 ### Migration: Existing RR Code → R-Lingua
 
 | Old construct | R-Lingua equivalent |

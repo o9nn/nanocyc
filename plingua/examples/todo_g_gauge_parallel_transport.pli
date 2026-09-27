@@ -65,6 +65,7 @@
  *
  * To simulate: ./bin/plingua examples/todo_g_gauge_parallel_transport.pli
  *              -o gauge.json -n  &&  ./bin/psim gauge.json -v 2
+ *   Regression: `make check-examples` asserts the halting configuration above.
  */
 @model<membrane_division>
 @include "membrane_division_model.pli"
