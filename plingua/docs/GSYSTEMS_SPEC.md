@@ -143,7 +143,9 @@ model metadata; simulator semantics to follow):
 ## Prototyping in plain P-Lingua
 
 Until dedicated syntax exists, a G-model of degree 1 with abelian `G = Z_k`
-is expressible in the `transition` model:
+is expressible with the communication schemas of the `membrane_division`
+model (whose send-out/send-in templates transform objects while they cross
+a membrane; no structural rules are needed):
 
 - fiber-indexed objects `x{g}`, `g ∈ {0..k-1}`;
 - one transport rule per `(g, edge)` with the sum `g + U(e) mod k` unrolled;

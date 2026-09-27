@@ -1,9 +1,19 @@
 /*
  * todo_g_gauge_parallel_transport.pli
  * G-system prototype: gauge-invariant parallel transport with Z_3 holonomy.
- * P-system type: Cell-like (active membranes, communication rules only)
+ * P-system type: Cell-like (active membranes model, using its communication
+ *                rule schemas only -- no division/dissolution rules appear)
  * Category: G-systems / gauge theory on membrane complexes
  * Complexity: L3 (advanced/research-grade)
+ *
+ * Model choice: @model<membrane_division> is selected because its send-out
+ * ([a]'h --> []b) and send-in (a []'h --> [b]) schemas are the only
+ * cell-like rule templates in this repository that transform an object
+ * while it crosses a membrane -- exactly the covariant transport operation
+ * g |-> g + U(e) a G-system needs (the local transition model offers no
+ * send-out, and tissue antiport moves objects unchanged).  The model's
+ * structural rules (division, dissolution) are simply never used, so the
+ * computation is communication-only.
  *
  * First runnable example of the G-systems derivation in
  * docs/GSYSTEMS_SPEC.md: a degree-1 G-system with abelian gauge group
