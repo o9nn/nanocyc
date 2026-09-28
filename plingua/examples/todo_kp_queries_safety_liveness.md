@@ -26,6 +26,14 @@ In contrast, standard P-Lingua models use specific model families
 with fixed rule templates.  kP systems generalize across these by treating
 membrane type as a first-class design parameter.
 
+This repository now ships a kP-flavoured P-Lingua model (`kp_model.pli`,
+selected with `@model<kp>`) combining rewriting, link communication and
+structure-changing rule templates.  Two artifacts demonstrate the workflow:
+`todo_kp_flame_agent_coordination.pli` is the runnable multi-agent example
+(compiled and simulated with the in-repo `plingua`/`psim` toolchain), and
+`todo_kp_flame_agent_coordination.kps` is its hand-translated kP-Lingua
+export for the kPWorkbench verification step described below.
+
 ---
 
 ## Formal Verification with kPWorkbench
@@ -76,6 +84,11 @@ levels of the P-systems ecosystem:
    - Generate the state space (via the kPWorkbench model checker).
    - Query safety/liveness properties in LTL or CTL.
    - Export counterexamples for debugging.
+
+Steps 1–3 are realized in this repository for the FLAME coordination
+example: `todo_kp_flame_agent_coordination.pli` (simulated design) and
+`todo_kp_flame_agent_coordination.kps` (hand-translated kP-Lingua quotient translation
+with the liveness/safety properties below ready for step 4).
 
 ---
 

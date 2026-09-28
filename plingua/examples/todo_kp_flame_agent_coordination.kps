@@ -1,0 +1,153 @@
+// todo_kp_flame_agent_coordination.kps
+// kPWorkbench (kP-Lingua) translation of the P-Lingua model
+// todo_kp_flame_agent_coordination.pli -- FLAME-style multi-agent task
+// coordination on a shared message board.
+//
+// This is a behavioural quotient translation, NOT a state-for-state export:
+// the .pli antiport handshakes (and the ack*5 routing pool that serves
+// them) are re-encoded as local rules, so initial and intermediate
+// configurations differ while the board-side counters the properties
+// quantify over are preserved (see translation notes below).
+//
+// This file completes step 3 of the P-Lingua -> kPWorkbench workflow
+// documented in todo_kp_queries_safety_liveness.md:
+//   1. prototype in P-Lingua        (todo_kp_flame_agent_coordination.pli)
+//   2. simulate with plingua/psim   (verified halting configuration)
+//   3. translate to kP notation     (this file)
+//   4. verify LTL/CTL properties with kPWorkbench + NuSMV/Spin
+//
+// Notation follows kP-Lingua as defined in Gheorghe et al. (2013),
+// "Kernel P systems", 11th BWMC, and the kPWorkbench distribution
+// (https://github.com/Kernel-P-Systems/kPWorkbench).  kPWorkbench is not
+// bundled with this repository, so this export is a hand translation kept
+// in sync with the .pli source; it has not been machine-checked here.
+//
+// Translation notes (P-Lingua antiport -> kP one-way communication):
+//   * kP communication is one-way and type-targeted, so the .pli antiport
+//     exchanges cannot be reproduced atomically.  This export uses a
+//     quotient translation that preserves the board-side counters the
+//     documented properties quantify over:
+//     - claim: [idle]'k <--> [task]'9 becomes a one-shot availability post
+//       (slot, idle -> avail{board}) followed by a board-side dispatch
+//       (avail, task -> hired, job{agent}).  The one-shot slot token stops
+//       reset agents from re-claiming (in the .pli the empty task pool
+//       plays this role); hired records the engaged worker so the archived
+//       availability can be restored on completion.
+//     - report/ack: [result]'k <--> [ack]'9 becomes a LOCAL report-and-
+//       reset rule (result -> res{board}, idle): the reporting agent and
+//       the reset agent are the same compartment by construction, so no
+//       acknowledgment message needs to be routed back and no ack can ever
+//       reach a non-reporting agent.  The board logs the completion and
+//       re-archives the availability (hired, res -> avail, done).
+//       Consequently the exported board carries NO ack objects at all: the
+//       .pli board's initial ack*5 pool exists only to route resets, a job
+//       this translation performs locally, so it has no counterpart here by
+//       design.  The exact board-side invariant is the conserved lifecycle
+//       sum task + hired + done = 5 (each task is pending, in flight, or
+//       logged).  Note the difference from the .pli board: there the
+//       archived idle count grows monotonically, whereas here avail dips
+//       while a job is in flight (avail -> hired) and is restored on
+//       completion, so avail itself is NOT monotone -- only its final
+//       value (5) matches the .pli board's archived idle*5.
+//   * The board therefore ends with avail(5), done(5) -- the counterpart
+//     of the .pli board's archived idle*5, done*5 -- and each dispatched
+//     job returns exactly one agent compartment to idle.  Because dispatch
+//     targets a nondeterministically chosen linked agent, the model checker
+//     explores interleavings where jobs are distributed unevenly across
+//     agent compartments (a permutation/multiplicity quotient of the
+//     deterministic psim trace); the translation is designed so that all
+//     board-side counters the properties quantify over are invariant under
+//     this quotient -- pending the kPWorkbench machine check tracked in
+//     TODO_EXAMPLES_CATALOG.md section 8, this remains an intended property
+//     of the translation, not an established verification result.
+//   * The spawner's division rule uses the kP structure-changing schema
+//     [a]_t -> [b]_t1 [c]_t2 (division into two agent-typed compartments).
+//     Per the kP division semantics (Gheorghe et al. 2013), the compartments
+//     created by division replace the divided compartment in the membrane
+//     graph and INHERIT its links: both recruits are therefore connected to
+//     b1 through the declared b1 - a4 link and can exchange messages with
+//     the board exactly as the pre-existing agents do.
+
+// -------------------------------------------------------------------------
+// Compartment types
+// -------------------------------------------------------------------------
+
+type board {
+	max {
+		// dispatch: match one availability message with one task,
+		// record the engaged worker (hired) and send the job to a
+		// linked agent compartment
+		avail, task -> hired, job{agent} .
+
+		// log: convert a posted result into a completion record and
+		// restore the archived availability message
+		hired, res -> avail, done .
+	}
+}
+
+type agent {
+	choice {
+		// claim: post an availability message on the board; the
+		// one-shot slot token prevents re-claiming after reset
+		slot, idle -> avail{board} .
+
+		// process: internal X-machine transition
+		job -> work .
+
+		// finish: internal X-machine transition
+		work -> result .
+
+		// report + reset: post the result message on the board and
+		// return to idle in the same (local) transition -- the kP
+		// counterpart of the .pli report/ack antiport handshake
+		result -> res{board}, idle .
+	}
+}
+
+type spawner {
+	choice {
+		// recruit: divide into two idle worker agents, each with a
+		// fresh one-shot claim slot
+		// (kP division schema [grow]_spawner -> [idle]_agent [idle]_agent)
+		grow -> [ idle, slot ]{agent} [ idle, slot ]{agent} .
+	}
+}
+
+// -------------------------------------------------------------------------
+// Instantiation (mirrors @mu / @ms of the .pli source)
+// -------------------------------------------------------------------------
+
+main {
+	b1 (5task) : board ;
+	a1 (idle, slot) : agent ;
+	a2 (idle, slot) : agent ;
+	a3 (idle, slot) : agent ;
+	a4 (grow) : spawner ;
+
+	b1 - a1 ;
+	b1 - a2 ;
+	b1 - a3 ;
+	b1 - a4 ;
+	// on division of a4, its two agent-typed children inherit the b1 link
+	// (kP division semantics; see translation notes above)
+}
+
+// -------------------------------------------------------------------------
+// Properties (kPWorkbench property language; NuSMV/Spin backends)
+// -------------------------------------------------------------------------
+//
+// Variables refer to object counters in compartment b1 (type board).
+//
+// liveness  -- all five tasks are eventually completed and logged:
+//   LTL:  F (b1.done = 5)
+//   CTL:  AF (b1.done = 5)
+//
+// safety    -- no task is duplicated or lost at any point.  A task on the
+//   board is `task` before dispatch, `hired` while in flight (its `job`,
+//   `res` and reset are agent-side; `hired` is the board's in-flight
+//   marker), and `done` once logged, so the tracked total is conserved:
+//   LTL:  G (b1.task + b1.hired + b1.done = 5)
+//   CTL:  AG (b1.task + b1.hired + b1.done = 5)
+//
+// reachability -- the fully-archived halting state is reachable:
+//   CTL:  EF (b1.avail = 5 & b1.done = 5)

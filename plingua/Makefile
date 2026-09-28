@@ -43,6 +43,38 @@ check-finops: compiler simulator
 	  $(BDIR)/$(BIN_PSIM) $(ODIR)/finops/$$m.json -v 1 | grep -A1 'SKIN MEMBRANE' | tail -1; \
 	done
 
+# Regression checks: catalog examples with documented halting configurations.
+# Each run asserts the exact final multisets the example headers promise.
+# Only the last CONFIGURATION block of the psim trace is inspected; each
+# membrane block is parsed from its (SKIN) MEMBRANE ID header to its Multiset
+# (tolerating intermediate metadata lines), and the multiset entries are
+# sorted so assertions do not depend on the serializer's print order.
+check-examples: compiler simulator
+	@mkdir -p $(ODIR)/examples
+	@echo "== todo_g_gauge_parallel_transport (gauge invariance: wa{1} = wb{1})"; \
+	$(BDIR)/$(BIN_PLINGUA) examples/todo_g_gauge_parallel_transport.pli -o $(ODIR)/examples/gauge.json -n || exit 1; \
+	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/gauge.json -v 1 -o $(ODIR)/examples/gauge_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
+	got=$$(echo "$$fin" | awk -v L="Label: c1," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "wa{1},wb{1}" || { echo "FAIL: c1 = '$$got', expected wa{1},wb{1}"; echo "$$fin"; exit 1; }; \
+	echo "   OK: c1 halts with wa{1},wb{1}"
+	@echo "== todo_enps_navigation_controller (ml = c+2*sl = 8, mr = c+2*sr = 16)"; \
+	$(BDIR)/$(BIN_PLINGUA) examples/todo_enps_navigation_controller.pli -o $(ODIR)/examples/enps.json -n || exit 1; \
+	trace=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/enps.json -v 1 -o $(ODIR)/examples/enps_out.json); \
+	fin=$$(echo "$$trace" | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
+	got=$$(echo "$$fin" | awk -v L="Label: 1," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "ml*8,mr*16" || { echo "FAIL: body = '$$got', expected ml*8,mr*16"; echo "$$fin"; exit 1; }; \
+	mid=$$(echo "$$trace" | awk '/^CONFIGURATION: 2$$/{f=1} /^CONFIGURATION: 3$$/{f=0} f'); \
+	got=$$(echo "$$mid" | awk -v L="Label: 2," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "c*2,e{1}*2,e{2}*2,p{1},vl*5,vr*5,xr*4" || { echo "FAIL: controller at step 2 = '$$got' (enzyme/token rate bounds violated)"; echo "$$mid"; exit 1; }; \
+	echo "   OK: body halts with ml*8,mr*16; step-2 controller shows xr*4 (enzyme-bounded 2/step)"
+	@echo "== todo_kp_flame_agent_coordination (board archives idle*5, logs done*5)"; \
+	$(BDIR)/$(BIN_PLINGUA) examples/todo_kp_flame_agent_coordination.pli -o $(ODIR)/examples/kp.json -n || exit 1; \
+	fin=$$($(BDIR)/$(BIN_PSIM) $(ODIR)/examples/kp.json -v 1 -o $(ODIR)/examples/kp_out.json | awk '/CONFIGURATION/{buf=""} {buf=buf $$0 "\n"} END{printf "%s", buf}'); \
+	got=$$(echo "$$fin" | awk -v L="Label: 9," '/MEMBRANE ID:/{m=index($$0,L)>0} m&&sub(/^Multiset: /,""){print;m=0}' | tr ',' '\n' | sort | paste -sd,); \
+	test "$$got" = "done*5,idle*5" || { echo "FAIL: board = '$$got', expected done*5,idle*5"; echo "$$fin"; exit 1; }; \
+	test "$$(echo "$$fin" | awk '/MEMBRANE ID:/{w=($$0~/Label: [1-4],/); if(w)t++} w&&/^Multiset: /{if($$0=="Multiset: idle")n++; w=0} END{print t "/" n}')" = "5/5" || { echo "FAIL: expected exactly 5 worker membrane instances (labels 1-4), all idle"; echo "$$fin"; exit 1; }; \
+	echo "   OK: board halts with done*5,idle*5 and 5 idle workers"
+
 grammar: y.tab.c lex.yy.c
 
 compiler: $(OBJ_PLINGUA) $(BIN_PLINGUA) 

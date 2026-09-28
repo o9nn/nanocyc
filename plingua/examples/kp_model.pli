@@ -1,0 +1,63 @@
+/*
+ * kp_model.pli
+ * Kernel P system (kP system) model definition.
+ *
+ * Kernel P systems (Gheorghe et al., 2013) unify several membrane computing
+ * variants under one formalism: typed compartments connected by an arbitrary
+ * graph, with rewriting, communication and structure-changing rules.
+ *
+ * This P-Lingua encoding maps the kP rule categories onto pattern groups:
+ *
+ *   kp_rewriting     -- multiset rewriting inside a compartment:
+ *       [u -> v]'h        rewrite multiset u to v within compartment h
+ *
+ *   kp_communication -- communication over a structural link (graph edge):
+ *       [u]'h1 <--> [v]'h2  antiport exchange between linked compartments
+ *                            h1 and h2 ('0 denotes the environment, treated
+ *                            as an unbounded reservoir)
+ *
+ *   kp_dissolution   -- structure-changing rule (compartment removal):
+ *       [u -> v, @d]'h    rewrite u to v and dissolve compartment h
+ *
+ *   kp_division      -- structure-changing rule (compartment duplication):
+ *       [a]'h -> [b]'h [c]'h   divide compartment h into two children
+ *
+ * Execution strategies: rewriting and communication rules run with maximal
+ * parallelism (kP "arbitrary/maximal parallelism" strategy), while the
+ * structure-changing rules (dissolution, division) are restricted by the
+ * @1{...} semantics group so that at most one of them fires per compartment
+ * per step, as in the kP structural-rule discipline.
+ *
+ * kP guards (e.g. {>= 2a}) have no direct P-Lingua counterpart; they are
+ * approximated by rule priorities "(n) [u -> v]'h" and by multiset contexts
+ * on the left-hand side (consume-and-restore promoter encoding).
+ */
+
+!kp_rewriting
+{
+        [u -> v]'h;
+    (?) [u -> v]'h;
+}
+
+!kp_communication
+{
+        [u]'h1 <--> [v]'h2;
+    (?) [u]'h1 <--> [v]'h2;
+}
+
+!kp_dissolution
+{
+        [u -> v, @d]'h;
+    (?) [u -> v, @d]'h;
+}
+
+!kp_division
+{
+        [a]'h -> [ ]'h [ ]'h;
+        [a]'h -> [b]'h [ ]'h;
+        [a]'h -> [ ]'h [b]'h;
+        [a]'h -> [b]'h [c]'h;
+}
+
+@model(kp) =
+       kp_rewriting, kp_communication, @1{kp_dissolution, kp_division};
