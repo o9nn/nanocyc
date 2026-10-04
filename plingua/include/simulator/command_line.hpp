@@ -24,22 +24,33 @@ public:
 	bool hasSeed() const {return seedProvided;}
 	unsigned getSeed() const {return seed;}
 
+	// Trace mode: "off" (default, legacy STEP output), "sexpr", "human".
+	// "sexpr" emits one parenthesised event per line (the "wire" stream) so the
+	// output can be diffed against the Lisp s-expr kernel; "human" adds the
+	// --glyph/--wire/--checkpoint three-pane layout.
+	const std::string& getTraceMode() const {return traceMode;}
+	unsigned getCheckpointEvery() const {return checkpointEvery;}
+	bool isUnicode() const {return unicode;}
+
 protected:
 	bool randomized;
 
 private:
-	
+
 	void printAbout() const;
-	
+
 	int verbosityLevel;
 	unsigned steps;
 	unsigned seed;
 	bool seedProvided;
-				
+
 	std::string inputFile;
 	std::string outputFile;
 	std::string configurationFile;
-	
+	std::string traceMode;
+	unsigned checkpointEvery;
+	bool unicode;
+
 };
 
 

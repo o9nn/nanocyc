@@ -20,6 +20,16 @@ int main(int argc, char *argv[])
 			while(simulator.ok()) {
 				simulator.step();
 			}
+			// Emit the halting event on the trace stream (if tracing).
+			if (simulator.getTraceMode() != "off") {
+				unsigned long t = simulator.getCurrentConfiguration().time;
+				bool hitMax = simulator.getMaxStepsToSimulate() > 0 &&
+				              t >= simulator.getMaxStepsToSimulate();
+				std::cout << "(halted (steps " << t << ")"
+				          << " (reason " << (hitMax ? "max-steps"
+				                                      : "no-applicable-rules")
+				          << "))" << std::endl;
+			}
 			// Save the final configuration to the output file
 			try {
 				saveToFile(simulator.getOutputFile(), simulator.getCurrentConfiguration(), "file");
