@@ -1,0 +1,25 @@
+/* Lowered by tli_lower.py from a T-Lingua (.tli) model.
+ * Source model: @tmodel<time_crystal>
+ * Lowering: @clock/@phase_register/when -> explicit tick ring. */
+
+@model<psystems_basic>
+
+@mu = [ [ [ [ [ [ [ [ [ [ [ []'d11 ]'d10 ]'d9 ]'d8 ]'d7 ]'d6 ]'d5 ]'d4 ]'d3 ]'d2 ]'d1 ]'skin;
+
+@mskin = tick;
+
+
+/* @clock tick (period 11) lowered: */
+[tick_in : tick --> (tick)in_d1 ]'skin;
+[tick_in : tick --> (tick)in_d2 ]'d1;
+[tick_in : tick --> (tick)in_d3 ]'d2;
+[tick_in : tick --> (tick)in_d4 ]'d3;
+[tick_in : tick --> (tick)in_d5 ]'d4;
+[tick_in : tick --> (tick)in_d6 ]'d5;
+[tick_in : tick --> (tick)in_d7 ]'d6;
+[tick_in : tick --> (tick)in_d8 ]'d7;
+[tick_in : tick --> (tick)in_d9 ]'d8;
+[tick_in : tick --> (tick)in_d10 ]'d9;
+[tick_in : tick --> (tick)in_d11 ]'d10;
+[tick_wrap : tick --> (tick)out ]'d11;
+[singularity : singularity_point --> singularity_point * tick ]'d11;

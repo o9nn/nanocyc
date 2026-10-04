@@ -1,0 +1,31 @@
+/* Lowered by tli_lower.py from a T-Lingua (.tli) model.
+ * Source model: @tmodel<time_crystal>
+ * Lowering: @clock/@phase_register/when -> explicit tick ring. */
+
+@model<psystems_basic>
+
+@mu = [ []'cfga ]'skin;
+
+@mskin = ignite;
+@mcfga = operator, fuel;
+@mcfga = phase(0), slot(add), slot(sub), slot(mul), slot(div), slot(diff), slot(int), slot(inner), slot(outer), slot(geometric), slot(project), slot(reject), slot(rotate), slot(reflect);
+
+[fire : operator * slot(add)       * fuel --> done(add) * slot(add) ]'cfga;
+[fire : operator * slot(sub) --> done(sub) * slot(sub) ]'cfga;
+[fire : operator * slot(mul) --> done(mul) * slot(mul) ]'cfga;
+[fire : operator * slot(div) --> done(div) * slot(div) ]'cfga;
+[fire : operator * slot(diff) --> done(diff) * slot(diff) ]'cfga;
+[fire : operator * slot(int) --> done(int) * slot(int) ]'cfga;
+[fire : operator * slot(inner) --> done(inner) * slot(inner) ]'cfga;
+[fire : operator * slot(outer) --> done(outer) * slot(outer) ]'cfga;
+[fire : operator * slot(geometric) --> done(geometric) * slot(geometric) ]'cfga;
+[fire : operator * slot(project) --> done(project) * slot(project) ]'cfga;
+[fire : operator * slot(reject) --> done(reject) * slot(reject) ]'cfga;
+[fire : operator * slot(rotate) --> done(rotate) * slot(rotate) ]'cfga;
+[fire : operator * slot(reflect) --> done(reflect) * slot(reflect) ]'cfga;
+[wrap : done(reflect) --> cycle_complete ]'cfga;
+[cycle_done : cycle_complete --> (result(cfga_13_ops))out ]'cfga;
+
+/* @phase_register cfga (cycle 13) lowered: */
+/* register advances when its slot fires; see wrap below */
+[wrap_cfga : done(reflect) --> cycle_complete * phase(0) ]'cfga;
