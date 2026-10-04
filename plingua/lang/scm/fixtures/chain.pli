@@ -1,0 +1,13 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+  @mu = [ [ ]'inner ]'skin;
+  @ms(skin) = a*1;
+
+  /* a multi-step rewriting chain entirely in skin: a->b->c->d (3 steps) */
+  [a --> b]'skin;
+  [b --> c]'skin;
+  [c --> d]'skin;
+}
