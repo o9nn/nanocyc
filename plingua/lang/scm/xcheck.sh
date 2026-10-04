@@ -41,16 +41,26 @@ for pli in "$HERE"/fixtures/*.pli; do
 
   psim_final="$(python3 "$HERE/xcheck_psim.py" "$compiled" "$outjson" 2>/dev/null)"
   scm_final="$(guile -L "$HERE" -s "$HERE/xcheck.scm" "$scm" 2>/dev/null | grep '^(final')"
+  # Racket engine: parse the SAME .pli and simulate with the Racket kernel
+  rkt_final=""
+  if command -v racket >/dev/null 2>&1; then
+    rkt_final="$(cd "$HERE/../rkt" && racket pli-run.rkt "$pli" 2>/dev/null | grep '^(final')"
+  fi
 
   if [ -z "$psim_final" ]; then echo "FAIL $name: empty psim canonical"; fail=1; continue; fi
   if [ -z "$scm_final" ];  then echo "FAIL $name: empty scheme canonical"; fail=1; continue; fi
 
-  if [ "$psim_final" = "$scm_final" ]; then
+  ok=1
+  [ "$psim_final" = "$scm_final" ] || ok=0
+  if [ -n "$rkt_final" ] && [ "$rkt_final" != "$scm_final" ]; then ok=0; fi
+
+  if [ "$ok" -eq 1 ]; then
     echo "ok   $name  ($scm_final)"
   else
     echo "FAIL $name"
     echo "     psim:   $psim_final"
     echo "     scheme: $scm_final"
+    [ -n "$rkt_final" ] && echo "     racket: $rkt_final"
     fail=1
   fi
 done
