@@ -1,0 +1,20 @@
+/* ============================================================================
+ * time_crystal_core.tli
+ *
+ * T-Lingua port of psystems/common/time_crystal_core.pli — the 11-dimensional
+ * time-crystal base.  The hand-written .pli version spells out 11 nested phase
+ * membranes and 13 tick rules by hand; here the whole clock is ONE @clock
+ * declaration.  Traceability: src/cpp/nanobrain_time_crystal.h
+ * ==========================================================================*/
+
+@tmodel<time_crystal>
+
+/* The 11D nested phase manifold as a first-class closed time loop:
+   the simulator owns the tick ring — no per-file boilerplate. */
+@clock tick {
+    period 11;                    /* 11 phase membranes d1..d11 (the 11D manifold) */
+    wrap d11 -> skin;             /* at the innermost phase, wrap back to the rim */
+    reseed singularity_point;     /* a singularity_point re-seeds the clock       */
+}
+
+@mskin = tick;

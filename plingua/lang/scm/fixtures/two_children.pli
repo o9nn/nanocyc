@@ -1,0 +1,13 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+  @mu = [ [ ]'left [ ]'right ]'skin;
+  @ms(skin) = a*2;
+
+  /* each a sends a p into left and a q into right, staying as b */
+  [a [ ]'left [ ]'right --> b [p]'left [q]'right]'skin;
+  [p --> r]'left;
+  [q --> s]'right;
+}

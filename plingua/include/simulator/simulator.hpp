@@ -7,6 +7,8 @@
 #include <map>
 #include <queue>
 #include <limits>
+#include <sstream>
+#include <functional>
 #include <simulator/command_line.hpp>
 #include <simulator/shuffler.hpp>
 #include <serialization.hpp>
@@ -32,15 +34,32 @@ public:
 	Simulator() : finished(false), initialTime(0) {}
 	virtual ~Simulator() {}
 	void step();
-	virtual bool parse(int argc, char *argv[]);	
+	virtual bool parse(int argc, char *argv[]);
 	const Configuration& getCurrentConfiguration() const {return configuration;}
 	const File& getFile() const {return file;}
 	bool ok() const {return !finished;}
-	
+
 protected:
-	
+
 	virtual void selectRules();
-	virtual void executeRules();	
+	virtual void executeRules();
+
+	// --- s-expr tracing (the "wire"/"checkpoint" streams) -------------------
+	// Emit the run header once: (seed <n>) (steps <n>) (model "<file>").
+	void traceHeader() const;
+	// Emit one (fired (step k) (membrane id) (rule r) (consumed ms)
+	//           (produced ms)) event per selected rule application.
+	void traceStepEvents() const;
+	// Build the wire lines without printing (shared by sexpr and human modes).
+	std::vector<std::string> stepEventLines() const;
+	// Emit (checkpoint (step k) (membrane id (label l) (objects ((o . n)..))..)).
+	void traceCheckpoint() const;
+	// Emit the three-pane human layout: --glyph / --wire / --checkpoint.
+	void traceHumanStep(const std::vector<std::string>& wireLines) const;
+	// Render the membrane tree as box-drawing art, one line per row.
+	std::vector<std::string> glyphLines() const;
+	// Serialise a multiset as ((sym . n) ...) sorted by symbol name.
+	static std::string multisetToSexpr(const Multiset& ms);
 	
 
 private:
@@ -75,7 +94,8 @@ private:
 	std::map<Label, std::map<char, std::vector<Rule>>> ruleSets;
 	
 		
-	std::map<unsigned, std::map<unsigned,std::size_t>> selectedRules;	
+	std::map<unsigned, std::map<unsigned,std::size_t>> selectedRules;
+	std::vector<std::string> pendingWireLines; // stashed for human-mode panes
 	std::queue<unsigned> freeIndexes;	
 	Configuration configuration;
 	File file;
@@ -90,11 +110,234 @@ private:
 inline
 void Simulator::step()
 {
-	
+
 	selectRules();
 	executeRules();
-	finished = selectedRules.empty() || 
+	finished = selectedRules.empty() ||
 				(getMaxStepsToSimulate()>0 && (configuration.time - initialTime) >= getMaxStepsToSimulate());
+}
+
+// ---------------------------------------------------------------------------
+// s-expr tracing.  The "wire" stream is one parenthesised event per line — the
+// same canonical format the Lisp s-expr kernel (plingua/lang/scm) emits, so
+// traces can be diffed across engines.  "checkpoint" lines carry the full
+// configuration as a readable s-expr.
+// ---------------------------------------------------------------------------
+
+inline
+std::string Simulator::multisetToSexpr(const Multiset& ms)
+{
+	std::ostringstream os;
+	os << "(";
+	bool first = true;
+	for (const auto& kv : ms) {
+		if (kv.second.raw() == 0) continue;
+		if (!first) os << " ";
+		os << "(" << kv.first.str() << " . " << kv.second.raw() << ")";
+		first = false;
+	}
+	os << ")";
+	return os.str();
+}
+
+inline
+void Simulator::traceHeader() const
+{
+	std::ostringstream os;
+	os << "(seed " << (hasSeed() ? getSeed() : RANDOM.getSeed()) << ")";
+	if (getMaxStepsToSimulate() > 0) os << " (steps " << getMaxStepsToSimulate() << ")";
+	os << " (model \"" << getInputFile() << "\")";
+	std::cout << os.str() << "\n";
+}
+
+inline
+std::vector<std::string> Simulator::stepEventLines() const
+{
+	std::vector<std::string> lines;
+	// configuration.time has NOT yet been incremented for this step's events
+	for (auto it1 = selectedRules.begin(); it1 != selectedRules.end(); ++it1) {
+		const CMembrane& m = configuration.membranes[it1->first];
+		const std::vector<Rule>& rules = ruleSets.at(m.label).at(m.charge);
+		for (auto it2 = it1->second.begin(); it2 != it1->second.end(); ++it2) {
+			const Rule& r = rules[it2->first];
+			std::size_t n = it2->second;
+			// consumed = objects taken from THIS membrane = the union of the
+			// rule's local multiset (lhr.multiset) and its home-membrane
+			// multiset (lhr.membrane.multiset), scaled by applications.
+			Multiset consumed;
+			for (const auto& kv : r.lhr.multiset)
+				consumed[kv.first] += kv.second.raw() * n;
+			for (const auto& kv : r.lhr.membrane.multiset)
+				consumed[kv.first] += kv.second.raw() * n;
+			// produced: in this grammar the home membrane is rhr.data[0]; its
+			// multiset is the "here" product, and its nested children are the
+			// send-in targets, reported as ((ms) (in <label>)).
+			Multiset produced;
+			std::ostringstream prod;
+			if (!r.rhr.data.empty()) {
+				const OMembrane& home = r.rhr.data[0];
+				for (const auto& kv : home.multiset)
+					produced[kv.first] += kv.second.raw() * n;
+				for (const auto& child : home.data) {
+					Multiset inner;
+					for (const auto& kv : child.multiset)
+						inner[kv.first] += kv.second.raw() * n;
+					prod << (produced.empty() ? "" : " ")
+					     << "(" << multisetToSexpr(inner)
+					     << " (in " << (child.label.empty() ? "?" : child.label[0].str())
+					     << "))";
+				}
+			}
+			// also account for any rhr.multiset (defensive; usually empty here)
+			for (const auto& kv : r.rhr.multiset)
+				produced[kv.first] += kv.second.raw() * n;
+			std::ostringstream prodAll;
+			prodAll << multisetToSexpr(produced);
+			if (!prod.str().empty()) prodAll << prod.str();
+			std::ostringstream line;
+			line << "(fired (step " << configuration.time << ")"
+			     << " (membrane " << it1->first << ")"
+			     << " (rule " << "r" << it2->first << ")"
+			     << " (consumed " << multisetToSexpr(consumed) << ")"
+			     << " (produced " << prodAll.str() << ")"
+			     << (n > 1 ? " (applications " : "")
+			     << (n > 1 ? std::to_string(n) : "")
+			     << (n > 1 ? ")" : "")
+			     << ")";
+			lines.push_back(line.str());
+		}
+	}
+	return lines;
+}
+
+inline
+void Simulator::traceStepEvents() const
+{
+	if (getTraceMode() == "human") return; // human mode draws its own panes
+	for (const auto& l : stepEventLines()) std::cout << l << "\n";
+}
+
+// Render the membrane tree as box-drawing art (one row per line).
+inline
+std::vector<std::string> Simulator::glyphLines() const
+{
+	const bool uni = isUnicode();
+	const char* tl = uni ? "\u256D" : "+";   // top-left
+	const char* bl = uni ? "\u2570" : "+";   // bottom-left
+	const char* tr = uni ? "\u256E" : "+";   // top-right
+	const char* br = uni ? "\u256F" : "+";   // bottom-right
+	const char* hz = uni ? "\u2500" : "-";   // horizontal
+	const char* vt = uni ? "\u2502" : "|";   // vertical
+
+	std::vector<std::string> out;
+	// recursive lambda over children of the skin (parent == -1)
+	std::function<void(unsigned, int)> render = [&](unsigned id, int depth) {
+		const CMembrane& m = configuration.membranes[id];
+		if (m.parent == -2) return; // dissolved
+		std::string indent(depth * 2, ' ');
+		std::ostringstream label;
+		label << "[" << id << "]" << (m.label.empty() ? "" : m.label[0].str());
+		// objects inline, e.g. "b b b"
+		std::ostringstream objs;
+		for (const auto& kv : m.multiset)
+			for (std::size_t k = 0; k < kv.second.raw(); k++)
+				objs << kv.first.str() << " ";
+		std::string width = label.str();
+		std::string rule;
+		for (std::size_t i = 0; i < width.size() + 2; i++) rule += hz;
+		out.push_back(indent + tl + rule + tr);
+		out.push_back(indent + vt + " " + width + " " + vt + "  " + objs.str());
+		for (int c : m.children) render(c, depth + 1);
+		out.push_back(indent + bl + rule + br);
+	};
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++)
+		if (configuration.membranes[i].parent == -1) render(i, 0);
+	return out;
+}
+
+// Three-pane human layout: --glyph / --wire / --checkpoint, side by side when
+// the terminal is wide enough, stacked otherwise.
+inline
+void Simulator::traceHumanStep(const std::vector<std::string>& wireLines) const
+{
+	std::vector<std::string> glyph = glyphLines();
+
+	// checkpoint text (reuse the s-expr but split into short lines)
+	std::ostringstream cp;
+	cp << "(checkpoint (step " << configuration.time << ")";
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		const CMembrane& m = configuration.membranes[i];
+		if (m.parent == -2) continue;
+		cp << "\n  (membrane " << i
+		   << " (label " << (m.label.empty() ? "?" : m.label[0].str()) << ")"
+		   << " (objects " << multisetToSexpr(m.multiset) << "))";
+	}
+	cp << ")";
+	std::vector<std::string> check;
+	{ std::istringstream is(cp.str()); std::string l; while (std::getline(is, l)) check.push_back(l); }
+
+	const std::size_t GW = 34, WW = 50; // column widths
+
+	// wrap a long line to width w, indenting continuation lines by 2
+	auto wrap = [](const std::string& s, std::size_t w) {
+		std::vector<std::string> out;
+		std::string cur;
+		std::istringstream is(s);
+		std::string tok;
+		while (is >> tok) {
+			if (!cur.empty() && cur.size() + 1 + tok.size() > w) {
+				out.push_back(cur); cur = "  " + tok;
+			} else {
+				cur += (cur.empty() ? "" : " ") + tok;
+			}
+		}
+		if (!cur.empty()) out.push_back(cur);
+		return out;
+	};
+	std::vector<std::string> wire;
+	for (const auto& l : wireLines)
+		for (const auto& w : wrap(l, WW - 1)) wire.push_back(w);
+
+	// pad to a *display* width: count UTF-8 code points (box-drawing chars are
+	// 3 bytes each but 1 column wide), then right-pad with spaces.
+	auto dispWidth = [](const std::string& s) {
+		std::size_t n = 0;
+		for (unsigned char c : s) if ((c & 0xC0) != 0x80) n++;
+		return n;
+	};
+	auto pad = [&](std::string s, std::size_t w) {
+		std::size_t dw = dispWidth(s);
+		if (dw < w) s.append(w - dw, ' '); return s; };
+
+	std::ostringstream hdr;
+	hdr << pad("--glyph", GW) << pad("--wire", WW) << "--checkpoint";
+	std::cout << hdr.str() << "\n";
+
+	std::size_t rows = std::max(glyph.size(), std::max(wire.size(), check.size()));
+	for (std::size_t i = 0; i < rows; i++) {
+		std::string g = i < glyph.size() ? glyph[i] : "";
+		std::string w = i < wire.size() ? wire[i] : "";
+		std::string c = i < check.size() ? check[i] : "";
+		std::cout << pad(g, GW) << pad(w, WW) << c << "\n";
+	}
+	std::cout << "\n";
+}
+
+inline
+void Simulator::traceCheckpoint() const
+{
+	std::ostringstream os;
+	os << "(checkpoint (step " << configuration.time << ")";
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		const CMembrane& m = configuration.membranes[i];
+		if (m.parent == -2) continue; // dissolved
+		os << " (membrane " << i
+		   << " (label " << (m.label.empty() ? "?" : m.label[0].str()) << ")"
+		   << " (parent " << m.parent << ")"
+		   << " (objects " << multisetToSexpr(m.multiset) << "))";
+	}
+	os << ")";
+	std::cout << os.str() << "\n";
 }
 
 inline
@@ -157,7 +400,7 @@ void Simulator::selectRules()
 	
 	if (getVerbosityLevel()>1 && !selectedRules.empty()) {
 		std::cout<<"-----------------------------------------------\n\n";
-		std::cout<<"STEP "<<configuration.time+1<<":\n"; 
+		std::cout<<"STEP "<<configuration.time+1<<":\n";
 		for (auto it1 = selectedRules.begin(); it1 != selectedRules.end(); ++it1) {
 			CMembrane& m = configuration.membranes[it1->first];
 			std::cout << "\nMembrane ID: "<< it1->first << std::endl;
@@ -166,6 +409,15 @@ void Simulator::selectRules()
 				std::cout<< it2->second <<" * "<< rules[it2->first] << std::endl;
 			}
 		}
+	}
+
+	// "wire" stream: one (fired ...) s-expr per rule application this step.
+	// sexpr mode prints now; human mode stashes the lines and the three-pane
+	// layout is drawn in executeRules() after the clock advances.
+	if (getTraceMode() == "sexpr" && !selectedRules.empty()) {
+		traceStepEvents();
+	} else if (getTraceMode() == "human") {
+		pendingWireLines = stepEventLines();
 	}
 }
 
@@ -409,12 +661,26 @@ void Simulator::executeRules()
 	
 	
 	configuration.time++;
-	
+
 	if (getVerbosityLevel()>0) {
 		std::cout<<"\n***********************************************\n\n";
 		std::cout<<getCurrentConfiguration()<<std::endl;
 	}
-	
+
+	// "checkpoint" stream: full configuration as a readable s-expr, emitted
+	// every --checkpoint-every steps (after time has advanced).  In human mode
+	// we draw the three-pane glyph/wire/checkpoint layout instead.
+	if (getTraceMode() == "human") {
+		if ((configuration.time % getCheckpointEvery()) == 0 ||
+			!pendingWireLines.empty()) {
+			traceHumanStep(pendingWireLines);
+		}
+		pendingWireLines.clear();
+	} else if (getTraceMode() == "sexpr" &&
+		(configuration.time % getCheckpointEvery()) == 0) {
+		traceCheckpoint();
+	}
+
 }
 
 
@@ -760,6 +1026,10 @@ bool Simulator::parse(int argc, char *argv[])
 	}
 	initialTime = configuration.time;
 	finished = false;
+	// Emit the run header first so any trace is replayable.
+	if (getTraceMode() != "off") {
+		traceHeader();
+	}
 	return true;
 }
 

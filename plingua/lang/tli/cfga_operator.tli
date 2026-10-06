@@ -1,0 +1,48 @@
+/* ============================================================================
+ * cfga_operator.tli
+ *
+ * T-Lingua port of psystems/ch04/ch04_cfga_operator.pli (section 4.8.3): the
+ * CFGA operator that runs thirteen mathematical operations by itself in a
+ * closed time-crystal loop.  The .pli original hand-rolls the phase register,
+ * the 13 slots, the per-tick advance and the wrap; here one @phase_register
+ * declaration replaces that ring.
+ *
+ * Traceability: src/cpp/nanobrain_dodecanion.h, nanobrain_fractal.h,
+ *               nanobrain_time_crystal.h (closed time loop)
+ * ==========================================================================*/
+
+@tmodel<time_crystal>
+
+@mu = [ []'cfga ]'skin;
+@mskin = ignite;
+@mcfga = operator, fuel;
+
+/* One self-driving 13-slot operation ring.  The register visits one slot per
+ * tick and wraps — the closed loop means the operator is never re-armed. */
+@phase_register cfga {
+    cycle 13;
+    slots [add sub mul div diff int inner outer geometric
+           project reject rotate reflect];
+}
+
+/* The skin drops the operator into its time crystal. */
+[ignite : ignite --> (operator)in_cfga ]'skin;
+
+/* Each slot fires its operation when the phase register points at it. */
+[fire : operator * slot(add)       * fuel --> done(add)]'cfga       when slot == add;
+[fire : operator * slot(sub)              --> done(sub)]'cfga       when slot == sub;
+[fire : operator * slot(mul)              --> done(mul)]'cfga       when slot == mul;
+[fire : operator * slot(div)              --> done(div)]'cfga       when slot == div;
+[fire : operator * slot(diff)             --> done(diff)]'cfga      when slot == diff;
+[fire : operator * slot(int)              --> done(int)]'cfga       when slot == int;
+[fire : operator * slot(inner)            --> done(inner)]'cfga     when slot == inner;
+[fire : operator * slot(outer)            --> done(outer)]'cfga     when slot == outer;
+[fire : operator * slot(geometric)        --> done(geometric)]'cfga when slot == geometric;
+[fire : operator * slot(project)          --> done(project)]'cfga   when slot == project;
+[fire : operator * slot(reject)           --> done(reject)]'cfga    when slot == reject;
+[fire : operator * slot(rotate)           --> done(rotate)]'cfga    when slot == rotate;
+[fire : operator * slot(reflect)          --> done(reflect)]'cfga   when slot == reflect;
+
+/* After the thirteenth slot the ring reports a full autonomous cycle. */
+[wrap : done(reflect) --> cycle_complete ]'cfga;
+[cycle_done : cycle_complete --> (result(cfga_13_ops))out ]'cfga;

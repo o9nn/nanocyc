@@ -1,0 +1,13 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+  @mu = [ [ ]'inner ]'skin;
+  @ms(skin) = a*3;
+
+  /* a in skin becomes b in skin and sends one b into inner */
+  [a [ ]'inner --> b [b]'inner]'skin;
+  /* b in inner becomes two c */
+  [b --> c, c]'inner;
+}
