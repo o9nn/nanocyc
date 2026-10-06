@@ -168,6 +168,11 @@ probe provably returns the **same** Wilson class `1`.
   re-description-stable, closing the loop with the RR requirement that
   agent–arena fit be independent of arbitrary labels.
 
+G-systems are not a fourth grammar. Graph-structured tissue P systems stay
+inside P-Lingua, geometric self-assembly stays in M-Lingua, and agent–arena
+fit stays in R-Lingua. Cross-dialect composition is `@import` (see
+`MLINGUA_SPEC.md` and `RLINGUA_SPEC.md`), not a G-Lingua syntax.
+
 ## Authoring Checklist
 
 1. Declare the gauge group and link field; keep `U(e⁻¹) = U(e)⁻¹`.

@@ -12,6 +12,7 @@
 #include "cereal/types/set.hpp"
 #include "cereal/types/string.hpp"
 #include "serialization.hpp"
+#include "dialect_import.hpp"
 
 namespace plingua {
 namespace msystem {
@@ -361,6 +362,9 @@ struct MSystem {
 	std::vector<PolytopeSpec> polytopes;
 	std::vector<FlowSpec> flows;
 	std::vector<std::string> capabilities;
+	// Composition metadata. Intentionally omitted from serialize() so Cytos
+	// XML and binary archives stay compatible with pre-import models.
+	std::vector<plingua::ImportedModule> imports;
 
 	MSystem() : modelType("morphogenetic"), reactionDistance(1.0),
 	            geometryProfile(GeometryProfile::EUCLIDEAN),

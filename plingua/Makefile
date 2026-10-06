@@ -35,6 +35,44 @@ all: grammar compiler simulator mcompiler msimulator rcompiler extensions
 # FinOps membrane reconciliation models (accospace + isabellex + fincosys)
 FINOPS_MODELS = membrane_reconciliation_minimal fincosys_fixture_reconciliation accospace_grouped_reconciliation fincosys_records_reconciliation
 
+# Chapter hybrids: geometric .mli and relevance .rli companions of psystems/*.pli.
+MLI_HYBRIDS = \
+	../psystems/ch02/ch02_singularity_assembly.mli \
+	../psystems/ch02/ch02_fractal_tape.mli \
+	../psystems/ch06/ch06_tubulin_ppm.mli \
+	../psystems/ch06/ch06_nanodevice_tc.mli \
+	../psystems/ch08/ch08_spiral_cylinders.mli \
+	../psystems/ch08/ch08_knot_morphogenesis.mli \
+	../psystems/ch08/ch08_knot_selfassembly.mli \
+	../psystems/ch09/ch09_living_gel.mli
+
+RLI_HYBRIDS = \
+	../psystems/ch05/ch05_wheel_of_intelligence.rli \
+	../psystems/ch05/ch05_creativity_primes.rli \
+	../psystems/ch07/ch07_h3_decision_device.rli \
+	../psystems/ch07/ch07_wheel_of_primes.rli \
+	../psystems/ch10/ch10_ten_paradoxes.rli
+
+check-extensions: mcompiler rcompiler $(BDIR)/test_mli_geometry_extensions $(BDIR)/test_rlingua
+	@$(BDIR)/test_mli_geometry_extensions
+	@$(BDIR)/test_rlingua
+	@set -e; \
+	for f in $(MLI_HYBRIDS); do \
+	  echo "== $$f"; \
+	  err=$$($(BDIR)/$(BIN_MLINGUA) -v -o /dev/null $$f 2>&1); \
+	  echo "$$err" | grep -E 'Imports:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no imports in $$f"; echo "$$err"; exit 1; }; \
+	  echo "$$err" | grep -E 'symbols=[1-9]' >/dev/null || { echo "FAIL: companion has no symbols in $$f"; echo "$$err"; exit 1; }; \
+	  echo "$$err" | grep -E 'Tiles:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no tiles in $$f"; echo "$$err"; exit 1; }; \
+	done; \
+	for f in $(RLI_HYBRIDS); do \
+	  echo "== $$f"; \
+	  err=$$($(BDIR)/$(BIN_RLINGUA) -v -s 0 -o /dev/null $$f 2>&1); \
+	  echo "$$err" | grep -E 'Imports:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no imports in $$f"; echo "$$err"; exit 1; }; \
+	  echo "$$err" | grep -E 'symbols=[1-9]' >/dev/null || { echo "FAIL: companion has no symbols in $$f"; echo "$$err"; exit 1; }; \
+	  echo "$$err" | grep -E 'Nodes:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no nodes in $$f"; echo "$$err"; exit 1; }; \
+	done; \
+	echo "check-extensions: 8 .mli + 5 .rli hybrids OK"
+
 check-finops: compiler simulator
 	@mkdir -p $(ODIR)/finops
 	@for m in $(FINOPS_MODELS); do \

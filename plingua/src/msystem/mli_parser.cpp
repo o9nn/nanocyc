@@ -9,6 +9,7 @@
  */
 
 #include <msystem/mli_parser.hpp>
+#include <dialect_import.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -205,10 +206,46 @@ bool MliParser::parseFile(const std::string& filename) {
 	return parseString(ss.str(), filename);
 }
 
+bool MliParser::handleImport(const std::string& line) {
+	plingua::import_util::ImportPrep prep = plingua::import_util::prepareImport(
+		filename_, line, importStack_, system_.imports);
+	if (prep.status == plingua::import_util::ImportPrep::NOT_IMPORT) return false;
+	if (prep.status == plingua::import_util::ImportPrep::SKIP) return true;
+	if (prep.status != plingua::import_util::ImportPrep::READY) {
+		errors_.push_back(filename_ + ":" + std::to_string(lineNum_) + ": error: " + prep.error);
+		return true;
+	}
+	plingua::ImportedModule mod;
+	mod.path = prep.resolved;
+	mod.spec = prep.spec;
+	mod.dialect = prep.dialect;
+	mod.symbols = prep.symbols;
+	mod.inlined = (prep.dialect == "mli");
+	if (mod.inlined) parseBody(prep.body, prep.resolved);
+	system_.imports.push_back(mod);
+	return true;
+}
+
 bool MliParser::parseString(const std::string& source, const std::string& filename) {
 	errors_.clear();
 	system_ = MSystem();
+	importStack_.clear();
 	filename_ = filename;
+	lineNum_ = 0;
+	return parseBody(source, filename);
+}
+
+bool MliParser::parseBody(const std::string& source, const std::string& filename) {
+	std::string prevFile = filename_;
+	int prevLine = lineNum_;
+	filename_ = filename;
+	std::string key = plingua::import_util::normalizePath(filename);
+	if (!importStack_.insert(key).second) {
+		errors_.push_back(filename + ": error: import cycle involving " + key);
+		filename_ = prevFile;
+		lineNum_ = prevLine;
+		return false;
+	}
 
 	std::string clean = stripComments(source);
 	std::vector<std::string> lines;
@@ -231,6 +268,7 @@ bool MliParser::parseString(const std::string& source, const std::string& filena
 		std::string ln = trim(lines[i]);
 		if (ln.empty()) continue;
 
+		if (handleImport(ln)) continue;
 		if (parseModelDecl(ln)) continue;
 		if (parseGeometryProfile(ln)) continue;
 		if (parseManifold(ln)) continue;
@@ -296,6 +334,9 @@ bool MliParser::parseString(const std::string& source, const std::string& filena
 		}
 	}
 
+	importStack_.erase(key);
+	filename_ = prevFile;
+	lineNum_ = prevLine;
 	return errors_.empty();
 }
 

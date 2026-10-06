@@ -1,0 +1,63 @@
+/*
+ * ch10_ten_paradoxes.rli
+ *
+ * Relevance-realization companion to ch10_ten_paradoxes.pli.
+ * Ten claims sit on the desk. An observer does not flatten them into one
+ * proposition; grip is the adaptive fit across the paradox set, and emergence
+ * is the relation that appears only when several claims are held together.
+ *
+ * Traceability: src/cpp/nanobrain_consciousness.h
+ */
+
+@import "ch10_ten_paradoxes.pli";
+
+@rmodel<relevance_realization>
+
+@ennead {
+    @triad_a {
+        identity_continuity  = 0.6;
+        skill_readiness      = 0.55;
+        motivational_valence = 0.7;
+    }
+    @triad_b {
+        constraint_clarity = 0.35;
+        affordance_density = 0.9;
+        feedback_latency   = 0.45;
+    }
+    @triad_c {
+        coupling_strength  = 0.65;
+        reciprocal_shaping = 0.8;
+        adaptive_fit       = 0.5;
+    }
+}
+
+@constraints {
+    grip_threshold        = 0.3;
+    emergence_sensitivity = 0.8;
+    convergence_window    = 60;
+    affordance_decay      = 0.015;
+}
+
+def main() {
+    @agent id=observer label="desk of claims" salience=0.7 affordance=1.0;
+    @arena id=p1_trumpet label="cycle paints its trumpet" salience=0.4 affordance=0.8;
+    @arena id=p2_spheres label="no outermost sphere" salience=0.5 affordance=0.9;
+    @arena id=p3_resonance label="density drives resonance" salience=0.55 affordance=0.9;
+    @arena id=p4_numbers label="number metric saturation" salience=0.45 affordance=0.8;
+    @arena id=p5_observer label="observer absolute" salience=0.6 affordance=1.0;
+    @arena id=p10_illogical label="illogical decision" salience=0.35 affordance=0.7;
+    @relate id=held_together from=observer to=p5_observer strength=0.7;
+
+    @coupling {
+        observer <-> p1_trumpet :: co_constitution strength=0.5;
+        observer <-> p2_spheres :: co_constitution strength=0.55;
+        observer <-> p3_resonance :: co_constitution strength=0.6;
+        observer <-> p5_observer :: co_constitution strength=0.7;
+        observer ~> p10_illogical :: emergent strength=0.45;
+    }
+}
+
+@observe {
+    sample_period = 10;
+    report_fields = grip_index, ennead_balance, emergence_score;
+}

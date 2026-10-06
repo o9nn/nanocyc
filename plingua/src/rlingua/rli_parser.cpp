@@ -8,6 +8,7 @@
  */
 
 #include <rlingua/rli_parser.hpp>
+#include <dialect_import.hpp>
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -108,9 +109,45 @@ bool RliParser::parseFile(const std::string& filename) {
     return parseString(ss.str(), filename);
 }
 
+bool RliParser::handleImport(const std::string& line) {
+    plingua::import_util::ImportPrep prep = plingua::import_util::prepareImport(
+        filename_, line, importStack_, system_.imports);
+    if (prep.status == plingua::import_util::ImportPrep::NOT_IMPORT) return false;
+    if (prep.status == plingua::import_util::ImportPrep::SKIP) return true;
+    if (prep.status != plingua::import_util::ImportPrep::READY) {
+        addError(prep.error);
+        return true;
+    }
+    plingua::ImportedModule mod;
+    mod.path = prep.resolved;
+    mod.spec = prep.spec;
+    mod.dialect = prep.dialect;
+    mod.symbols = prep.symbols;
+    mod.inlined = (prep.dialect == "rli");
+    if (mod.inlined) parseBody(prep.body, prep.resolved);
+    system_.imports.push_back(mod);
+    return true;
+}
+
 bool RliParser::parseString(const std::string& source, const std::string& filename) {
     system_   = RLinguaSystem();
+    importStack_.clear();
     filename_ = filename;
+    lineNum_  = 0;
+    return parseBody(source, filename);
+}
+
+bool RliParser::parseBody(const std::string& source, const std::string& filename) {
+    std::string prevFile = filename_;
+    int prevLine = lineNum_;
+    filename_ = filename;
+    std::string key = plingua::import_util::normalizePath(filename);
+    if (!importStack_.insert(key).second) {
+        addError("import cycle involving " + key);
+        filename_ = prevFile;
+        lineNum_ = prevLine;
+        return false;
+    }
 
     std::string clean = stripComments(source);
     std::vector<std::string> lines;
@@ -127,6 +164,8 @@ bool RliParser::parseString(const std::string& source, const std::string& filena
         lineNum_ = static_cast<int>(i + 1);
         std::string ln = trim(lines[i]);
         if (ln.empty()) continue;
+
+        if (handleImport(ln)) continue;
 
         // ── @rmodel declaration ──────────────────────────────────────────────
         if (ln.find("@rmodel") != std::string::npos) {
@@ -188,6 +227,9 @@ bool RliParser::parseString(const std::string& source, const std::string& filena
         }
     }
 
+    importStack_.erase(key);
+    filename_ = prevFile;
+    lineNum_ = prevLine;
     return !system_.hasErrors();
 }
 

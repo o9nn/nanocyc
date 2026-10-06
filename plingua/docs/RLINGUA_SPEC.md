@@ -112,6 +112,7 @@ An R-Lingua system `R = (E, N, C, Ω, Γ)` where:
 | `@observe` | Observability / reporting block |
 | `@grip_threshold` | Minimum acceptable grip_index before triggering alert |
 | `@emergence_trigger` | Conditions for emergent relation creation |
+| `@import` | Composes another module. `@import "rel.rli";` or `@import <rel.pli>;`. Same-dialect `.rli` files are inlined; other dialects are recorded as companions and not inlined |
 
 ---
 
@@ -303,7 +304,7 @@ def main() {
 
 Before submitting an R-Lingua model, verify:
 
-- [ ] `@rmodel<relevance_realization>` is present and first.
+- [ ] `@rmodel<relevance_realization>` is present (`@import` lines may precede it).
 - [ ] `@ennead` block declares all nine dimensions (or relies on defaults).
 - [ ] Every `@agent` and `@arena` node has a unique `id`.
 - [ ] At least one `@coupling` rule connects an agent to an arena.
@@ -312,3 +313,14 @@ Before submitting an R-Lingua model, verify:
 - [ ] `@observe` block is present (even if minimal).
 - [ ] All ennead dimension initial values are in `[0, 1]`.
 - [ ] No coupling `strength` exceeds `1.0`.
+
+## Composition (`@import`)
+
+```
+@import "ch05_wheel_of_intelligence.pli";
+@import <../common/ennead_defaults.rli>;
+```
+
+Resolution, cycle detection, and diamond skipping match M-Lingua. A `.rli` import is inlined (nodes, couplings, and later `@ennead` assignments append or overwrite fields; the host system is not reset). A `.pli` companion is recorded with its `@mu` labels and is not inlined. `rlingua -v` prints `Imports: N` and one companion/inlined line per module.
+
+Chapter relevance hybrids live beside their discrete specs under `psystems/ch05`, `ch07`, and `ch10`. `make check-extensions` compiles all five.
