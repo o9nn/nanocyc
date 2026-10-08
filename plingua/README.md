@@ -28,6 +28,7 @@ make simulator    # Build bin/psim (P-system simulator)
 make mcompiler    # Build bin/mlingua (M-Lingua compiler)
 make msimulator   # Build bin/msim (M-system simulator)
 make extensions   # Build RR/OpenCog demos and tests
+make check-extensions  # Parse the psystems .mli/.rli chapter hybrids
 make all          # Build everything
 sudo make install
 ```
@@ -94,6 +95,7 @@ M-Lingua (`.mli`) extends P-Lingua with support for **Morphogenetic Systems** â€
 * Geometry extensions: `@geometry`, `@manifold`, `@metric`, `@connection`
 * Advanced model directives: `@polytope`, `@flow`, `@capability`
 * Cytos-compatible XML output for Unity visualization
+* `@import "path";` / `@import <path>;` â€” inline another `.mli`, or record a `.pli` companion without inlining its rules
 
 ### M-Lingua Examples
 
@@ -106,6 +108,7 @@ M-Lingua (`.mli`) extends P-Lingua with support for **Morphogenetic Systems** â€
 | `examples/msystem/self_healing.mli` | Robust membrane repair |
 | `examples/msystem/tissue_morphogenetic.mli` | Tissue-like M system |
 | `examples/msystem/geometry_120cell.mli` | Geometry-profile + 120-cell metadata example |
+| `../psystems/ch02,ch06,ch08,ch09/*.mli` | Geometric hybrids of the chapter `.pli` specs |
 
 ### Cytos Reference XML
 
@@ -145,7 +148,7 @@ make rcompiler           # produces bin/rlingua
 
 # Run unit + integration tests
 make bin/test_rlingua
-./bin/test_rlingua       # 73 tests
+./bin/test_rlingua       # unit + integration tests
 ```
 
 ### Usage
@@ -168,6 +171,7 @@ bin/rlingua examples/rr/minimal_ennead.rli -s 50 -v -o report.json
 | `examples/rr/minimal_ennead.rli` | Minimal single agentâ€“arena model with balanced ennead |
 | `examples/rr/adaptive_coupling.rli` | Two-arena adaptive coupling (grip_index improvement demo) |
 | `examples/rr/convergence_benchmark.rli` | Symmetric 2-agent 2-arena convergence benchmark |
+| `../psystems/ch05,ch07,ch10/*.rli` | Relevance hybrids of the chapter `.pli` specs |
 
 ### Minimal `.rli` Model
 

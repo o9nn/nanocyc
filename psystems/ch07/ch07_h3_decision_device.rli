@@ -1,0 +1,58 @@
+/*
+ * ch07_h3_decision_device.rli
+ *
+ * Relevance-realization companion to ch07_h3_decision_device.pli (7.8).
+ * Three cortical layers each offer a candidate action. Consensus is a grip
+ * threshold: the voter commits only when the three affordances fit one arena.
+ *
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ */
+
+@import "ch07_h3_decision_device.pli";
+
+@rmodel<relevance_realization>
+
+@ennead {
+    @triad_a {
+        identity_continuity  = 0.7;
+        skill_readiness      = 0.8;
+        motivational_valence = 0.6;
+    }
+    @triad_b {
+        constraint_clarity = 0.85;
+        affordance_density = 0.55;
+        feedback_latency   = 0.25;
+    }
+    @triad_c {
+        coupling_strength  = 0.8;
+        reciprocal_shaping = 0.5;
+        adaptive_fit       = 0.7;
+    }
+}
+
+@constraints {
+    grip_threshold        = 0.55;
+    emergence_sensitivity = 0.7;
+    convergence_window    = 30;
+    affordance_decay      = 0.01;
+}
+
+def main() {
+    @agent id=l1 label="layer low threshold" salience=0.5 affordance=1.0;
+    @agent id=l2 label="layer med threshold" salience=0.65 affordance=1.0;
+    @agent id=l3 label="layer high threshold" salience=0.8 affordance=1.0;
+    @agent id=voter label="confidence weighted vote" salience=0.75 affordance=1.1;
+    @arena id=situation label="input situation" salience=0.7 affordance=1.0;
+
+    @coupling {
+        l1 -> voter :: application strength=0.4;
+        l2 -> voter :: application strength=0.6;
+        l3 -> voter :: application strength=0.8;
+        voter <-> situation :: co_constitution strength=0.75;
+    }
+}
+
+@observe {
+    sample_period = 5;
+    report_fields = grip_index, ennead_balance, relevance_gradient;
+}

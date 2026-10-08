@@ -1,0 +1,57 @@
+/*
+ * ch05_wheel_of_intelligence.rli
+ *
+ * Relevance-realization companion to ch05_wheel_of_intelligence.pli (5.9).
+ * The wheel is an agent–arena cycle: topological similarity, defragment,
+ * conformal association, rewiring, future simulation. Grip is the measurable
+ * difference between PPM symmetry and a biased human turn of the same wheel.
+ *
+ * Traceability: src/cpp/nanobrain_gog.h, src/cpp/nanobrain_ppm.h
+ */
+
+@import "ch05_wheel_of_intelligence.pli";
+
+@rmodel<relevance_realization>
+
+@ennead {
+    @triad_a {
+        identity_continuity  = 0.8;
+        skill_readiness      = 0.7;
+        motivational_valence = 0.4;
+    }
+    @triad_b {
+        constraint_clarity = 0.9;
+        affordance_density = 0.6;
+        feedback_latency   = 0.2;
+    }
+    @triad_c {
+        coupling_strength  = 0.75;
+        reciprocal_shaping = 0.7;
+        adaptive_fit       = 0.65;
+    }
+}
+
+@constraints {
+    grip_threshold        = 0.4;
+    emergence_sensitivity = 0.7;
+    convergence_window    = 40;
+    affordance_decay      = 0.01;
+}
+
+def main() {
+    @agent id=ppm_wheel label="ppm symmetry wheel" salience=0.85 affordance=1.2;
+    @agent id=human_turn label="emotion culture bias" salience=0.45 affordance=0.8;
+    @arena id=prime_gap label="prime pair complexity gap" salience=0.7 affordance=1.1;
+    @relate id=contrast from=ppm_wheel to=human_turn strength=0.6;
+
+    @coupling {
+        ppm_wheel <-> prime_gap :: co_constitution strength=0.85;
+        human_turn -> prime_gap :: application strength=0.4;
+        ppm_wheel ~> human_turn :: emergent strength=0.55;
+    }
+}
+
+@observe {
+    sample_period = 10;
+    report_fields = grip_index, ennead_balance, relevance_gradient;
+}

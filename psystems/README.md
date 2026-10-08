@@ -50,10 +50,11 @@ Naming: `chNN_<feature>.pli` (e.g. `ch03_ppm_metric3_phasepath.pli`).
 ## P-Lingua conventions used
 
 * **P-Lingua 4.0**, cell-like P systems (model: `psystems_basic` / `transition` style rules).
-* Each file is self-contained: it declares its own membrane structure via `@mu` and its
-  multisets; shared definitions from `common/` are **inlined by convention** (P-Lingua has no
-  import statement — copy the needed declarations from the common file and cite it in the
-  header comment).
+* Each `.pli` file is self-contained: it declares its own membrane structure via `@mu` and its
+  multisets; shared definitions from `common/` are **inlined by convention** (the P-Lingua
+  compiler has no import statement — copy the needed declarations from the common file and cite
+  it in the header comment). Geometric and relevance companions use M-Lingua / R-Lingua
+  `@import` instead; see Dialect extensions below.
 * Every file carries a header comment block with:
   * chapter / issue / section coverage,
   * the C++/Elixir module it specifies (traceability),
@@ -75,6 +76,37 @@ To run a simulation (with pLinguaCore ≥ 4.0 installed):
 
 ```bash
 plingua psystems/ch03/ch03_ppm_core.pli simulate -steps 10
+```
+
+## Dialect extensions
+
+The 125 `.pli` specifications stay. Models whose geometry or relevance-realization
+content was only prose now have a native companion beside the `.pli` file.
+`validate.sh` still globs `*.pli` only.
+
+| Companion | Dialect | Discrete spec |
+|-----------|---------|---------------|
+| `ch02/ch02_singularity_assembly.mli` | M-Lingua | singularity seeds nucleate edges into loops |
+| `ch02/ch02_fractal_tape.mli` | M-Lingua | nested-sphere fractal tape |
+| `ch06/ch06_tubulin_ppm.mli` | M-Lingua | helix rings, 13 protofilaments, water channel |
+| `ch06/ch06_nanodevice_tc.mli` | M-Lingua | pump/probe device and kHz/MHz/GHz bands |
+| `ch08/ch08_spiral_cylinders.mli` | M-Lingua | three concentric spiral cylinders |
+| `ch08/ch08_knot_morphogenesis.mli` | M-Lingua | phase-editor mirrors, supercoil, vortex atom |
+| `ch08/ch08_knot_selfassembly.mli` | M-Lingua | vortex atoms along a dark-knot skeleton |
+| `ch09/ch09_living_gel.mli` | M-Lingua | listen-then-grow scale cascade |
+| `ch05/ch05_wheel_of_intelligence.rli` | R-Lingua | PPM wheel versus human turn |
+| `ch05/ch05_creativity_primes.rli` | R-Lingua | geometric similarity as grip |
+| `ch07/ch07_h3_decision_device.rli` | R-Lingua | three-layer confidence vote |
+| `ch07/ch07_wheel_of_primes.rli` | R-Lingua | octonion sensors on one wheel |
+| `ch10/ch10_ten_paradoxes.rli` | R-Lingua | observer held across paradox claims |
+
+Each companion `@import`s its sibling `.pli`. Same-dialect imports are inlined;
+the `.pli` companion is recorded (membrane labels) and not inlined. There is
+no G-Lingua grammar — tissue graphs stay in P-Lingua, geometry in M-Lingua,
+relevance in R-Lingua, composed by `@import`.
+
+```bash
+cd plingua && make check-extensions
 ```
 
 ## Traceability

@@ -44,6 +44,7 @@ An M system `M = (F, P, T, μ, R, σ)` where:
 | `@polytope` | Declares high-dimensional polytope incidence metadata |
 | `@flow` | Declares geometric flow metadata (e.g., discrete Ricci) |
 | `@capability` | Enables capability/invariant flags (e.g., gauge invariance) |
+| `@import` | Composes another module. `@import "rel.mli";` or `@import <rel.pli>;`. Same-dialect `.mli` files are inlined; other dialects are recorded as companions and not inlined |
 
 ## Rule Types
 
@@ -168,3 +169,18 @@ in the Cytos/Unity visualization engine, or simulated directly by `msim`.
 - `@msystem<tissue_morphogenetic>` — Tissue-like M system with graph topology
 - `@model<transition>` — Standard P-Lingua transition (backward compatible)
 - `@model<probabilistic>` — Standard P-Lingua probabilistic (backward compatible)
+
+## Composition (`@import`)
+
+```
+@import "ch02_singularity_assembly.pli";
+@import <../common/assembly_glues.mli>;
+```
+
+- Paths are resolved relative to the importing file. Absolute paths are used as given. `.` and `..` are normalized.
+- A `.mli` import is inlined into the current system (tiles, glues, rules append; the host is not reset).
+- A `.pli` (or any non-`.mli`) import is a companion record: path, dialect, and extracted symbols (`@mu` labels for `.pli`). Its rules are not parsed, so cell-like `[ lhs --> rhs ]'mem;` syntax cannot be misread as a metabolic rule.
+- A repeated import of the same normalized path is skipped. A cycle is an error. A missing file or a malformed `@import` is an error.
+- `mlingua -v` prints `Imports: N` and one `import <dialect> <path> (inlined|companion) symbols=K` line per module.
+
+Chapter geometric hybrids live beside their discrete specs under `psystems/ch02`, `ch06`, `ch08`, and `ch09`. `make check-extensions` compiles all eight.

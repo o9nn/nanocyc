@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 #include <relevance_realization.hpp>
+#include <dialect_import.hpp>
 
 namespace plingua {
 namespace rlingua {
@@ -92,6 +93,9 @@ struct RLinguaSystem {
     RLinguaConstraints constraints;
     RLinguaObserve     observe;
 
+    // Composition metadata. Not part of the hypergraph dynamics.
+    std::vector<plingua::ImportedModule> imports;
+
     std::vector<std::string> errors;
     std::vector<std::string> warnings;
 
@@ -122,6 +126,10 @@ private:
     RLinguaSystem system_;
     std::string   filename_;
     int           lineNum_;
+    std::set<std::string> importStack_;
+
+    bool parseBody(const std::string& source, const std::string& filename);
+    bool handleImport(const std::string& line);
 
     // Section-level parsers
     bool parseModelDecl(const std::string& line);

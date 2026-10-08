@@ -1,6 +1,7 @@
 #ifndef _MLI_PARSER_HPP_
 #define _MLI_PARSER_HPP_
 
+#include <set>
 #include <string>
 #include <vector>
 #include "msystem/msystem.hpp"
@@ -23,7 +24,10 @@ private:
 	std::vector<std::string> errors_;
 	std::string filename_;
 	int lineNum_;
+	std::set<std::string> importStack_;
 
+	bool parseBody(const std::string& source, const std::string& filename);
+	bool handleImport(const std::string& line);
 	bool parseModelDecl(const std::string& line);
 	bool parseGeometryProfile(const std::string& line);
 	bool parseManifold(const std::string& line);

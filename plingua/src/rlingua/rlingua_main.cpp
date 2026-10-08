@@ -142,7 +142,14 @@ int main(int argc, char* argv[]) {
                   << "  Model type:    " << sys.model_type          << "\n"
                   << "  Nodes:         " << hg->nodes.size()        << "\n"
                   << "  Edges:         " << hg->edges.size()        << "\n"
-                  << "  Ennead balance:" << hg->system_ennead.balance() << "\n";
+                  << "  Ennead balance:" << hg->system_ennead.balance() << "\n"
+                  << "  Imports: " << sys.imports.size() << "\n";
+        for (size_t i = 0; i < sys.imports.size(); ++i) {
+            const plingua::ImportedModule& im = sys.imports[i];
+            std::cerr << "  import " << im.dialect << " " << im.path
+                      << (im.inlined ? " (inlined)" : " (companion)")
+                      << " symbols=" << im.symbols.size() << "\n";
+        }
     }
 
     // Run dynamics

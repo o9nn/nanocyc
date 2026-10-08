@@ -1,0 +1,59 @@
+/*
+ * ch07_wheel_of_primes.rli
+ *
+ * Relevance-realization companion to ch07_wheel_of_primes.pli (7.7).
+ * Eight sensor channels and eight mathematical operators share one wheel.
+ * Octonion cross-over is the coupling that fuses them without collision;
+ * grip is the coherence of that product.
+ *
+ * Traceability: src/cpp/nanobrain_brain_model.h
+ */
+
+@import "ch07_wheel_of_primes.pli";
+
+@rmodel<relevance_realization>
+
+@ennead {
+    @triad_a {
+        identity_continuity  = 0.75;
+        skill_readiness      = 0.8;
+        motivational_valence = 0.5;
+    }
+    @triad_b {
+        constraint_clarity = 0.7;
+        affordance_density = 0.85;
+        feedback_latency   = 0.3;
+    }
+    @triad_c {
+        coupling_strength  = 0.9;
+        reciprocal_shaping = 0.8;
+        adaptive_fit       = 0.7;
+    }
+}
+
+@constraints {
+    grip_threshold        = 0.45;
+    emergence_sensitivity = 0.72;
+    convergence_window    = 40;
+    affordance_decay      = 0.01;
+}
+
+def main() {
+    @agent id=sensors label="eight octonion sensors" salience=0.8 affordance=1.2;
+    @agent id=engine_a label="linear operators" salience=0.6 affordance=1.0;
+    @agent id=engine_b label="phase operators" salience=0.6 affordance=1.0;
+    @arena id=wheel label="shared prime wheel" salience=0.75 affordance=1.1;
+    @relate id=crossover from=sensors to=wheel strength=0.85;
+
+    @coupling {
+        sensors <-> wheel :: co_constitution strength=0.85;
+        engine_a <-> wheel :: co_constitution strength=0.7;
+        engine_b <-> wheel :: co_constitution strength=0.7;
+        engine_a ~> engine_b :: emergent strength=0.5;
+    }
+}
+
+@observe {
+    sample_period = 10;
+    report_fields = grip_index, ennead_balance, emergence_score;
+}

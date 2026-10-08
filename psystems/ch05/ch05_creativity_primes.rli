@@ -1,0 +1,57 @@
+/*
+ * ch05_creativity_primes.rli
+ *
+ * Relevance-realization companion to ch05_creativity_primes.pli (5.8).
+ * Creativity here is geometric similarity between unrelated patterns, not a
+ * stored algorithm. The matcher and the novelty composer are coupled so grip
+ * rises when an affordance that was never encoded becomes realizable.
+ *
+ * Traceability: src/cpp/nanobrain_gog.h, src/cpp/nanobrain_ppm.h
+ */
+
+@import "ch05_creativity_primes.pli";
+
+@rmodel<relevance_realization>
+
+@ennead {
+    @triad_a {
+        identity_continuity  = 0.55;
+        skill_readiness      = 0.7;
+        motivational_valence = 0.85;
+    }
+    @triad_b {
+        constraint_clarity = 0.4;
+        affordance_density = 0.95;
+        feedback_latency   = 0.35;
+    }
+    @triad_c {
+        coupling_strength  = 0.8;
+        reciprocal_shaping = 0.75;
+        adaptive_fit       = 0.6;
+    }
+}
+
+@constraints {
+    grip_threshold        = 0.35;
+    emergence_sensitivity = 0.65;
+    convergence_window    = 50;
+    affordance_decay      = 0.02;
+}
+
+def main() {
+    @agent id=similarity label="geometric matcher" salience=0.8 affordance=1.3;
+    @arena id=unrelated label="unrelated events" salience=0.5 affordance=1.0;
+    @arena id=primes label="oscillating prime ranks" salience=0.7 affordance=1.1;
+    @relate id=create from=similarity to=unrelated strength=0.8;
+
+    @coupling {
+        similarity <-> unrelated :: co_constitution strength=0.8;
+        similarity <-> primes :: co_constitution strength=0.7;
+        similarity ~> create :: emergent strength=0.75;
+    }
+}
+
+@observe {
+    sample_period = 10;
+    report_fields = grip_index, ennead_balance, emergence_score;
+}

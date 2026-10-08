@@ -17,8 +17,11 @@
 #include <iostream>
 #include <cassert>
 #include <cmath>
+#include <fstream>
 #include <string>
 #include <sstream>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "relevance_realization.hpp"
 #include "atomspace_integration.hpp"
@@ -312,6 +315,81 @@ def main() { @agent id=a1 label="a" salience=0.5 affordance=1.0; }
                 "model_type empty when @rmodel is missing");
 }
 
+static void test_import_composition() {
+    section("RliParser – @import composition");
+
+    std::string dir = "/tmp/nanocyc_rli_" + std::to_string(static_cast<long>(getpid()));
+    mkdir(dir.c_str(), 0755);
+    std::string lib = dir + "/lib.rli";
+    std::string host = dir + "/host.rli";
+    std::string pli = dir + "/companion.pli";
+    std::string cycleA = dir + "/cycle_a.rli";
+    std::string cycleB = dir + "/cycle_b.rli";
+
+    {
+        std::ofstream out(lib.c_str());
+        out << "def main() {\n"
+            << "  @agent id=lib_agent label=\"library\" salience=0.4 affordance=1.0;\n"
+            << "}\n";
+    }
+    {
+        std::ofstream out(pli.c_str());
+        out << "@mu = [ []'wheel ]'skin;\n";
+    }
+    {
+        std::ofstream out(host.c_str());
+        out << "@import \"" << lib << "\";\n"
+            << "@import <" << pli << ">;\n"
+            << "@rmodel<relevance_realization>\n"
+            << "def main() {\n"
+            << "  @agent id=host_agent label=\"host\" salience=0.8 affordance=1.0;\n"
+            << "  @arena id=arena_1 label=\"arena\" salience=0.6 affordance=1.1;\n"
+            << "  @coupling { host_agent <-> arena_1 :: co_constitution strength=0.7; }\n"
+            << "}\n";
+    }
+
+    RliParser parser;
+    bool ok = parser.parseFile(host);
+    ASSERT_TRUE(ok, "host with @import parses");
+    ASSERT_TRUE(parser.system().model_type == "relevance_realization",
+                "host @rmodel survives inlined library");
+    ASSERT_TRUE(parser.system().nodes.size() == 3, "inlined library agent plus host nodes");
+    ASSERT_TRUE(parser.system().imports.size() == 2, "library and companion both recorded");
+    bool sawPli = false;
+    bool pliInlined = true;
+    bool hasSkin = false;
+    bool mliInlined = false;
+    for (size_t i = 0; i < parser.system().imports.size(); ++i) {
+        const plingua::ImportedModule& im = parser.system().imports[i];
+        if (im.dialect == "pli") {
+            sawPli = true;
+            pliInlined = im.inlined;
+            for (size_t s = 0; s < im.symbols.size(); ++s)
+                if (im.symbols[s] == "skin") hasSkin = true;
+        }
+        if (im.dialect == "rli") mliInlined = im.inlined;
+    }
+    ASSERT_TRUE(sawPli && !pliInlined && hasSkin, ".pli companion recorded, not inlined");
+    ASSERT_TRUE(mliInlined, ".rli import is inlined");
+    ASSERT_TRUE(parser.buildHypergraph() != nullptr, "hypergraph builds after import");
+
+    {
+        std::ofstream out(cycleA.c_str());
+        out << "@import \"cycle_b.rli\";\n@rmodel<relevance_realization>\n";
+    }
+    {
+        std::ofstream out(cycleB.c_str());
+        out << "@import \"cycle_a.rli\";\n@rmodel<relevance_realization>\n";
+    }
+    RliParser cycled;
+    ASSERT_TRUE(!cycled.parseFile(cycleA), "import cycle is rejected");
+
+    RliParser missing;
+    ASSERT_TRUE(!missing.parseString("@import \"/tmp/nanocyc_no_such.rli\";\n@rmodel<relevance_realization>\n",
+                                     "/tmp/nanocyc_rli_host.rli"),
+                "missing import is an error");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. Hypergraph build from R-Lingua source
 // ─────────────────────────────────────────────────────────────────────────────
@@ -517,6 +595,7 @@ int main() {
     test_parser_constraints();
     test_parser_observe();
     test_parser_rejects_missing_rmodel();
+    test_import_composition();
 
     // 5. Hypergraph build
     test_buildHypergraph_basic();

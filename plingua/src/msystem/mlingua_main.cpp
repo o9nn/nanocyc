@@ -95,7 +95,14 @@ int main(int argc, char* argv[]) {
 		          << "  Connections: " << sys.connections.size() << "\n"
 		          << "  Polytopes: " << sys.polytopes.size() << "\n"
 		          << "  Flows: " << sys.flows.size() << "\n"
-		          << "  Capabilities: " << sys.capabilities.size() << "\n";
+		          << "  Capabilities: " << sys.capabilities.size() << "\n"
+		          << "  Imports: " << sys.imports.size() << "\n";
+		for (size_t i = 0; i < sys.imports.size(); ++i) {
+			const plingua::ImportedModule& im = sys.imports[i];
+			std::cerr << "  import " << im.dialect << " " << im.path
+			          << (im.inlined ? " (inlined)" : " (companion)")
+			          << " symbols=" << im.symbols.size() << "\n";
+		}
 	}
 
 	std::string output;
