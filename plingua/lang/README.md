@@ -76,36 +76,18 @@ All three engines must agree byte-for-byte on the halting configuration.
 
 `--trace=human` renders the three-pane `--glyph / --wire / --checkpoint`
 layout (box-drawing membrane tree, event wire, full checkpoint), with an
-`--no-unicode` ASCII fallback.
+`--no-unicode` ASCII fallback (`+--[id]--+`). Under 120 columns the panes
+stack glyph → wire → checkpoint; `COLUMNS` overrides the tty width. A pure
+`d1`…`d11` nest collapses to `d1⋯d11 ◔ phase=N` unless `--expand` is set.
 
-## Plan: remaining `psim --trace` work
-
-Already implemented (do not redo): `--trace=off|sexpr|human`,
-`--checkpoint-every`, `--no-unicode`, the `(seed …) (steps …) (model …)`
-header, `(fired …)` events, glyph panes, checkpoint s-exprs, and the
-`(halted (steps N) (reason max-steps|no-applicable-rules))` line from
-`src/simulator/psim/psim.cpp`.
-
-Remaining, owned by the intelligible-trace issue rather than the dialect
-extensions:
-
-1. **`--trace=json`.** Add the mode beside the existing check in
-   `src/simulator/command_line.cpp`, and emit one JSON object per step from
-   `Simulator::stepEventLines()` (`include/simulator/simulator.hpp`) instead of
-   an s-expr. Keep `sexpr` as the cross-engine wire format.
-2. **`--trace=diff`.** Remember the previous checkpoint and redraw only when
-   the multiset or membrane tree changes. Hook this in `traceHumanStep`, which
-   already owns the pane render.
-3. **Narrow terminals.** `traceHumanStep` assumes a wide layout. If the
-   terminal width is under 120 columns, stack glyph, wire, and checkpoint
-   vertically instead of side by side. Read width once per step; do not
-   require a new flag.
-4. **11-deep time-crystal collapse.** Chapter models nest an 11-phase clock.
-   In human mode, collapse a pure phase ring (`phase(0)` … wrap) to a single
-   glyph row so the pane stays readable. Do not change the s-expr wire.
-5. **Named rules.** Fired events currently print `(rule r<index>)`
-   (`stepEventLines`, the `"r" << it2->first` field). Prefer the rule's
-   source name when the compiler stored one, and fall back to `r<index>`.
+`--trace=json` emits the same events as one JSON object per line
+(`header`, `step`, `checkpoint`, `halted`) so a GUI can consume the stream
+without parsing s-exprs. `--trace=diff` uses the human panes but redraws
+only when the multiset or membrane tree changes, printing
+`(unchanged (step k))` otherwise. Fired events use a rule's `name` / `id` /
+`rule` feature when the compiler stored one, and fall back to `r<index>`.
+Checkpoints are emitted every `--checkpoint-every` steps (default 1), or
+every step at `-v 2` and above.
 
 T-Lingua wire atoms (`tick`, resonance, grip) belong to the T-Lingua
-simulator, not to this `psim` plan.
+simulator, not to this `psim` trace.

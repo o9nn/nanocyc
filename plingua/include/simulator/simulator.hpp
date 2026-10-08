@@ -9,6 +9,10 @@
 #include <limits>
 #include <sstream>
 #include <functional>
+#include <cctype>
+#include <cstdlib>
+#include <sys/ioctl.h>
+#include <unistd.h>
 #include <simulator/command_line.hpp>
 #include <simulator/shuffler.hpp>
 #include <serialization.hpp>
@@ -38,6 +42,8 @@ public:
 	const Configuration& getCurrentConfiguration() const {return configuration;}
 	const File& getFile() const {return file;}
 	bool ok() const {return !finished;}
+	// Halting summary for the active trace mode. No-op when tracing is off.
+	void traceHalt() const;
 
 protected:
 
@@ -56,10 +62,24 @@ protected:
 	void traceCheckpoint() const;
 	// Emit the three-pane human layout: --glyph / --wire / --checkpoint.
 	void traceHumanStep(const std::vector<std::string>& wireLines) const;
+	// One JSON object for this step's fired events (MeCoSim-style stream).
+	void traceStepJson() const;
+	void traceCheckpointJson() const;
 	// Render the membrane tree as box-drawing art, one line per row.
 	std::vector<std::string> glyphLines() const;
 	// Serialise a multiset as ((sym . n) ...) sorted by symbol name.
 	static std::string multisetToSexpr(const Multiset& ms);
+	// true when a checkpoint s-expr/JSON object should be emitted this step.
+	bool checkpointDue() const;
+	// Pure d1..d11 nest (each membrane one child, d11 a leaf). phase is the
+	// deepest index (1..11) whose multiset is non-empty, or 0 if all empty.
+	bool isPurePhaseNest(unsigned id, int& phase) const;
+	std::string collapsedPhaseNote(int phase) const;
+	std::string configurationFingerprint() const;
+	static unsigned terminalColumns();
+	static std::string ruleTraceName(const Rule& rule, std::size_t index);
+	static std::string jsonEscape(const std::string& s);
+	static std::string multisetToJson(const Multiset& ms);
 	
 
 private:
@@ -95,7 +115,8 @@ private:
 	
 		
 	std::map<unsigned, std::map<unsigned,std::size_t>> selectedRules;
-	std::vector<std::string> pendingWireLines; // stashed for human-mode panes
+	std::vector<std::string> pendingWireLines; // stashed for human/diff panes
+	mutable std::string lastTraceFingerprint; // previous checkpoint, for --trace=diff
 	std::queue<unsigned> freeIndexes;	
 	Configuration configuration;
 	File file;
@@ -143,11 +164,35 @@ std::string Simulator::multisetToSexpr(const Multiset& ms)
 inline
 void Simulator::traceHeader() const
 {
+	unsigned seed = hasSeed() ? getSeed() : RANDOM.getSeed();
+	if (getTraceMode() == "json") {
+		std::ostringstream os;
+		os << "{\"event\":\"header\",\"seed\":" << seed;
+		if (getMaxStepsToSimulate() > 0) os << ",\"steps\":" << getMaxStepsToSimulate();
+		os << ",\"model\":\"" << jsonEscape(getInputFile()) << "\"}";
+		std::cout << os.str() << "\n";
+		return;
+	}
 	std::ostringstream os;
-	os << "(seed " << (hasSeed() ? getSeed() : RANDOM.getSeed()) << ")";
+	os << "(seed " << seed << ")";
 	if (getMaxStepsToSimulate() > 0) os << " (steps " << getMaxStepsToSimulate() << ")";
 	os << " (model \"" << getInputFile() << "\")";
 	std::cout << os.str() << "\n";
+}
+
+inline
+void Simulator::traceHalt() const
+{
+	if (getTraceMode() == "off") return;
+	unsigned long t = configuration.time;
+	bool hitMax = getMaxStepsToSimulate() > 0 && t >= getMaxStepsToSimulate();
+	const char* reason = hitMax ? "max-steps" : "no-applicable-rules";
+	if (getTraceMode() == "json") {
+		std::cout << "{\"event\":\"halted\",\"steps\":" << t
+		          << ",\"reason\":\"" << reason << "\"}\n";
+		return;
+	}
+	std::cout << "(halted (steps " << t << ") (reason " << reason << "))\n";
 }
 
 inline
@@ -197,7 +242,7 @@ std::vector<std::string> Simulator::stepEventLines() const
 			std::ostringstream line;
 			line << "(fired (step " << configuration.time << ")"
 			     << " (membrane " << it1->first << ")"
-			     << " (rule " << "r" << it2->first << ")"
+			     << " (rule " << ruleTraceName(r, it2->first) << ")"
 			     << " (consumed " << multisetToSexpr(consumed) << ")"
 			     << " (produced " << prodAll.str() << ")"
 			     << (n > 1 ? " (applications " : "")
@@ -218,6 +263,7 @@ void Simulator::traceStepEvents() const
 }
 
 // Render the membrane tree as box-drawing art (one row per line).
+// A pure d1..d11 time-crystal nest collapses to one row unless --expand.
 inline
 std::vector<std::string> Simulator::glyphLines() const
 {
@@ -247,40 +293,82 @@ std::vector<std::string> Simulator::glyphLines() const
 		for (std::size_t i = 0; i < width.size() + 2; i++) rule += hz;
 		out.push_back(indent + tl + rule + tr);
 		out.push_back(indent + vt + " " + width + " " + vt + "  " + objs.str());
-		for (int c : m.children) render(c, depth + 1);
+		for (int c : m.children) {
+			int phase = 0;
+			if (!expandNests() && c >= 0 &&
+			    isPurePhaseNest(static_cast<unsigned>(c), phase)) {
+				out.push_back(indent + vt + " " + collapsedPhaseNote(phase) + " " + vt);
+			} else {
+				render(static_cast<unsigned>(c), depth + 1);
+			}
+		}
 		out.push_back(indent + bl + rule + br);
 	};
-	for (std::size_t i = 0; i < configuration.membranes.size(); i++)
-		if (configuration.membranes[i].parent == -1) render(i, 0);
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		if (configuration.membranes[i].parent != -1) continue;
+		int phase = 0;
+		if (!expandNests() && isPurePhaseNest(static_cast<unsigned>(i), phase)) {
+			out.push_back(collapsedPhaseNote(phase));
+		} else {
+			render(static_cast<unsigned>(i), 0);
+		}
+	}
 	return out;
 }
 
-// Three-pane human layout: --glyph / --wire / --checkpoint, side by side when
-// the terminal is wide enough, stacked otherwise.
+// Three-pane human layout: --glyph / --wire / --checkpoint.
+// Side by side at >= 120 columns; stacked (glyph, then wire, then checkpoint)
+// below that. Width is read once per step (COLUMNS, else the tty size).
+// --trace=diff redraws the panes only when the multiset or membrane tree
+// changes; the wire lines are still emitted so the event stream stays complete.
 inline
 void Simulator::traceHumanStep(const std::vector<std::string>& wireLines) const
 {
+	if (getTraceMode() == "diff") {
+		std::string fp = configurationFingerprint();
+		if (!lastTraceFingerprint.empty() && fp == lastTraceFingerprint) {
+			for (const auto& l : wireLines) std::cout << l << "\n";
+			std::cout << "(unchanged (step " << configuration.time << "))\n";
+			return;
+		}
+		lastTraceFingerprint = fp;
+	}
+
 	std::vector<std::string> glyph = glyphLines();
 
-	// checkpoint text (reuse the s-expr but split into short lines)
-	std::ostringstream cp;
-	cp << "(checkpoint (step " << configuration.time << ")";
-	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
-		const CMembrane& m = configuration.membranes[i];
-		if (m.parent == -2) continue;
-		cp << "\n  (membrane " << i
-		   << " (label " << (m.label.empty() ? "?" : m.label[0].str()) << ")"
-		   << " (objects " << multisetToSexpr(m.multiset) << "))";
-	}
-	cp << ")";
+	// checkpoint text (reuse the s-expr but split into short lines).
+	// High verbosity (-v 2+) emits it every step; otherwise every N steps.
 	std::vector<std::string> check;
-	{ std::istringstream is(cp.str()); std::string l; while (std::getline(is, l)) check.push_back(l); }
+	if (checkpointDue()) {
+		std::ostringstream cp;
+		cp << "(checkpoint (step " << configuration.time << ")";
+		for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+			const CMembrane& m = configuration.membranes[i];
+			if (m.parent == -2) continue;
+			cp << "\n  (membrane " << i
+			   << " (label " << (m.label.empty() ? "?" : m.label[0].str()) << ")"
+			   << " (objects " << multisetToSexpr(m.multiset) << "))";
+		}
+		cp << ")";
+		std::istringstream is(cp.str());
+		std::string l;
+		while (std::getline(is, l)) check.push_back(l);
+	} else {
+		unsigned every = getCheckpointEvery() == 0 ? 1 : getCheckpointEvery();
+		unsigned long next = configuration.time + (every - (configuration.time % every));
+		std::ostringstream cp;
+		cp << "(checkpoint (step " << configuration.time << ") (deferred until " << next << "))";
+		check.push_back(cp.str());
+	}
 
+	const unsigned cols = terminalColumns();
+	const bool stack = cols < 120;
 	const std::size_t GW = 34, WW = 50; // column widths
 
 	// wrap a long line to width w, indenting continuation lines by 2
 	auto wrap = [](const std::string& s, std::size_t w) {
 		std::vector<std::string> out;
+		if (w < 4) w = 4;
 		std::string cur;
 		std::istringstream is(s);
 		std::string tok;
@@ -292,11 +380,24 @@ void Simulator::traceHumanStep(const std::vector<std::string>& wireLines) const
 			}
 		}
 		if (!cur.empty()) out.push_back(cur);
+		if (out.empty() && !s.empty()) out.push_back(s);
 		return out;
 	};
+	std::size_t wireWidth = stack ? (cols > 2 ? cols - 1 : 78) : (WW - 1);
 	std::vector<std::string> wire;
 	for (const auto& l : wireLines)
-		for (const auto& w : wrap(l, WW - 1)) wire.push_back(w);
+		for (const auto& w : wrap(l, wireWidth)) wire.push_back(w);
+
+	if (stack) {
+		std::cout << "--glyph\n";
+		for (const auto& g : glyph) std::cout << g << "\n";
+		std::cout << "--wire\n";
+		for (const auto& w : wire) std::cout << w << "\n";
+		std::cout << "--checkpoint\n";
+		for (const auto& c : check) std::cout << c << "\n";
+		std::cout << "\n";
+		return;
+	}
 
 	// pad to a *display* width: count UTF-8 code points (box-drawing chars are
 	// 3 bytes each but 1 column wide), then right-pad with spaces.
@@ -307,7 +408,9 @@ void Simulator::traceHumanStep(const std::vector<std::string>& wireLines) const
 	};
 	auto pad = [&](std::string s, std::size_t w) {
 		std::size_t dw = dispWidth(s);
-		if (dw < w) s.append(w - dw, ' '); return s; };
+		if (dw < w) s.append(w - dw, ' ');
+		return s;
+	};
 
 	std::ostringstream hdr;
 	hdr << pad("--glyph", GW) << pad("--wire", WW) << "--checkpoint";
@@ -337,6 +440,220 @@ void Simulator::traceCheckpoint() const
 		   << " (objects " << multisetToSexpr(m.multiset) << "))";
 	}
 	os << ")";
+	std::cout << os.str() << "\n";
+}
+
+inline
+bool Simulator::checkpointDue() const
+{
+	if (getVerbosityLevel() >= 2) return true;
+	unsigned every = getCheckpointEvery() == 0 ? 1 : getCheckpointEvery();
+	return configuration.time != 0 && (configuration.time % every) == 0;
+}
+
+inline
+std::string Simulator::jsonEscape(const std::string& s)
+{
+	std::string o;
+	o.reserve(s.size());
+	for (unsigned char c : s) {
+		switch (c) {
+			case '"': o += "\\\""; break;
+			case '\\': o += "\\\\"; break;
+			case '\n': o += "\\n"; break;
+			case '\r': o += "\\r"; break;
+			case '\t': o += "\\t"; break;
+			default:
+				if (c < 0x20) {
+					const char* hex = "0123456789abcdef";
+					o += "\\u00";
+					o += hex[c >> 4];
+					o += hex[c & 0xf];
+				} else {
+					o += static_cast<char>(c);
+				}
+		}
+	}
+	return o;
+}
+
+inline
+std::string Simulator::multisetToJson(const Multiset& ms)
+{
+	std::ostringstream os;
+	os << "{";
+	bool first = true;
+	for (const auto& kv : ms) {
+		if (kv.second.raw() == 0) continue;
+		if (!first) os << ",";
+		os << "\"" << jsonEscape(kv.first.str()) << "\":" << kv.second.raw();
+		first = false;
+	}
+	os << "}";
+	return os.str();
+}
+
+inline
+std::string Simulator::ruleTraceName(const Rule& rule, std::size_t index)
+{
+	static const char* keys[] = {"name", "id", "rule"};
+	for (const char* key : keys) {
+		auto it = rule.features.find(key);
+		if (it == rule.features.end()) continue;
+		if (it->second.type() != Value::STRING) continue;
+		const char* raw = it->second.as_string();
+		if (raw == nullptr || raw[0] == '\0') continue;
+		std::string name(raw);
+		bool bare = (std::isalpha(static_cast<unsigned char>(name[0])) || name[0] == '_') &&
+		            name.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos;
+		if (bare) return name;
+		return "\"" + jsonEscape(name) + "\"";
+	}
+	return "r" + std::to_string(index);
+}
+
+inline
+unsigned Simulator::terminalColumns()
+{
+	if (const char* env = std::getenv("COLUMNS")) {
+		char* end = nullptr;
+		long n = std::strtol(env, &end, 10);
+		if (end != env && n > 0 && n < 100000) return static_cast<unsigned>(n);
+	}
+	struct winsize ws;
+	if (::isatty(STDOUT_FILENO) && ::ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
+		return ws.ws_col;
+	}
+	return 80;
+}
+
+inline
+bool Simulator::isPurePhaseNest(unsigned id, int& phase) const
+{
+	phase = 0;
+	unsigned cur = id;
+	for (int i = 1; i <= 11; i++) {
+		if (cur >= configuration.membranes.size()) return false;
+		const CMembrane& m = configuration.membranes[cur];
+		if (m.parent == -2) return false;
+		std::string lab = m.label.empty() ? "" : m.label[0].str();
+		if (lab != std::string("d") + std::to_string(i)) return false;
+		if (!m.multiset.empty()) phase = i;
+		if (i < 11) {
+			if (m.children.size() != 1) return false;
+			if (m.children[0] < 0) return false;
+			cur = static_cast<unsigned>(m.children[0]);
+		} else if (!m.children.empty()) {
+			return false;
+		}
+	}
+	return true;
+}
+
+inline
+std::string Simulator::collapsedPhaseNote(int phase) const
+{
+	std::ostringstream os;
+	if (isUnicode()) {
+		os << "d1\u22EFd11 \u25D4 phase=" << phase;
+	} else {
+		os << "d1...d11 phase=" << phase;
+	}
+	return os.str();
+}
+
+inline
+std::string Simulator::configurationFingerprint() const
+{
+	std::ostringstream os;
+	os << "env=" << multisetToSexpr(configuration.environment);
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		const CMembrane& m = configuration.membranes[i];
+		if (m.parent == -2) {
+			os << " #" << i << "dissolved";
+			continue;
+		}
+		os << " |" << i
+		   << " p=" << m.parent
+		   << " l=" << (m.label.empty() ? "?" : m.label[0].str())
+		   << " c=" << static_cast<int>(m.charge)
+		   << " o=" << multisetToSexpr(m.multiset)
+		   << " k=";
+		for (int c : m.children) os << c << ",";
+	}
+	return os.str();
+}
+
+inline
+void Simulator::traceStepJson() const
+{
+	std::ostringstream os;
+	os << "{\"event\":\"step\",\"step\":" << configuration.time << ",\"fired\":[";
+	bool first = true;
+	for (auto it1 = selectedRules.begin(); it1 != selectedRules.end(); ++it1) {
+		const CMembrane& m = configuration.membranes[it1->first];
+		const std::vector<Rule>& rules = ruleSets.at(m.label).at(m.charge);
+		for (auto it2 = it1->second.begin(); it2 != it1->second.end(); ++it2) {
+			const Rule& r = rules[it2->first];
+			std::size_t n = it2->second;
+			Multiset consumed;
+			for (const auto& kv : r.lhr.multiset)
+				consumed[kv.first] += kv.second.raw() * n;
+			for (const auto& kv : r.lhr.membrane.multiset)
+				consumed[kv.first] += kv.second.raw() * n;
+			Multiset produced;
+			std::ostringstream sent;
+			bool sentFirst = true;
+			if (!r.rhr.data.empty()) {
+				const OMembrane& home = r.rhr.data[0];
+				for (const auto& kv : home.multiset)
+					produced[kv.first] += kv.second.raw() * n;
+				for (const auto& child : home.data) {
+					Multiset inner;
+					for (const auto& kv : child.multiset)
+						inner[kv.first] += kv.second.raw() * n;
+					if (!sentFirst) sent << ",";
+					sentFirst = false;
+					sent << "{\"in\":\""
+					     << jsonEscape(child.label.empty() ? "?" : child.label[0].str())
+					     << "\",\"objects\":" << multisetToJson(inner) << "}";
+				}
+			}
+			for (const auto& kv : r.rhr.multiset)
+				produced[kv.first] += kv.second.raw() * n;
+			if (!first) os << ",";
+			first = false;
+			std::string name = ruleTraceName(r, it2->first);
+			bool quoted = !name.empty() && name[0] == '"';
+			os << "{\"membrane\":" << it1->first
+			   << ",\"rule\":" << (quoted ? name : "\"" + jsonEscape(name) + "\"")
+			   << ",\"applications\":" << n
+			   << ",\"consumed\":" << multisetToJson(consumed)
+			   << ",\"produced\":" << multisetToJson(produced)
+			   << ",\"sent\":[" << sent.str() << "]}";
+		}
+	}
+	os << "]}";
+	std::cout << os.str() << "\n";
+}
+
+inline
+void Simulator::traceCheckpointJson() const
+{
+	std::ostringstream os;
+	os << "{\"event\":\"checkpoint\",\"step\":" << configuration.time << ",\"membranes\":[";
+	bool first = true;
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		const CMembrane& m = configuration.membranes[i];
+		if (m.parent == -2) continue;
+		if (!first) os << ",";
+		first = false;
+		os << "{\"id\":" << i
+		   << ",\"label\":\"" << jsonEscape(m.label.empty() ? "?" : m.label[0].str()) << "\""
+		   << ",\"parent\":" << m.parent
+		   << ",\"objects\":" << multisetToJson(m.multiset) << "}";
+	}
+	os << "]}";
 	std::cout << os.str() << "\n";
 }
 
@@ -412,11 +729,14 @@ void Simulator::selectRules()
 	}
 
 	// "wire" stream: one (fired ...) s-expr per rule application this step.
-	// sexpr mode prints now; human mode stashes the lines and the three-pane
-	// layout is drawn in executeRules() after the clock advances.
+	// sexpr mode prints now; json mode emits one object for the step; human
+	// and diff stash the lines and the panes are drawn in executeRules()
+	// after the clock advances.
 	if (getTraceMode() == "sexpr" && !selectedRules.empty()) {
 		traceStepEvents();
-	} else if (getTraceMode() == "human") {
+	} else if (getTraceMode() == "json" && !selectedRules.empty()) {
+		traceStepJson();
+	} else if (getTraceMode() == "human" || getTraceMode() == "diff") {
 		pendingWireLines = stepEventLines();
 	}
 }
@@ -668,17 +988,17 @@ void Simulator::executeRules()
 	}
 
 	// "checkpoint" stream: full configuration as a readable s-expr, emitted
-	// every --checkpoint-every steps (after time has advanced).  In human mode
-	// we draw the three-pane glyph/wire/checkpoint layout instead.
-	if (getTraceMode() == "human") {
-		if ((configuration.time % getCheckpointEvery()) == 0 ||
-			!pendingWireLines.empty()) {
+	// every --checkpoint-every steps (after time has advanced), or every step
+	// at high verbosity.  human/diff draw the three-pane layout instead.
+	if (getTraceMode() == "human" || getTraceMode() == "diff") {
+		if (checkpointDue() || !pendingWireLines.empty()) {
 			traceHumanStep(pendingWireLines);
 		}
 		pendingWireLines.clear();
-	} else if (getTraceMode() == "sexpr" &&
-		(configuration.time % getCheckpointEvery()) == 0) {
+	} else if (getTraceMode() == "sexpr" && checkpointDue()) {
 		traceCheckpoint();
+	} else if (getTraceMode() == "json" && checkpointDue()) {
+		traceCheckpointJson();
 	}
 
 }
@@ -1029,6 +1349,11 @@ bool Simulator::parse(int argc, char *argv[])
 	// Emit the run header first so any trace is replayable.
 	if (getTraceMode() != "off") {
 		traceHeader();
+	}
+	// --trace=diff compares each step against the previous checkpoint,
+	// starting from the initial configuration.
+	if (getTraceMode() == "diff") {
+		lastTraceFingerprint = configurationFingerprint();
 	}
 	return true;
 }

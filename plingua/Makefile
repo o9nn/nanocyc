@@ -87,6 +87,11 @@ check-finops: compiler simulator
 # membrane block is parsed from its (SKIN) MEMBRANE ID header to its Multiset
 # (tolerating intermediate metadata lines), and the multiset entries are
 # sorted so assertions do not depend on the serializer's print order.
+# Intelligible step output: sexpr/json/human/diff traces, width fallback,
+# time-crystal collapse, and named rules.
+check-trace: compiler simulator
+	bash tests/test_trace.sh
+
 check-examples: compiler simulator
 	@mkdir -p $(ODIR)/examples
 	@echo "== todo_g_gauge_parallel_transport (gauge invariance: wa{1} = wb{1})"; \
