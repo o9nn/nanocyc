@@ -24,10 +24,13 @@ public:
 	bool hasSeed() const {return seedProvided;}
 	unsigned getSeed() const {return seed;}
 
-	// Trace mode: "off" (default, legacy STEP output), "sexpr", "human".
+	// Trace mode: "off" (default, legacy STEP output), "sexpr", "json",
+	// "human", "diff".
 	// "sexpr" emits one parenthesised event per line (the "wire" stream) so the
-	// output can be diffed against the Lisp s-expr kernel; "human" adds the
-	// --glyph/--wire/--checkpoint three-pane layout.
+	// output can be diffed against the Lisp s-expr kernel. "json" emits the
+	// same events as one JSON object per line. "human" adds the
+	// --glyph/--wire/--checkpoint three-pane layout. "diff" is human layout
+	// that redraws only when the multiset or membrane tree changes.
 	const std::string& getTraceMode() const {return traceMode;}
 	unsigned getCheckpointEvery() const {return checkpointEvery;}
 	bool isUnicode() const {return unicode;}

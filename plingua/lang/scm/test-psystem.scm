@@ -67,6 +67,32 @@
   (check "mini5 second event membrane"
          (cadr (assoc 'membrane (cdr (cadr events)))) 1))
 
+;;; --- T-Lingua tick atom: tick falls one phase membrane deeper --------------
+
+(define tick-model
+  '(psystem
+    (membrane 0 (label skin) (parent #f)
+      (objects ())
+      (rules)
+      (membrane 1 (label d1) (parent 0)
+        (objects ((tick . 1)))
+        (rules
+          (rule tick_in (lhs ((tick . 1)))
+                (rhs (((tick . 1) (in 2))))))
+        (membrane 2 (label d2) (parent 1)
+          (objects ())
+          (rules))))))
+
+(let-values (((final events halted) (run tick-model 5 #f)))
+  (check "tick event follows the fired line"
+         (and (>= (length events) 2) (list (car events) (cadr events)))
+         (list '(fired (step 0) (membrane 1) (rule tick_in)
+                       (consumed ((tick . 1)))
+                       (produced (((tick . 1) (in 2)))))
+               '(tick 0 1 2)))
+  (check "tick landed in d2"
+         (membrane-objects (find-membrane final 2)) '((tick . 1))))
+
 ;;; --- send-out: child produces to parent ------------------------------------
 
 (define out-model

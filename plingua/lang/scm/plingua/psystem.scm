@@ -172,6 +172,58 @@
   (rebuild-membrane m objs (membrane-children m)))
 
 ;;; ---------------------------------------------------------------------------
+;;; T-Lingua wire atoms.  Optional rule clauses, ignored by the stepper:
+;;;   (clock)                         — this rule advances a phase
+;;;   (resonance (m1 m2) (match 2 3 5))
+;;; A rule that consumes `tick` and sends it `(in <id>)` also emits
+;;; `(tick <step> (phase <from>-><to>))` when both membranes are phase labels
+;;; (dN / skin).  The arrow is ASCII so golden traces do not depend on a
+;;; terminal.  These events are appended after the (fired ...) line.
+;;; ---------------------------------------------------------------------------
+
+(define (phase-index label)
+  (let ((s (if (symbol? label) (symbol->string label) "")))
+    (cond ((and (> (string-length s) 1)
+                (char=? (string-ref s 0) #\d)
+                (string->number (substring s 1)))
+           => (lambda (n) n))
+          ((memq label '(skin rim)) 0)
+          (else #f))))
+
+(define (rule-clause r tag)
+  (assoc tag (cddr r)))
+
+(define (name-starts-with? sym prefix)
+  (let ((s (symbol->string sym)))
+    (and (>= (string-length s) (string-length prefix))
+         (string=? (substring s 0 (string-length prefix)) prefix))))
+
+(define (trace-extras rule membrane step)
+  (let ((extras '())
+        (from (phase-index (membrane-label membrane))))
+    (when (and from
+               (or (rule-clause rule 'clock)
+                   (name-starts-with? (rule-name rule) "tick")
+                   (assq 'tick (rule-lhs rule))))
+      (let loop ((prods (rule-rhs rule)))
+        (unless (null? prods)
+          (let* ((target (product-target (car prods)))
+                 (sym (car (product-pair (car prods)))))
+            (when (and (eq? sym 'tick) (pair? target) (eq? (car target) 'in))
+              (let* ((child (find-membrane-child membrane (cadr target)))
+                     (to (and child (phase-index (membrane-label child)))))
+                (when (and to (not (= from to)))
+                  (set! extras (cons (list 'tick step from to) extras)))))
+            (loop (cdr prods))))))
+    (let ((res (rule-clause rule 'resonance)))
+      (when res
+        (set! extras (cons (cons 'resonance (cdr res)) extras))))
+    (reverse extras)))
+
+(define (find-membrane-child membrane id)
+  (find (lambda (c) (= (membrane-id c) id)) (membrane-children membrane)))
+
+;;; ---------------------------------------------------------------------------
 ;;; apply-step: one maximally-parallel evolution step over the whole tree.
 ;;; Returns (values new-psystem events).  Each event is an s-expr:
 ;;;   (fired (step k) (membrane id) (rule name)
@@ -200,18 +252,19 @@
                 (loop (cdr apps)
                       (ms-sub objs (rule-lhs rule) n)
                       inbox*
-                      (cons (list 'fired
-                                  (list 'step step)
-                                  (list 'membrane (membrane-id m))
-                                  (list 'rule (rule-name rule))
-                                  (list 'consumed (ms-scale (rule-lhs rule) n))
-                                  (list 'produced
-                                        (map (lambda (prod)
-                                               (list (scale-pair
-                                                      (product-pair prod) n)
-                                                     (product-target prod)))
-                                             (rule-rhs rule))))
-                            events))))))))
+                      (append (reverse (trace-extras rule m step))
+                              (cons (list 'fired
+                                          (list 'step step)
+                                          (list 'membrane (membrane-id m))
+                                          (list 'rule (rule-name rule))
+                                          (list 'consumed (ms-scale (rule-lhs rule) n))
+                                          (list 'produced
+                                                (map (lambda (prod)
+                                                       (list (scale-pair
+                                                              (product-pair prod) n)
+                                                             (product-target prod)))
+                                                     (rule-rhs rule))))
+                                    events)))))))))
 
 ;; Recursively step a node.  A membrane evolves its OWN rules from the objects
 ;; it held at the START of the step.  Communication products are delivered to
@@ -282,5 +335,11 @@
 (define (configuration->sexpr psys) psys)
 (define (sexpr->psystem sx) sx)
 
+(define (write-event e port)
+  (if (and (pair? e) (eq? (car e) 'tick) (= (length e) 4))
+      ;; Same wire atom psim --trace=sexpr --no-unicode emits.
+      (format port "(tick ~a (phase ~a->~a))" (cadr e) (caddr e) (cadddr e))
+      (write e port)))
+
 (define (write-trace events port)
-  (for-each (lambda (e) (write e port) (newline port)) events))
+  (for-each (lambda (e) (write-event e port) (newline port)) events))

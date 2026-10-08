@@ -1,0 +1,12 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+	@mu = [ [ ]'b ]'a;
+	@ms(a) = signal;
+
+	/* Resonance is a trace annotation, not a new simulator rule. */
+	/* One @ introduces the feature list; commas separate the rest. */
+	[signal [ ]'b --> [signal]'b]'a @name="couple", resonance="2 3 5", partner="b";
+}

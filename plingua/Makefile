@@ -113,6 +113,11 @@ check-examples: compiler simulator
 	test "$$(echo "$$fin" | awk '/MEMBRANE ID:/{w=($$0~/Label: [1-4],/); if(w)t++} w&&/^Multiset: /{if($$0=="Multiset: idle")n++; w=0} END{print t "/" n}')" = "5/5" || { echo "FAIL: expected exactly 5 worker membrane instances (labels 1-4), all idle"; echo "$$fin"; exit 1; }; \
 	echo "   OK: board halts with done*5,idle*5 and 5 idle workers"
 
+# Intelligible step traces: json/diff modes, named rules, narrow panes,
+# phase-ring collapse, tick/resonance wire atoms.
+check-trace: compiler simulator
+	bash check-trace.sh
+
 grammar: y.tab.c lex.yy.c
 
 compiler: $(OBJ_PLINGUA) $(BIN_PLINGUA) 

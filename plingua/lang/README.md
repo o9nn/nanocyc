@@ -78,34 +78,22 @@ All three engines must agree byte-for-byte on the halting configuration.
 layout (box-drawing membrane tree, event wire, full checkpoint), with an
 `--no-unicode` ASCII fallback.
 
-## Plan: remaining `psim --trace` work
+## `psim --trace` modes
 
-Already implemented (do not redo): `--trace=off|sexpr|human`,
-`--checkpoint-every`, `--no-unicode`, the `(seed …) (steps …) (model …)`
-header, `(fired …)` events, glyph panes, checkpoint s-exprs, and the
-`(halted (steps N) (reason max-steps|no-applicable-rules))` line from
-`src/simulator/psim/psim.cpp`.
+`--trace=off|sexpr|json|human|diff`.  `sexpr` is the cross-engine wire format.
+`json` is one object per line (`event` is `header`, `fired`, `tick`,
+`resonance`, `checkpoint`, or `halted`).  `human` draws `--glyph / --wire /
+--checkpoint` side by side, and stacks those panes when the terminal (or
+`COLUMNS`) is under 120 columns.  `diff` uses the same panes but skips a step
+whose multiset and membrane tree did not change.  `--no-unicode` switches the
+glyph and the phase arrow (`→` vs `->`).
 
-Remaining, owned by the intelligible-trace issue rather than the dialect
-extensions:
+Fired events print the rule's `@name` when the compiler stored one, otherwise
+`r<index>`.  A pure phase ring (`d1`…`dN`, clock objects only) collapses to one
+glyph row (`[phase d1..dN @ dK tick ]`); the s-expr checkpoint still lists
+every membrane.  A tick that falls into the next phase membrane also emits
+`(tick <step> (phase <from>-><to>))`.  `@resonance` / `@partner` emit
+`(resonance (<mem> <partner>) (match …))` as a trace annotation — they do not
+change which rules fire.
 
-1. **`--trace=json`.** Add the mode beside the existing check in
-   `src/simulator/command_line.cpp`, and emit one JSON object per step from
-   `Simulator::stepEventLines()` (`include/simulator/simulator.hpp`) instead of
-   an s-expr. Keep `sexpr` as the cross-engine wire format.
-2. **`--trace=diff`.** Remember the previous checkpoint and redraw only when
-   the multiset or membrane tree changes. Hook this in `traceHumanStep`, which
-   already owns the pane render.
-3. **Narrow terminals.** `traceHumanStep` assumes a wide layout. If the
-   terminal width is under 120 columns, stack glyph, wire, and checkpoint
-   vertically instead of side by side. Read width once per step; do not
-   require a new flag.
-4. **11-deep time-crystal collapse.** Chapter models nest an 11-phase clock.
-   In human mode, collapse a pure phase ring (`phase(0)` … wrap) to a single
-   glyph row so the pane stays readable. Do not change the s-expr wire.
-5. **Named rules.** Fired events currently print `(rule r<index>)`
-   (`stepEventLines`, the `"r" << it2->first` field). Prefer the rule's
-   source name when the compiler stored one, and fall back to `r<index>`.
-
-T-Lingua wire atoms (`tick`, resonance, grip) belong to the T-Lingua
-simulator, not to this `psim` plan.
+Regression: `make -C plingua check-trace` (fixtures in `examples/trace/`).

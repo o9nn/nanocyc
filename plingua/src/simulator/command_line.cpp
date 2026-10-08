@@ -45,7 +45,7 @@ bool CommandLine::parse(int argc, char *argv[])
 	("steps,s", po::value<int>(), "set the number of steps to simulate")
 	("configuration,c", po::value<string>(),"set the initial configuration file")
 	("output,o", po::value<string>(),"set the output file")
-	("trace,t", po::value<string>(),"set trace mode: off (default), sexpr or human")
+	("trace,t", po::value<string>(),"set trace mode: off (default), sexpr, json, human or diff")
 	("checkpoint-every", po::value<unsigned>(),"emit a checkpoint every N steps (default 1)")
 	("no-unicode", po::bool_switch(),"use ASCII instead of Unicode box drawing")
 	("psystem", po::value< string>(), "set the psystem file")
@@ -95,8 +95,9 @@ bool CommandLine::parse(int argc, char *argv[])
 		}
 		if (vm.count("trace")) {
 			traceMode = vm["trace"].as<string>();
-			if (traceMode != "off" && traceMode != "sexpr" && traceMode != "human") {
-				throw std::runtime_error("invalid --trace mode (expected off|sexpr|human)");
+			if (traceMode != "off" && traceMode != "sexpr" && traceMode != "json" &&
+			    traceMode != "human" && traceMode != "diff") {
+				throw std::runtime_error("invalid --trace mode (expected off|sexpr|json|human|diff)");
 			}
 		}
 		if (vm.count("checkpoint-every")) {

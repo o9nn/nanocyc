@@ -9,6 +9,12 @@
 #include <limits>
 #include <sstream>
 #include <functional>
+#include <cstdio>
+#include <cstdlib>
+#include <cctype>
+#include <set>
+#include <unistd.h>
+#include <sys/ioctl.h>
 #include <simulator/command_line.hpp>
 #include <simulator/shuffler.hpp>
 #include <serialization.hpp>
@@ -50,10 +56,13 @@ protected:
 	// Emit one (fired (step k) (membrane id) (rule r) (consumed ms)
 	//           (produced ms)) event per selected rule application.
 	void traceStepEvents() const;
-	// Build the wire lines without printing (shared by sexpr and human modes).
+	// Build the wire lines without printing (shared by sexpr, human and diff).
 	std::vector<std::string> stepEventLines() const;
+	// Same events as stepEventLines(), one JSON object per line.
+	std::vector<std::string> stepEventJsonLines() const;
 	// Emit (checkpoint (step k) (membrane id (label l) (objects ((o . n)..))..)).
 	void traceCheckpoint() const;
+	void traceCheckpointJson() const;
 	// Emit the three-pane human layout: --glyph / --wire / --checkpoint.
 	void traceHumanStep(const std::vector<std::string>& wireLines) const;
 	// Render the membrane tree as box-drawing art, one line per row.
@@ -96,7 +105,25 @@ private:
 		
 	std::map<unsigned, std::map<unsigned,std::size_t>> selectedRules;
 	std::vector<std::string> pendingWireLines; // stashed for human-mode panes
-	std::queue<unsigned> freeIndexes;	
+	// Last multiset+tree signature drawn by --trace=diff. Mutable so the
+	// const pane renderer can remember it across steps.
+	mutable std::string lastDiffSignature;
+	std::queue<unsigned> freeIndexes;
+
+	static std::string jsonEscape(const std::string& s);
+	static std::string multisetToJson(const Multiset& ms);
+	static std::string featureString(const Features& features, const char* key);
+	static std::string ruleTraceName(const Rule& rule, unsigned index);
+	static bool parsePhaseIndex(const std::string& label, int& n);
+	static int phaseOfLabel(const std::string& label);
+	static bool onlyClockObjects(const Multiset& ms);
+	static std::string normalizeMatch(const std::string& raw);
+	std::string configurationSignature() const;
+	bool collectPhaseChain(unsigned id, std::vector<unsigned>& chain) const;
+	std::string collapsedPhaseGlyph(const std::vector<unsigned>& chain) const;
+	unsigned terminalColumns() const;
+	const char* phaseArrow() const;
+	std::vector<std::string> formatStepEvents(const std::string& mode) const;	
 	Configuration configuration;
 	File file;
 	bool finished;
@@ -141,18 +168,253 @@ std::string Simulator::multisetToSexpr(const Multiset& ms)
 }
 
 inline
-void Simulator::traceHeader() const
+std::string Simulator::jsonEscape(const std::string& s)
+{
+	std::string out;
+	out.reserve(s.size());
+	for (unsigned char c : s) {
+		switch (c) {
+			case '\\': out += "\\\\"; break;
+			case '"':  out += "\\\""; break;
+			case '\n': out += "\\n"; break;
+			case '\r': out += "\\r"; break;
+			case '\t': out += "\\t"; break;
+			default:
+				if (c < 0x20) {
+					char buf[8];
+					std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+					out += buf;
+				} else {
+					out += static_cast<char>(c);
+				}
+		}
+	}
+	return out;
+}
+
+inline
+std::string Simulator::multisetToJson(const Multiset& ms)
 {
 	std::ostringstream os;
-	os << "(seed " << (hasSeed() ? getSeed() : RANDOM.getSeed()) << ")";
+	os << "{";
+	bool first = true;
+	for (const auto& kv : ms) {
+		if (kv.second.raw() == 0) continue;
+		if (!first) os << ",";
+		os << "\"" << jsonEscape(kv.first.str()) << "\":" << kv.second.raw();
+		first = false;
+	}
+	os << "}";
+	return os.str();
+}
+
+inline
+std::string Simulator::featureString(const Features& features, const char* key)
+{
+	for (const auto& kv : features) {
+		if (kv.first.str() == key && kv.second.type() == Value::STRING && kv.second.as_string()) {
+			std::string s = kv.second.as_string();
+			// The compiler stores string literals with their quotes.
+			if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+				s = s.substr(1, s.size() - 2);
+			}
+			return s;
+		}
+	}
+	return "";
+}
+
+inline
+std::string Simulator::ruleTraceName(const Rule& rule, unsigned index)
+{
+	std::string name = featureString(rule.features, "name");
+	if (!name.empty()) return name;
+	return "r" + std::to_string(index);
+}
+
+inline
+bool Simulator::parsePhaseIndex(const std::string& label, int& n)
+{
+	if (label.size() >= 2 && (label[0] == 'd' || label[0] == 'D') &&
+	    std::all_of(label.begin() + 1, label.end(), ::isdigit)) {
+		n = std::atoi(label.c_str() + 1);
+		return n > 0;
+	}
+	if (label.compare(0, 5, "phase") == 0) {
+		std::string rest = label.substr(5);
+		if (!rest.empty() && (rest[0] == '{' || rest[0] == '(')) rest.erase(rest.begin());
+		if (!rest.empty() && (rest.back() == '}' || rest.back() == ')')) rest.pop_back();
+		if (!rest.empty() && std::all_of(rest.begin(), rest.end(), ::isdigit)) {
+			n = std::atoi(rest.c_str());
+			return true;
+		}
+	}
+	return false;
+}
+
+inline
+int Simulator::phaseOfLabel(const std::string& label)
+{
+	int n = -1;
+	if (parsePhaseIndex(label, n)) return n;
+	if (label == "skin" || label == "rim") return 0;
+	return -1;
+}
+
+inline
+bool Simulator::onlyClockObjects(const Multiset& ms)
+{
+	for (const auto& kv : ms) {
+		if (kv.second.raw() == 0) continue;
+		const std::string& name = kv.first.str();
+		if (name == "tick" || name.compare(0, 4, "tick") == 0) continue;
+		if (name == "singularity_point") continue;
+		if (name.compare(0, 5, "phase") == 0) continue;
+		if (name.compare(0, 6, "period") == 0) continue;
+		if (name.compare(0, 9, "coherence") == 0) continue;
+		return false;
+	}
+	return true;
+}
+
+inline
+std::string Simulator::normalizeMatch(const std::string& raw)
+{
+	std::string out;
+	for (char c : raw) {
+		if (c == ',' || c == ';') out.push_back(' ');
+		else out.push_back(c);
+	}
+	// collapse whitespace
+	std::string collapsed;
+	bool sp = false;
+	for (char c : out) {
+		if (c == ' ' || c == '\t') {
+			if (!collapsed.empty()) sp = true;
+			continue;
+		}
+		if (sp) collapsed.push_back(' ');
+		sp = false;
+		collapsed.push_back(c);
+	}
+	return collapsed;
+}
+
+inline
+const char* Simulator::phaseArrow() const
+{
+	return isUnicode() ? "\u2192" : "->";
+}
+
+inline
+std::string Simulator::configurationSignature() const
+{
+	std::ostringstream os;
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		const CMembrane& m = configuration.membranes[i];
+		os << i << ":" << m.parent << ":";
+		if (!m.label.empty()) os << m.label[0].str();
+		os << ":";
+		for (int c : m.children) os << c << ",";
+		os << ":" << multisetToSexpr(m.multiset) << ";";
+	}
+	return os.str();
+}
+
+inline
+bool Simulator::collectPhaseChain(unsigned id, std::vector<unsigned>& chain) const
+{
+	chain.clear();
+	if (id >= configuration.membranes.size()) return false;
+	int expect = -1;
+	unsigned cur = id;
+	std::set<unsigned> seen;
+	while (cur < configuration.membranes.size()) {
+		if (!seen.insert(cur).second) break;
+		const CMembrane& m = configuration.membranes[cur];
+		if (m.parent == -2 || m.label.empty()) break;
+		int n = 0;
+		if (!parsePhaseIndex(m.label[0].str(), n)) break;
+		if (expect >= 0 && n != expect) break;
+		if (m.children.size() > 1) break;
+		if (!onlyClockObjects(m.multiset)) break;
+		chain.push_back(cur);
+		expect = n + 1;
+		if (m.children.empty()) break;
+		cur = static_cast<unsigned>(m.children[0]);
+	}
+	return chain.size() >= 3;
+}
+
+inline
+std::string Simulator::collapsedPhaseGlyph(const std::vector<unsigned>& chain) const
+{
+	const CMembrane& first = configuration.membranes[chain.front()];
+	const CMembrane& last = configuration.membranes[chain.back()];
+	std::string where = "?";
+	std::string objs;
+	for (unsigned id : chain) {
+		const CMembrane& m = configuration.membranes[id];
+		bool hasTick = false;
+		for (const auto& kv : m.multiset) {
+			if (kv.second.raw() == 0) continue;
+			if (kv.first.str() == "tick" || kv.first.str().compare(0, 4, "tick") == 0)
+				hasTick = true;
+			for (std::size_t k = 0; k < kv.second.raw(); k++)
+				objs += kv.first.str() + " ";
+		}
+		if (hasTick && !m.label.empty()) where = m.label[0].str();
+	}
+	std::ostringstream os;
+	os << "[phase " << first.label[0].str() << ".." << last.label[0].str()
+	   << " @" << where;
+	if (!objs.empty()) os << " " << objs;
+	os << "]";
+	return os.str();
+}
+
+inline
+unsigned Simulator::terminalColumns() const
+{
+	if (isatty(STDOUT_FILENO)) {
+		struct winsize ws;
+		if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col >= 20)
+			return ws.ws_col;
+	}
+	const char* env = std::getenv("COLUMNS");
+	if (env && *env) {
+		int n = std::atoi(env);
+		if (n >= 20) return static_cast<unsigned>(n);
+	}
+	// Non-interactive default keeps the historical side-by-side layout.
+	// Set COLUMNS to force stacking in pipes and tests.
+	return 160;
+}
+
+inline
+void Simulator::traceHeader() const
+{
+	unsigned long seed = hasSeed() ? getSeed() : RANDOM.getSeed();
+	if (getTraceMode() == "json") {
+		std::ostringstream os;
+		os << "{\"event\":\"header\",\"seed\":" << seed;
+		if (getMaxStepsToSimulate() > 0)
+			os << ",\"steps\":" << getMaxStepsToSimulate();
+		os << ",\"model\":\"" << jsonEscape(getInputFile()) << "\"}";
+		std::cout << os.str() << "\n";
+		return;
+	}
+	std::ostringstream os;
+	os << "(seed " << seed << ")";
 	if (getMaxStepsToSimulate() > 0) os << " (steps " << getMaxStepsToSimulate() << ")";
 	os << " (model \"" << getInputFile() << "\")";
 	std::cout << os.str() << "\n";
 }
 
 inline
-std::vector<std::string> Simulator::stepEventLines() const
+std::vector<std::string> Simulator::formatStepEvents(const std::string& mode) const
 {
+	const bool asJson = (mode == "json");
 	std::vector<std::string> lines;
 	// configuration.time has NOT yet been incremented for this step's events
 	for (auto it1 = selectedRules.begin(); it1 != selectedRules.end(); ++it1) {
@@ -161,6 +423,7 @@ std::vector<std::string> Simulator::stepEventLines() const
 		for (auto it2 = it1->second.begin(); it2 != it1->second.end(); ++it2) {
 			const Rule& r = rules[it2->first];
 			std::size_t n = it2->second;
+			const std::string ruleName = ruleTraceName(r, it2->first);
 			// consumed = objects taken from THIS membrane = the union of the
 			// rule's local multiset (lhr.multiset) and its home-membrane
 			// multiset (lhr.membrane.multiset), scaled by applications.
@@ -174,19 +437,43 @@ std::vector<std::string> Simulator::stepEventLines() const
 			// send-in targets, reported as ((ms) (in <label>)).
 			Multiset produced;
 			std::ostringstream prod;
+			std::ostringstream inJson;
+			bool anyIn = false;
+			bool movedTick = false;
+			for (const auto& kv : consumed) {
+				if (kv.second.raw() == 0) continue;
+				if (kv.first.str() == "tick" || kv.first.str().compare(0, 4, "tick") == 0)
+					movedTick = true;
+			}
+			int tickTo = -1;
+			std::string tickToLabel;
 			if (!r.rhr.data.empty()) {
 				const OMembrane& home = r.rhr.data[0];
 				for (const auto& kv : home.multiset)
 					produced[kv.first] += kv.second.raw() * n;
+				inJson << "[";
 				for (const auto& child : home.data) {
 					Multiset inner;
-					for (const auto& kv : child.multiset)
+					bool childTick = false;
+					for (const auto& kv : child.multiset) {
 						inner[kv.first] += kv.second.raw() * n;
-					prod << (produced.empty() ? "" : " ")
+						if (kv.first.str() == "tick" || kv.first.str().compare(0, 4, "tick") == 0)
+							childTick = true;
+					}
+					const std::string childLabel = child.label.empty() ? "?" : child.label[0].str();
+					prod << (produced.empty() && prod.str().empty() ? "" : " ")
 					     << "(" << multisetToSexpr(inner)
-					     << " (in " << (child.label.empty() ? "?" : child.label[0].str())
-					     << "))";
+					     << " (in " << childLabel << "))";
+					if (anyIn) inJson << ",";
+					inJson << "{\"target\":\"" << jsonEscape(childLabel)
+					       << "\",\"objects\":" << multisetToJson(inner) << "}";
+					anyIn = true;
+					if (childTick) {
+						tickTo = phaseOfLabel(childLabel);
+						tickToLabel = childLabel;
+					}
 				}
+				inJson << "]";
 			}
 			// also account for any rhr.multiset (defensive; usually empty here)
 			for (const auto& kv : r.rhr.multiset)
@@ -194,20 +481,99 @@ std::vector<std::string> Simulator::stepEventLines() const
 			std::ostringstream prodAll;
 			prodAll << multisetToSexpr(produced);
 			if (!prod.str().empty()) prodAll << prod.str();
-			std::ostringstream line;
-			line << "(fired (step " << configuration.time << ")"
-			     << " (membrane " << it1->first << ")"
-			     << " (rule " << "r" << it2->first << ")"
-			     << " (consumed " << multisetToSexpr(consumed) << ")"
-			     << " (produced " << prodAll.str() << ")"
-			     << (n > 1 ? " (applications " : "")
-			     << (n > 1 ? std::to_string(n) : "")
-			     << (n > 1 ? ")" : "")
-			     << ")";
-			lines.push_back(line.str());
+
+			if (asJson) {
+				std::ostringstream line;
+				line << "{\"event\":\"fired\""
+				     << ",\"step\":" << configuration.time
+				     << ",\"membrane\":" << it1->first
+				     << ",\"rule\":\"" << jsonEscape(ruleName) << "\""
+				     << ",\"applications\":" << n
+				     << ",\"consumed\":" << multisetToJson(consumed)
+				     << ",\"produced\":{\"here\":" << multisetToJson(produced);
+				if (anyIn) line << ",\"in\":" << inJson.str();
+				line << "}}";
+				lines.push_back(line.str());
+			} else {
+				std::ostringstream line;
+				line << "(fired (step " << configuration.time << ")"
+				     << " (membrane " << it1->first << ")"
+				     << " (rule " << ruleName << ")"
+				     << " (consumed " << multisetToSexpr(consumed) << ")"
+				     << " (produced " << prodAll.str() << ")"
+				     << (n > 1 ? " (applications " : "")
+				     << (n > 1 ? std::to_string(n) : "")
+				     << (n > 1 ? ")" : "")
+				     << ")";
+				lines.push_back(line.str());
+			}
+
+			// T-Lingua wire atoms. These are extra events; the fired line and
+			// the checkpoint s-expr are unchanged.
+			const std::string selfLabel = m.label.empty() ? "?" : m.label[0].str();
+			int tickFrom = phaseOfLabel(selfLabel);
+			bool wrap = ruleName.find("wrap") != std::string::npos;
+			if (movedTick && wrap && tickFrom >= 0) tickTo = 0;
+			if (movedTick && tickFrom >= 0 && tickTo >= 0 && tickTo != tickFrom) {
+				if (asJson) {
+					std::ostringstream tick;
+					tick << "{\"event\":\"tick\",\"step\":" << configuration.time
+					     << ",\"phase_from\":" << tickFrom
+					     << ",\"phase_to\":" << tickTo << "}";
+					lines.push_back(tick.str());
+				} else {
+					std::ostringstream tick;
+					tick << "(tick " << configuration.time
+					     << " (phase " << tickFrom << phaseArrow() << tickTo << "))";
+					lines.push_back(tick.str());
+				}
+			}
+
+			std::string resonance = featureString(r.features, "resonance");
+			if (!resonance.empty()) {
+				std::string partner = featureString(r.features, "partner");
+				if (partner.empty()) partner = tickToLabel.empty() ? "?" : tickToLabel;
+				std::string match = normalizeMatch(resonance);
+				if (asJson) {
+					std::ostringstream res;
+					res << "{\"event\":\"resonance\",\"membranes\":[\""
+					    << jsonEscape(selfLabel) << "\",\"" << jsonEscape(partner)
+					    << "\"],\"match\":[";
+					std::istringstream ms(match);
+					std::string tok;
+					bool firstTok = true;
+					while (ms >> tok) {
+						if (!firstTok) res << ",";
+						bool numeric = !tok.empty() &&
+							std::all_of(tok.begin(), tok.end(), ::isdigit);
+						if (numeric) res << tok;
+						else res << "\"" << jsonEscape(tok) << "\"";
+						firstTok = false;
+					}
+					res << "]}";
+					lines.push_back(res.str());
+				} else {
+					std::ostringstream res;
+					res << "(resonance (" << selfLabel << " " << partner
+					    << ") (match " << match << "))";
+					lines.push_back(res.str());
+				}
+			}
 		}
 	}
 	return lines;
+}
+
+inline
+std::vector<std::string> Simulator::stepEventLines() const
+{
+	return formatStepEvents("sexpr");
+}
+
+inline
+std::vector<std::string> Simulator::stepEventJsonLines() const
+{
+	return formatStepEvents("json");
 }
 
 inline
@@ -235,6 +601,13 @@ std::vector<std::string> Simulator::glyphLines() const
 		const CMembrane& m = configuration.membranes[id];
 		if (m.parent == -2) return; // dissolved
 		std::string indent(depth * 2, ' ');
+		std::vector<unsigned> phaseChain;
+		if (collectPhaseChain(id, phaseChain)) {
+			// Pure phase ring (d1..dN / phase(k)): one glyph row, not 3×depth
+			// boxes. The s-expr wire and checkpoint still list every membrane.
+			out.push_back(indent + collapsedPhaseGlyph(phaseChain));
+			return;
+		}
 		std::ostringstream label;
 		label << "[" << id << "]" << (m.label.empty() ? "" : m.label[0].str());
 		// objects inline, e.g. "b b b"
@@ -260,6 +633,14 @@ std::vector<std::string> Simulator::glyphLines() const
 inline
 void Simulator::traceHumanStep(const std::vector<std::string>& wireLines) const
 {
+	// --trace=diff redraws the panes only when the multiset or the membrane
+	// tree changed since the previous drawn checkpoint.
+	if (getTraceMode() == "diff") {
+		std::string sig = configurationSignature();
+		if (sig == lastDiffSignature) return;
+		lastDiffSignature = sig;
+	}
+
 	std::vector<std::string> glyph = glyphLines();
 
 	// checkpoint text (reuse the s-expr but split into short lines)
@@ -307,7 +688,23 @@ void Simulator::traceHumanStep(const std::vector<std::string>& wireLines) const
 	};
 	auto pad = [&](std::string s, std::size_t w) {
 		std::size_t dw = dispWidth(s);
-		if (dw < w) s.append(w - dw, ' '); return s; };
+		if (dw < w) s.append(w - dw, ' ');
+		return s;
+	};
+
+	// Width is read once per step. Under 120 columns the three panes stack
+	// instead of sitting side by side (no extra flag).
+	const bool stack = terminalColumns() < 120;
+	if (stack) {
+		std::cout << "--glyph\n";
+		for (const auto& g : glyph) std::cout << g << "\n";
+		std::cout << "--wire\n";
+		for (const auto& w : wire) std::cout << w << "\n";
+		std::cout << "--checkpoint\n";
+		for (const auto& c : check) std::cout << c << "\n";
+		std::cout << "\n";
+		return;
+	}
 
 	std::ostringstream hdr;
 	hdr << pad("--glyph", GW) << pad("--wire", WW) << "--checkpoint";
@@ -337,6 +734,27 @@ void Simulator::traceCheckpoint() const
 		   << " (objects " << multisetToSexpr(m.multiset) << "))";
 	}
 	os << ")";
+	std::cout << os.str() << "\n";
+}
+
+inline
+void Simulator::traceCheckpointJson() const
+{
+	std::ostringstream os;
+	os << "{\"event\":\"checkpoint\",\"step\":" << configuration.time
+	   << ",\"membranes\":[";
+	bool first = true;
+	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
+		const CMembrane& m = configuration.membranes[i];
+		if (m.parent == -2) continue;
+		if (!first) os << ",";
+		first = false;
+		os << "{\"id\":" << i
+		   << ",\"label\":\"" << jsonEscape(m.label.empty() ? "?" : m.label[0].str()) << "\""
+		   << ",\"parent\":" << m.parent
+		   << ",\"objects\":" << multisetToJson(m.multiset) << "}";
+	}
+	os << "]}";
 	std::cout << os.str() << "\n";
 }
 
@@ -416,7 +834,9 @@ void Simulator::selectRules()
 	// layout is drawn in executeRules() after the clock advances.
 	if (getTraceMode() == "sexpr" && !selectedRules.empty()) {
 		traceStepEvents();
-	} else if (getTraceMode() == "human") {
+	} else if (getTraceMode() == "json" && !selectedRules.empty()) {
+		for (const auto& l : stepEventJsonLines()) std::cout << l << "\n";
+	} else if (getTraceMode() == "human" || getTraceMode() == "diff") {
 		pendingWireLines = stepEventLines();
 	}
 }
@@ -670,17 +1090,17 @@ void Simulator::executeRules()
 	// "checkpoint" stream: full configuration as a readable s-expr, emitted
 	// every --checkpoint-every steps (after time has advanced).  In human mode
 	// we draw the three-pane glyph/wire/checkpoint layout instead.
-	if (getTraceMode() == "human") {
+	if (getTraceMode() == "human" || getTraceMode() == "diff") {
 		if ((configuration.time % getCheckpointEvery()) == 0 ||
 			!pendingWireLines.empty()) {
 			traceHumanStep(pendingWireLines);
 		}
 		pendingWireLines.clear();
-	} else if (getTraceMode() == "sexpr" &&
+	} else if ((getTraceMode() == "sexpr" || getTraceMode() == "json") &&
 		(configuration.time % getCheckpointEvery()) == 0) {
-		traceCheckpoint();
+		if (getTraceMode() == "json") traceCheckpointJson();
+		else traceCheckpoint();
 	}
-
 }
 
 
@@ -1026,6 +1446,9 @@ bool Simulator::parse(int argc, char *argv[])
 	}
 	initialTime = configuration.time;
 	finished = false;
+	// Diff mode compares against the configuration that existed before step 1,
+	// so a rule that rewrites a multiset onto itself does not redraw.
+	lastDiffSignature = configurationSignature();
 	// Emit the run header first so any trace is replayable.
 	if (getTraceMode() != "off") {
 		traceHeader();

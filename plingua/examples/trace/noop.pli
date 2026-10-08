@@ -1,0 +1,11 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+	@mu = [ ]'skin;
+	@ms(skin) = a;
+
+	/* Rewrites the multiset onto itself: the tree does not change. */
+	[a --> a]'skin @name="idle";
+}

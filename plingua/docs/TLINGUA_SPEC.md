@@ -119,6 +119,8 @@ See `plingua/lang/tli/` for the lowered exemplars:
   `psystems/ch04/ch04_cfga_operator.pli`).
 - `time_crystal_core.tli` — the 11D nested phase-manifold base (ports
   `psystems/common/time_crystal_core.pli`).
+- `tc_neuron.tli` — the nn.nn time-crystal neuron clock (ports the
+  `time_crystal_neuron` convention in `nn.nn/lang/pli/time_crystal.pli`).
 
 Each is shown beside its `.pli` lowering to demonstrate the line-count
 reduction from convention to language primitive.
@@ -136,3 +138,20 @@ reduction from convention to language primitive.
 The proposed **AI-Lingua** experiment = T-Lingua temporal core + R-Lingua
 observables + ECAN/PLN attention/truth on objects, hosted in the élan dialect
 of the L-Lingua kernel.
+
+## 6. Profiles, not parsers
+
+f / n / s / d / a are libraries imported by a T-Lingua model, not new front
+ends.  A profile is a set of objects and rules the lowering already knows how
+to spell; it does not add a grammar production.
+
+| Profile | What it imports | Does not become |
+|---|---|---|
+| `@fractal` | an M-Lingua geometry companion (tiles, morphogenesis) | a fractal parser |
+| spinor / spectral | typed objects (`prime_k`, phase, coherence) living in the clock membranes | a spinor language |
+| `@module` neural | the nn.nn neuron convention: an 11-cycle crystal whose rim fires, then couples by resonance | a second neural dialect |
+
+`tc_neuron.tli` is the neural profile in miniature: one `@clock` replaces the
+hand-written d1..d11 nest.  Resonance stays a wire annotation
+(`(resonance (m1 m2) (match …))`) until a native T-Lingua simulator checks the
+prime-signature match.  Lowering does not change rule semantics.

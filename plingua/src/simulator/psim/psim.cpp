@@ -25,10 +25,14 @@ int main(int argc, char *argv[])
 				unsigned long t = simulator.getCurrentConfiguration().time;
 				bool hitMax = simulator.getMaxStepsToSimulate() > 0 &&
 				              t >= simulator.getMaxStepsToSimulate();
-				std::cout << "(halted (steps " << t << ")"
-				          << " (reason " << (hitMax ? "max-steps"
-				                                      : "no-applicable-rules")
-				          << "))" << std::endl;
+				const char* reason = hitMax ? "max-steps" : "no-applicable-rules";
+				if (simulator.getTraceMode() == "json") {
+					std::cout << "{\"event\":\"halted\",\"steps\":" << t
+					          << ",\"reason\":\"" << reason << "\"}" << std::endl;
+				} else {
+					std::cout << "(halted (steps " << t << ")"
+					          << " (reason " << reason << "))" << std::endl;
+				}
 			}
 			// Save the final configuration to the output file
 			try {

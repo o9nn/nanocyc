@@ -51,4 +51,34 @@
            (glyph (plingua--glyph-lines cp)))
       (should (cl-some (lambda (l) (string-match-p "\\+-" l)) glyph)))))
 
+(ert-deftest plingua-narrow-stacks ()
+  (let* ((d (plingua--parse-trace plingua-test--trace))
+         (text (plingua--render-step d 1 80))
+         (lines (split-string text "\n")))
+    (should (cl-some (lambda (l) (and (string-match-p "--glyph" l)
+                                      (not (string-match-p "--wire" l))))
+                     lines))
+    (should (member "--wire" lines))
+    (should (member "--checkpoint" lines))))
+
+(ert-deftest plingua-wide-side-by-side ()
+  (let* ((d (plingua--parse-trace plingua-test--trace))
+         (text (plingua--render-step d 1 160))
+         (lines (split-string text "\n")))
+    (should (cl-some (lambda (l) (and (string-match-p "--glyph" l)
+                                      (string-match-p "--wire" l)
+                                      (string-match-p "--checkpoint" l)))
+                     lines))))
+
+(ert-deftest plingua-tick-and-resonance ()
+  (let* ((text (concat "(seed 0) (steps 1) (model \"t.pli\")\n"
+                       "(fired (step 0) (membrane 1) (rule tick_in) (consumed ((tick . 1))) (produced (((tick . 1) (in 2)))))\n"
+                       "(tick 0 (phase 1→2))\n"
+                       "(resonance (a b) (match 2 3 5))\n"))
+         (d (plingua--parse-trace text))
+         (wire (plingua--wire-lines (plist-get d :events) 0)))
+    (should (= 3 (length (plist-get d :events))))
+    (should (cl-some (lambda (l) (string-match-p "phase 1->2" l)) wire))
+    (should (cl-some (lambda (l) (string-match-p "resonance" l)) wire))))
+
 ;;; test-plingua-mode.el ends here
