@@ -27,8 +27,10 @@ make compiler     # Build bin/plingua (P-Lingua compiler)
 make simulator    # Build bin/psim (P-system simulator)
 make mcompiler    # Build bin/mlingua (M-Lingua compiler)
 make msimulator   # Build bin/msim (M-system simulator)
+make tcompiler    # Build bin/tlingua (T-Lingua compiler and verifier)
 make extensions   # Build RR/OpenCog demos and tests
 make check-extensions  # Parse the psystems .mli/.rli chapter hybrids
+make check-tlingua     # Verify the T-Lingua 11-cycle, gates, and resonance
 make all          # Build everything
 sudo make install
 ```
@@ -196,6 +198,25 @@ def main() {
 ```
 
 See `docs/RLINGUA_SPEC.md` for the full R-Lingua language specification.
+
+---
+
+## T-Lingua (temporal/tensor, `.tli`)
+
+T-Lingua is the one custom dialect for the time-crystal corpus.  Clocks, phase
+registers, PPM prime gates, and resonance exchange are language primitives the
+compiler can check.  Fractal, spinor, module/import, and daemon/angel are
+profiles and pragmas inside that dialect, not extra grammars.
+
+```bash
+make tcompiler
+make check-tlingua
+bin/tlingua examples/tlingua/time_crystal_neuron.tli -s 11 -v -o report.json
+bin/tlingua model.tli -l model.pli    # lower to the psystems tick-ring convention
+```
+
+`lang/tli/tli_lower.py` remains the bootstrap lowerer.  `bin/tlingua` is the
+verifying compiler.  Spec: `docs/TLINGUA_SPEC.md`.
 
 See `docs/GSYSTEMS_SPEC.md` for the draft **G-systems** specification, which
 derives a gauge-invariant generalization of the (P,M,R) dialect triad for

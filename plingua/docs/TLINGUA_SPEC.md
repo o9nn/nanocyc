@@ -14,12 +14,16 @@ T-Lingua is a **strict superset of P-Lingua**: every valid `.pli` file is also
 a valid `.tli` file.  The `.tli` extension adds first-class temporal and
 typed-object constructs.  A `.tli` model is **lowered to plain P-Lingua**
 (`.pli`) by macro-expanding clocks and phase registers into the explicit
-tick-ring pattern, so the existing `psim` simulator runs `.tli` with **no
-simulator changes**.  (Native simulator support is a later optimization.)
+tick-ring pattern, so the existing `psim` simulator runs the lowered file with
+**no simulator changes**.  The `tlingua` compiler also verifies the temporal
+claims natively (see Verification): the 11-cycle, circular phase distance,
+prime gating, and resonance exchange.  Nested `(tick)out` in a hand-written
+`.pli` does not return to the rim in one hop, so those claims are checked on
+the language-owned ring, not by hoping the convention is right.
 
 The name "T" stands for *temporal* / *tensor* / *time*.  The f/n/s/d/a
 variants proposed during design are **profiles and libraries within T-Lingua**,
-not separate parsers (see §6).
+not separate parsers (see Profiles).
 
 ## Formal Definition
 
@@ -110,6 +114,49 @@ T-Lingua's reference implementation is a source-to-source compiler
 
 Because lowering targets plain `.pli`, the lowered file runs on the unmodified
 `psim` and is validated by `psystems/validate.sh`.
+
+## Verification
+
+`tlingua` owns a ring of `period` phases.  Phase 0 is the rim (`wrap_to`).
+After exactly `period` steps the phase is 0 and the wrap count is 1.  That is
+the closed time loop.
+
+| Check | Predicate |
+|---|---|
+| Eleven-cycle | a clock with `period 11` returns to phase 0 with one wrap |
+| Circular phase distance | `circ(a,b,n) = min((a-b) mod n, n - that)`; `circ(10,0,11) == 1` |
+| Prime gating | `@primes N` is the first N of `2,3,5,7,11,13,17,19,23,29,31,37,41,43,47`; the gate signature is their product; the gate is open iff `step % signature == 0` (step 0 is open). A signature that divides no positive tick inside the clock period is a warning, not a failure — `prime_signature(2,3,5) = 30` on an 11-cycle is the corpus case |
+| Resonance exchange | `match`/`exchange` fires only when signatures intersect (or, with one signature, the phase-prime is in it; with none, circular distance is 0). `mismatch`/`dissipate` is the complement and consumes without delivering |
+| Spinor | `2 * flip_at == period`; sign is −1 at `flip_at` and +1 at `period` |
+
+Scheduling is simultaneous: eligibility is decided against a budget snapshot,
+each rule at most once per step.  **daemon** fires every non-conflicting rule;
+**angel** (the default) fires the first eligible rule per membrane.  Phase,
+slot, and gate are read at the start of the step; clocks advance after rules.
+`reseed` restores the tick at the rim on wrap.
+
+```bash
+make tcompiler
+make check-tlingua
+bin/tlingua examples/tlingua/time_crystal_neuron.tli -s 11 -v -o report.json
+bin/tlingua model.tli -l model.pli
+```
+
+Exit status is 1 on a parse error or a failed verification.
+
+## Profiles
+
+One dialect.  The other proposed letters are libraries and pragmas:
+
+| Proposal | In T-Lingua |
+|---|---|
+| F-Lingua (fractal/frequency) | `@fractal { depth N; scale s; tile name; }` — a profile recorded for an M-Lingua companion, not a parser |
+| N-Lingua (neural/nested) | `@module` / `@import` — same-dialect `.tli` is inlined; other dialects are recorded |
+| S-Lingua (spinor/spectral) | `@spinor name { period N; flip_at N/2; object obj; }` — one rule schema |
+| D-Lingua / A-Lingua | `@semantics { mode = daemon \| angel; }` — scheduling poles, default angel |
+
+Profiles live in `plingua/lang/tli/profiles/` and are imported, not parsed by a
+second grammar.
 
 ## Examples
 
