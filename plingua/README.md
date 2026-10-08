@@ -197,6 +197,24 @@ def main() {
 
 See `docs/RLINGUA_SPEC.md` for the full R-Lingua language specification.
 
+## Ai-Lingua (`.ali`)
+
+Ai-Lingua is the cognitive time-crystal dialect: a T-Lingua clock, R-Lingua
+grip/emergence observables, and the existing ECAN/PLN/MOSES/AtomSpace headers,
+under cell-like P-Lingua send rules. It has its own runner (`ailingua`), the
+same way R-Lingua has `rlingua`. `psim` cannot check STI wages or PLN revision.
+
+```bash
+make acompiler              # produces bin/ailingua
+make bin/test_ailingua
+./bin/test_ailingua
+make check-ailingua         # unit tests + examples/ailingua/cognitive_cycle.ali
+
+bin/ailingua examples/ailingua/cognitive_cycle.ali -s 11 -v -o report.json
+```
+
+See `docs/AILINGUA_SPEC.md`.
+
 See `docs/GSYSTEMS_SPEC.md` for the draft **G-systems** specification, which
 derives a gauge-invariant generalization of the (P,M,R) dialect triad for
 parallel transport of n-forms over membrane complexes (runnable prototype:
@@ -305,6 +323,7 @@ The platform supports the Cognitive Cities triad architecture:
 include/
 ├── msystem/          # M-Lingua headers (parser, simulator, Cytos XML)
 ├── rlingua/          # R-Lingua headers (rli_parser.hpp)
+├── ailingua/         # Ai-Lingua headers (ali_parser.hpp, ai_engine.hpp)
 ├── parser/           # P-Lingua parser headers
 ├── simulator/        # P-system simulator headers
 ├── cereal/           # Serialization library
@@ -323,6 +342,7 @@ src/
 ├── simulator/        # P-system simulator
 ├── msystem/          # M-Lingua parser, compiler, simulator
 ├── rlingua/          # R-Lingua parser (rli_parser.cpp, rlingua_main.cpp)
+├── ailingua/         # Ai-Lingua parser and runner
 ├── rr/               # RR/OpenCog test/demo sources
 └── generators/       # Code generators
 
@@ -331,6 +351,7 @@ examples/
 ├── msystem/          # M-Lingua models (6 examples)
 ├── rr/               # RR demos and models
 ├── opencog/          # OpenCog P-Lingua models (6 subsystems)
+├── ailingua/         # Ai-Lingua cognitive-cycle model (.ali + .pli companion)
 ├── skin/             # Multiscale cosmeceutical skin model (phases 1–5)
 │   ├── conditions/   # Condition-specific variants (6 conditions × 3 severities)
 │   │   ├── atopic_dermatitis/  # AD barrier defect + Th2 inflammatory model

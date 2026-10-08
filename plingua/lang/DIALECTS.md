@@ -67,9 +67,9 @@ paths.  The canonical model grows an attention/ truth annotation:
             (pln revision)))))
 ```
 
-This is the natural host for the **AI-Lingua** experiment of
-`plingua/docs/TLINGUA_SPEC.md`: T-Lingua temporal core + R-Lingua observables +
-ECAN/PLN economics, all expressed as membrane rules.
+This is the Lisp host sketch for **Ai-Lingua**. The C++ reference is
+`plingua/docs/AILINGUA_SPEC.md`: T-Lingua temporal core + R-Lingua observables +
+ECAN/PLN/MOSES + AtomSpace, run by `ailingua` (not by lowering onto `psim`).
 
 ## Cross-dialect consistency
 

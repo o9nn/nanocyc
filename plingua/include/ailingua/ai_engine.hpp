@@ -27,6 +27,7 @@
 #include <cmath>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <random>
 #include <sstream>
 #include <string>
@@ -94,6 +95,7 @@ public:
           next_id_(1),
           phase_(0),
           wraps_(0),
+          steps_(0),
           rules_fired_(0),
           rule_generations_(0),
           combo_generations_(0),
@@ -209,7 +211,7 @@ public:
     unsigned ruleGenerations() const { return rule_generations_; }
     unsigned comboGenerations() const { return combo_generations_; }
     bool populationVaried() const { return population_varied_; }
-    bool hasMosesProgram() const { return moses_.best_overall.tree != 0; }
+    bool hasMosesProgram() const { return static_cast<bool>(moses_.best_overall.tree); }
     double mosesBestScore() const { return moses_.best_overall.score; }
     double gripIndex() const { return grip_index_; }
     double emergenceScore() const { return emergence_score_; }
@@ -548,8 +550,11 @@ private:
             if (!lhs || lhs->count < 1) continue;
             if (lhs->attention.sti < rule.threshold) continue;
             std::string dest = rule.decl.target.empty() ? rule.decl.membrane : rule.decl.target;
+            /* ensureProduct may reallocate objects_; re-find lhs afterwards. */
             RuntimeObject* rhs = ensureProduct(rule.decl.rhs, dest);
-            if (!rhs) continue;
+            lhs = findMutable(rule.decl.lhs, rule.decl.membrane);
+            if (!lhs || !rhs) continue;
+            bool fresh = (rhs->count == 0 && rhs->attention.sti <= 0);
             lhs->attention.boostSTI(static_cast<short>(-rule.wage));
             if (!rule.decl.restore) {
                 if (lhs->count > 0) --lhs->count;
@@ -557,7 +562,12 @@ private:
             applyPln(rule, *lhs, *rhs);
             rhs->count += 1;
             rhs->phase = phase_;
-            if (rhs->attention.sti < rule.threshold) {
+            /* A brand-new product has STI 0. ECAN forgets STI <= 0 in the same
+               step, which would erase the rewrite. Seed it with the wage. */
+            if (fresh) {
+                int seed = rule.wage < 1 ? 1 : rule.wage;
+                rhs->attention.boostSTI(static_cast<short>(seed));
+            } else if (rhs->attention.sti < rule.threshold) {
                 rhs->attention.boostSTI(static_cast<short>(rule.wage));
             }
             earners.push_back(rule.ecan_id);

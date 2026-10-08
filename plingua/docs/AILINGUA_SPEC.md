@@ -245,7 +245,7 @@ Stages, in order:
 1. **perceive** — stimulate each live object in the clock membrane (default `skin`) by the default wage.
 2. **orient (grip)** — copy truth/STI into the RR hypergraph and call `updateRelevanceRealization`. Recompute `grip_index` (mean node grip), `emergence_score`, `ennead_balance`, `relevance_gradient`, `grip_stability`.
 3. **decide (PLN)** — upsert concept nodes, install implication links for inference rules, run `PLNInferenceEngine::performInferenceCycle`, copy truth values back.
-4. **act** — fire every eligible rule once (reference scheduler: declaration order, one application per rule per step, the `@N{...}` cap of 1). Eligibility is phase gate AND wage gate AND `count(LHS) >= 1` in the rule's membrane. A firing spends `wage`, produces one RHS in the target membrane at the current phase, and applies the PLN clause.
+4. **act** — fire every eligible rule once (reference scheduler: declaration order, one application per rule per step, the `@N{...}` cap of 1). Eligibility is phase gate AND wage gate AND `count(LHS) >= 1` in the rule's membrane. A firing spends `wage`, produces one RHS in the target membrane at the current phase, and applies the PLN clause. A product that did not already exist is seeded with STI `wage` (at least 1). ECAN's forgetting rule removes atoms with `STI <= 0`; without that seed the rewrite would vanish in the same step.
 5. **remember (AtomSpace)** — upsert concept nodes for every live symbol.
 
 After the pipeline the runner always:
