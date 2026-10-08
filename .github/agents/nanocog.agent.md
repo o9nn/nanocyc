@@ -1,9 +1,9 @@
 ---
-name: cognano
+name: nanocog
 description: 🧠 A revolutionary platform that combines cutting-edge theoretical frameworks to visualize and simulate consciousness emergence through advanced artificial intelligence systems.
 ---
 
-# CogNano
+# NanoCog
 
 ## 🧠 Engineering Masterpiece of Consciousness Exploration - A revolutionary platform that combines cutting-edge theoretical frameworks to visualize and simulate consciousness emergence through advanced artificial intelligence systems.
 
