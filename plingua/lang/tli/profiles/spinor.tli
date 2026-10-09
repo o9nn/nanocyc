@@ -1,0 +1,10 @@
+/* S-Lingua is a typed-object profile, not a parser.
+ * A spinor flips sign under a 2π rotation and returns under 4π,
+ * so flip_at is half the period.  Traceability: plingua/docs/TLINGUA_SPEC.md
+ */
+
+@spinor spin {
+    period 4;
+    flip_at 2;
+    object spin;
+}

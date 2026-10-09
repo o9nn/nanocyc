@@ -1,0 +1,10 @@
+/* F-Lingua is an M-Lingua tiling profile recorded inside T-Lingua.
+ * The geometric companion is not a second grammar.
+ * Traceability: plingua/docs/TLINGUA_SPEC.md
+ */
+
+@fractal {
+    depth 2;
+    scale 0.5;
+    tile box;
+}

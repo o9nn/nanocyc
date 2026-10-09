@@ -1,0 +1,41 @@
+/* ============================================================================
+ * time_crystal_neuron.tli
+ *
+ * One T-Lingua model: an 11-cycle clock, a CFGA phase register, PPM prime
+ * gates, and a resonance exchange.  Spinor and fractal variants are imported
+ * profiles.  Daemon/angel is a scheduling pragma, not a dialect.
+ *
+ * Traceability: src/cpp/nanobrain_time_crystal.h
+ * ==========================================================================*/
+
+@tmodel<time_crystal>
+@semantics { mode = daemon; }
+@primes 15;
+
+@import "../../lang/tli/profiles/spinor.tli";
+@import "../../lang/tli/profiles/fractal.tli";
+
+@mu = [ []'neuron []'partner ]'skin;
+
+@clock tick {
+    period 11;
+    wrap d11 -> skin;
+    reseed singularity_point;
+}
+
+@phase_register cfga {
+    cycle 13;
+    slots [add sub mul div diff int inner outer geometric
+           project reject rotate reflect];
+}
+
+/* 2*3*5 = 30 does not divide a positive tick of the 11-cycle.
+ * The verifier warns; it does not invent a divisor the clock does not have. */
+@gate neuron by prime_signature(2, 3, 5);
+@gate partner by prime_signature(3, 7);
+
+@mneuron = signal, fuel;
+@mpartner = fuel;
+
+[exchange : signal --> (signal)in_partner ]'neuron with resonance(match);
+[hold : fuel --> fuel * held ]'neuron when phase == 0;
