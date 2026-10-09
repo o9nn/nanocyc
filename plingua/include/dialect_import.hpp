@@ -2,7 +2,7 @@
 #define _DIALECT_IMPORT_HPP_
 
 /*
- * Cross-dialect composition for the P/M/R/Ai stack.
+ * Cross-dialect composition for the P/M/R/T/Ai stack.
  *
  * @import "path"; and @import <path>; resolve relative to the importing
  * file. Same-dialect modules are inlined by the caller; other dialects
@@ -26,7 +26,7 @@ namespace plingua {
 struct ImportedModule {
 	std::string path;
 	std::string spec;
-	std::string dialect; // pli, mli, rli, or other
+	std::string dialect; // pli, mli, rli, tli, or other
 	bool inlined;
 	std::vector<std::string> symbols;
 
@@ -168,6 +168,12 @@ inline std::vector<std::string> extractSymbols(const std::string& body,
 	} else if (dialect == "ali") {
 		std::regex aliRe("@(?:object|rule|clock|phase_register)\\s+([A-Za-z_][A-Za-z0-9_]*)");
 		auto begin = std::sregex_iterator(clean.begin(), clean.end(), aliRe);
+		auto end = std::sregex_iterator();
+		for (auto it = begin; it != end; ++it)
+			addUnique(syms, seen, (*it)[1].str());
+	} else if (dialect == "tli") {
+		std::regex symRe("@(?:clock|phase_register|spinor|gate)\\s+([A-Za-z_][A-Za-z0-9_]*)");
+		auto begin = std::sregex_iterator(clean.begin(), clean.end(), symRe);
 		auto end = std::sregex_iterator();
 		for (auto it = begin; it != end; ++it)
 			addUnique(syms, seen, (*it)[1].str());

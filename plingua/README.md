@@ -27,8 +27,12 @@ make compiler     # Build bin/plingua (P-Lingua compiler)
 make simulator    # Build bin/psim (P-system simulator)
 make mcompiler    # Build bin/mlingua (M-Lingua compiler)
 make msimulator   # Build bin/msim (M-system simulator)
+make acompiler    # Build bin/ailingua (Ai-Lingua compiler and runner)
+make tcompiler    # Build bin/tlingua (T-Lingua compiler and verifier)
 make extensions   # Build RR/OpenCog demos and tests
 make check-extensions  # Parse the psystems .mli/.rli chapter hybrids
+make check-ailingua    # Unit tests + examples/ailingua/cognitive_cycle.ali
+make check-tlingua     # Verify the T-Lingua 11-cycle, gates, and resonance
 make all          # Build everything
 sudo make install
 ```
@@ -197,6 +201,8 @@ def main() {
 
 See `docs/RLINGUA_SPEC.md` for the full R-Lingua language specification.
 
+---
+
 ## Ai-Lingua (`.ali`)
 
 Ai-Lingua is the cognitive time-crystal dialect: a T-Lingua clock, R-Lingua
@@ -214,6 +220,25 @@ bin/ailingua examples/ailingua/cognitive_cycle.ali -s 11 -v -o report.json
 ```
 
 See `docs/AILINGUA_SPEC.md`.
+
+---
+
+## T-Lingua (temporal/tensor, `.tli`)
+
+T-Lingua is the one custom dialect for the time-crystal corpus.  Clocks, phase
+registers, PPM prime gates, and resonance exchange are language primitives the
+compiler can check.  Fractal, spinor, module/import, and daemon/angel are
+profiles and pragmas inside that dialect, not extra grammars.
+
+```bash
+make tcompiler
+make check-tlingua
+bin/tlingua examples/tlingua/time_crystal_neuron.tli -s 11 -v -o report.json
+bin/tlingua model.tli -l model.pli    # lower to the psystems tick-ring convention
+```
+
+`lang/tli/tli_lower.py` remains the bootstrap lowerer.  `bin/tlingua` is the
+verifying compiler.  Spec: `docs/TLINGUA_SPEC.md`.
 
 See `docs/GSYSTEMS_SPEC.md` for the draft **G-systems** specification, which
 derives a gauge-invariant generalization of the (P,M,R) dialect triad for
@@ -324,6 +349,7 @@ include/
 ├── msystem/          # M-Lingua headers (parser, simulator, Cytos XML)
 ├── rlingua/          # R-Lingua headers (rli_parser.hpp)
 ├── ailingua/         # Ai-Lingua headers (ali_parser.hpp, ai_engine.hpp)
+├── tlingua/          # T-Lingua headers (tli_parser.hpp)
 ├── parser/           # P-Lingua parser headers
 ├── simulator/        # P-system simulator headers
 ├── cereal/           # Serialization library
@@ -343,6 +369,7 @@ src/
 ├── msystem/          # M-Lingua parser, compiler, simulator
 ├── rlingua/          # R-Lingua parser (rli_parser.cpp, rlingua_main.cpp)
 ├── ailingua/         # Ai-Lingua parser and runner
+├── tlingua/          # T-Lingua parser and verifier
 ├── rr/               # RR/OpenCog test/demo sources
 └── generators/       # Code generators
 
@@ -352,6 +379,7 @@ examples/
 ├── rr/               # RR demos and models
 ├── opencog/          # OpenCog P-Lingua models (6 subsystems)
 ├── ailingua/         # Ai-Lingua cognitive-cycle model (.ali + .pli companion)
+├── tlingua/          # T-Lingua time-crystal model
 ├── skin/             # Multiscale cosmeceutical skin model (phases 1–5)
 │   ├── conditions/   # Condition-specific variants (6 conditions × 3 severities)
 │   │   ├── atopic_dermatitis/  # AD barrier defect + Th2 inflammatory model
