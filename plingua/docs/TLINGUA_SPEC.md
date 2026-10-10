@@ -180,6 +180,7 @@ reduction from convention to language primitive.
 | **T-Lingua (`.tli`)** | temporal/tensor: clocks, phases, primes, resonance |
 | L-Lingua (`.scm`/…) | the s-expression semantic kernel (`plingua/lang/`) |
 
-The proposed **AI-Lingua** experiment = T-Lingua temporal core + R-Lingua
-observables + ECAN/PLN attention/truth on objects, hosted in the élan dialect
-of the L-Lingua kernel.
+**Ai-Lingua** (`.ali`) is that composition with a reference runner:
+T-Lingua temporal core + R-Lingua observables + ECAN/PLN/MOSES + AtomSpace.
+See `plingua/docs/AILINGUA_SPEC.md` and `make acompiler`. The élan sketch in
+`plingua/lang/DIALECTS.md` remains the Lisp host of the same quadruple.

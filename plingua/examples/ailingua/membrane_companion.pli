@@ -1,0 +1,15 @@
+@model<membrane_computing>
+
+/* Companion membrane image of the cognitive cycle.
+ * Recorded by @import, not inlined into the .ali runner.
+ * Send targets follow the cell-like tree: skin contains memory.
+ */
+
+def main()
+{
+    @mu = [[]'memory]'skin;
+
+    @ms(skin) = perception, agent_self, co_constitution;
+
+    [perception --> perception, concept]'skin;
+}

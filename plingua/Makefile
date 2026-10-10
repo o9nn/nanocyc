@@ -13,6 +13,7 @@ OBJ_MSIM = mli_parser.o cytos_xml.o msim.o msim_main.o
 
 OBJ_RLINGUA = rli_parser.o rlingua_main.o
 
+OBJ_AILINGUA = ali_parser.o ailingua_main.o
 OBJ_TLINGUA = tli_parser.o tlingua_main.o
       
 BIN_PLINGUA = plingua
@@ -25,6 +26,7 @@ BIN_MSIM = msim
 
 BIN_RLINGUA = rlingua
 
+BIN_AILINGUA = ailingua
 BIN_TLINGUA = tlingua
 
 CFlags=-c -O3 -Wall -std=gnu++11 
@@ -34,7 +36,7 @@ RM=rm
 FLEX=flex
 BISON=bison
 
-all: grammar compiler simulator mcompiler msimulator rcompiler tcompiler extensions
+all: grammar compiler simulator mcompiler msimulator rcompiler acompiler tcompiler extensions
 
 # FinOps membrane reconciliation models (accospace + isabellex + fincosys)
 FINOPS_MODELS = membrane_reconciliation_minimal fincosys_fixture_reconciliation accospace_grouped_reconciliation fincosys_records_reconciliation
@@ -76,6 +78,19 @@ check-extensions: mcompiler rcompiler $(BDIR)/test_mli_geometry_extensions $(BDI
 	  echo "$$err" | grep -E 'Nodes:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no nodes in $$f"; echo "$$err"; exit 1; }; \
 	done; \
 	echo "check-extensions: 8 .mli + 5 .rli hybrids OK"
+
+check-ailingua: acompiler $(BDIR)/test_ailingua
+	@$(BDIR)/test_ailingua
+	@echo "== examples/ailingua/cognitive_cycle.ali"; \
+	err=$$($(BDIR)/$(BIN_AILINGUA) -v -s 4 -o /tmp/nanocyc_ali_report.json examples/ailingua/cognitive_cycle.ali 2>&1); \
+	echo "$$err"; \
+	echo "$$err" | grep -E 'Imports:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no imports"; exit 1; }; \
+	echo "$$err" | grep -E 'companion' >/dev/null || { echo "FAIL: pli companion not recorded"; exit 1; }; \
+	echo "$$err" | grep -E 'symbols=[1-9]' >/dev/null || { echo "FAIL: companion has no symbols"; exit 1; }; \
+	grep -q '"dialect": "ali"' /tmp/nanocyc_ali_report.json || { echo "FAIL: dialect"; exit 1; }; \
+	grep -q '"grip_index"' /tmp/nanocyc_ali_report.json || { echo "FAIL: grip_index"; exit 1; }; \
+	grep -q '"emergence_score"' /tmp/nanocyc_ali_report.json || { echo "FAIL: emergence_score"; exit 1; }; \
+	echo "check-ailingua: OK"
 
 check-tlingua: tcompiler $(BDIR)/test_tlingua
 	@$(BDIR)/test_tlingua
@@ -141,6 +156,7 @@ msimulator: $(OBJ_MSIM) $(BIN_MSIM)
 
 rcompiler: $(OBJ_RLINGUA) $(BIN_RLINGUA)
 
+acompiler: $(OBJ_AILINGUA) $(BIN_AILINGUA)
 tcompiler: $(OBJ_TLINGUA) $(BIN_TLINGUA)
 
 $(BIN_PLINGUA): $(patsubst %,$(ODIR)/%,$(OBJ_PLINGUA))
@@ -160,6 +176,10 @@ $(BIN_MSIM): $(patsubst %,$(ODIR)/%,$(OBJ_MSIM))
 	$(CC) $^ -o $(BDIR)/$@
 
 $(BIN_RLINGUA): $(patsubst %,$(ODIR)/%,$(OBJ_RLINGUA))
+	@mkdir -p $(BDIR)
+	$(CC) $^ -o $(BDIR)/$@
+
+$(BIN_AILINGUA): $(patsubst %,$(ODIR)/%,$(OBJ_AILINGUA))
 	@mkdir -p $(BDIR)
 	$(CC) $^ -o $(BDIR)/$@
 
@@ -200,12 +220,16 @@ $(BIN_TLINGUA): $(patsubst %,$(ODIR)/%,$(OBJ_TLINGUA))
 	@mkdir -p $(ODIR)
 	$(CC) $(CFlags) -I$(IDIR) -o $(ODIR)/$@ $<
 
+%.o: $(SDIR)/ailingua/%.cpp
+	@mkdir -p $(ODIR)
+	$(CC) $(CFlags) -I$(IDIR) -o $(ODIR)/$@ $<
+
 %.o: $(SDIR)/tlingua/%.cpp
 	@mkdir -p $(ODIR)
 	$(CC) $(CFlags) -I$(IDIR) -o $(ODIR)/$@ $<
 
 # RR/OpenCog extension targets (header-only + standalone demos)
-extensions: $(BDIR)/rr_simple_demo $(BDIR)/rr_demo $(BDIR)/demo_repl $(BDIR)/test_rr_enhanced $(BDIR)/test_next_directions $(BDIR)/test_opencog_integration $(BDIR)/adaptive_foraging $(BDIR)/test_rlingua $(BDIR)/test_e2e $(BDIR)/test_mli_geometry_extensions $(BDIR)/test_tlingua
+extensions: $(BDIR)/rr_simple_demo $(BDIR)/rr_demo $(BDIR)/demo_repl $(BDIR)/test_rr_enhanced $(BDIR)/test_next_directions $(BDIR)/test_opencog_integration $(BDIR)/adaptive_foraging $(BDIR)/test_rlingua $(BDIR)/test_ailingua $(BDIR)/test_e2e $(BDIR)/test_mli_geometry_extensions $(BDIR)/test_tlingua
 
 $(BDIR)/rr_simple_demo: examples/rr/rr_simple_demo.cpp
 	@mkdir -p $(BDIR)
@@ -239,6 +263,10 @@ $(BDIR)/test_rlingua: src/rr/test_rlingua.cpp src/rlingua/rli_parser.cpp
 	@mkdir -p $(BDIR)
 	$(CC) -O2 -Wall -std=gnu++11 -I$(IDIR) -o $@ $^
 
+$(BDIR)/test_ailingua: src/ailingua/test_ailingua.cpp src/ailingua/ali_parser.cpp
+	@mkdir -p $(BDIR)
+	$(CC) -O2 -Wall -std=gnu++11 -I$(IDIR) -o $@ $^
+
 $(BDIR)/test_e2e: src/rr/test_e2e.cpp
 	@mkdir -p $(BDIR)
 	$(CC) -O2 -Wall -std=gnu++11 -I$(IDIR) -o $@ $<
@@ -262,7 +290,7 @@ lex.yy.c: $(SDIR)/parser/plingua.l
 	$(FLEX) -o $(SDIR)/parser/$@ $<  
 	
 clean:
-	$(RM) -f $(patsubst %,$(ODIR)/%,$(OBJ_PLINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_PSIM)) $(patsubst %,$(ODIR)/%,$(OBJ_MLINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_MSIM)) $(patsubst %,$(ODIR)/%,$(OBJ_RLINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_TLINGUA)) $(BDIR)/$(BIN_PLINGUA) $(BDIR)/$(BIN_PSIM) $(BDIR)/$(BIN_MLINGUA) $(BDIR)/$(BIN_MSIM) $(BDIR)/$(BIN_RLINGUA) $(BDIR)/$(BIN_TLINGUA) $(BDIR)/rr_simple_demo $(BDIR)/rr_demo $(BDIR)/demo_repl $(BDIR)/test_rr_enhanced $(BDIR)/test_next_directions $(BDIR)/test_opencog_integration $(BDIR)/adaptive_foraging $(BDIR)/test_rlingua $(BDIR)/test_e2e $(BDIR)/test_mli_geometry_extensions $(BDIR)/test_tlingua $(SDIR)/parser/y.tab.c $(SDIR)/parser/y.tab.h $(SDIR)/parser/lex.yy.c
+	$(RM) -f $(patsubst %,$(ODIR)/%,$(OBJ_PLINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_PSIM)) $(patsubst %,$(ODIR)/%,$(OBJ_MLINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_MSIM)) $(patsubst %,$(ODIR)/%,$(OBJ_RLINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_AILINGUA)) $(patsubst %,$(ODIR)/%,$(OBJ_TLINGUA)) $(BDIR)/$(BIN_PLINGUA) $(BDIR)/$(BIN_PSIM) $(BDIR)/$(BIN_MLINGUA) $(BDIR)/$(BIN_MSIM) $(BDIR)/$(BIN_RLINGUA) $(BDIR)/$(BIN_AILINGUA) $(BDIR)/$(BIN_TLINGUA) $(BDIR)/rr_simple_demo $(BDIR)/rr_demo $(BDIR)/demo_repl $(BDIR)/test_rr_enhanced $(BDIR)/test_next_directions $(BDIR)/test_opencog_integration $(BDIR)/adaptive_foraging $(BDIR)/test_rlingua $(BDIR)/test_ailingua $(BDIR)/test_e2e $(BDIR)/test_mli_geometry_extensions $(BDIR)/test_tlingua $(SDIR)/parser/y.tab.c $(SDIR)/parser/y.tab.h $(SDIR)/parser/lex.yy.c
 	
 install:
 	@mkdir -p /usr/local/PLingua/$(BIN_PLINGUA)/
