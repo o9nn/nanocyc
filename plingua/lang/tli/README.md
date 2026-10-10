@@ -23,6 +23,7 @@ still runs on the unmodified `psim` / `psystems/validate.sh` pipeline.
 ```bash
 python3 tli_lower.py time_crystal_core.tli -o time_crystal_core.pli
 python3 tli_lower.py cfga_operator.tli      -o cfga_operator.pli
+python3 tli_lower.py tc_neuron.tli          -o tc_neuron.pli
 ```
 
 ## Exemplar ports
@@ -31,6 +32,7 @@ python3 tli_lower.py cfga_operator.tli      -o cfga_operator.pli
 |---|---|---|---|
 | `time_crystal_core.tli` | `psystems/common/time_crystal_core.pli` | **17** | 36 |
 | `cfga_operator.tli` | `psystems/ch04/ch04_cfga_operator.pli` | **42** | 85 |
+| `tc_neuron.tli` | `nn.nn/lang/pli/time_crystal.pli` neuron clock | **28** | 11 nest + 12 tick rules |
 
 The 11-phase closed time loop that `time_crystal_core.pli` spells out as
 13 tick rules + 11 nested membranes collapses to one declaration:

@@ -80,14 +80,22 @@ layout (box-drawing membrane tree, event wire, full checkpoint), with an
 stack glyph → wire → checkpoint; `COLUMNS` overrides the tty width. A pure
 `d1`…`d11` nest collapses to `d1⋯d11 ◔ phase=N` unless `--expand` is set.
 
-`--trace=json` emits the same events as one JSON object per line
-(`header`, `step`, `checkpoint`, `halted`) so a GUI can consume the stream
-without parsing s-exprs. `--trace=diff` uses the human panes but redraws
-only when the multiset or membrane tree changes, printing
+`--trace=json` emits one JSON object per line (`header`, `step`, `checkpoint`,
+`halted`, plus `tick` and `resonance` annotations) so a GUI can consume the
+stream without parsing s-exprs. A step object is
+`{"event":"step","step":N,"fired":[...]}`. `--trace=diff` uses the human panes
+but redraws only when the multiset or membrane tree changes, printing
 `(unchanged (step k))` otherwise. Fired events use a rule's `name` / `id` /
 `rule` feature when the compiler stored one, and fall back to `r<index>`.
 Checkpoints are emitted every `--checkpoint-every` steps (default 1), or
 every step at `-v 2` and above.
 
-T-Lingua wire atoms (`tick`, resonance, grip) belong to the T-Lingua
-simulator, not to this `psim` trace.
+A tick that falls into the next phase membrane also emits
+`(tick <step> (phase <from>-><to>))` (`->` with `--no-unicode`).
+`@resonance` / `@partner` emit `(resonance (<mem> <partner>) (match …))` as a
+trace annotation — they do not change which rules fire. A shorter pure phase
+ring (`d1`…`dN`, clock objects only, N≥3) collapses to one glyph row
+(`[phase d1..dN @ dK …]`); the s-expr checkpoint still lists every membrane.
+
+Regression: `make -C plingua check-trace` runs `tests/test_trace.sh` and
+`check-trace.sh` (fixtures in `examples/trace/`).

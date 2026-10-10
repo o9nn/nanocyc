@@ -119,9 +119,10 @@ check-finops: compiler simulator
 # (tolerating intermediate metadata lines), and the multiset entries are
 # sorted so assertions do not depend on the serializer's print order.
 # Intelligible step output: sexpr/json/human/diff traces, width fallback,
-# time-crystal collapse, and named rules.
+# time-crystal collapse, named rules, and T-Lingua tick/resonance atoms.
 check-trace: compiler simulator
 	bash tests/test_trace.sh
+	bash check-trace.sh
 
 check-examples: compiler simulator
 	@mkdir -p $(ODIR)/examples

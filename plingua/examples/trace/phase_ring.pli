@@ -1,0 +1,11 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+	/* Six nested phase membranes. Human glyphs collapse this pure ring. */
+	@mu = [ [ [ [ [ [ []'d6 ]'d5 ]'d4 ]'d3 ]'d2 ]'d1 ]'skin;
+	@ms(d1) = tick;
+
+	[tick [ ]'d2 --> [tick]'d2]'d1 @name="tick_in";
+}

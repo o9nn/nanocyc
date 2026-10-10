@@ -1,0 +1,28 @@
+/* ============================================================================
+ * tc_neuron.tli
+ *
+ * T-Lingua port of the nn.nn/lang/pli/time_crystal.pli neuron convention.
+ * That module hand-inlines an 11-deep phase nest and a tick-fall rule per
+ * dimension so each neuron is a closed time crystal.  Here the same loop is
+ * one @clock.  Activation stays at the rim (phase 0); the clock owns the fall.
+ *
+ * Traceability: src/cpp/nanobrain_time_crystal.h
+ *               (TIME_CRYSTAL_DIMENSIONS = 11, resonance_frequency)
+ * ==========================================================================*/
+
+@tmodel<time_crystal>
+
+/* Neuron rim is phase 0.  tick falls d1..d11 and wraps back to the rim. */
+@clock tick {
+    period 11;
+    wrap d11 -> skin;
+    reseed singularity_point;
+}
+
+@mskin = tick, signal, fuel;
+
+/* The crystal fires only while the pulse is still at the rim. */
+[activate : signal * fuel * tick --> done * tick ]'skin;
+
+/* A finished activation leaves the rim for the neighbouring crystal. */
+[couple : done --> (activation)out ]'skin;

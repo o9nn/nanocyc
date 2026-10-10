@@ -1,0 +1,11 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+	@mu = [ ]'skin;
+	@ms(skin) = a*2;
+
+	/* @name is the source name the compiler stores on the rule. */
+	[a --> b]'skin @name="send";
+}

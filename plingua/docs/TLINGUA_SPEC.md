@@ -166,6 +166,8 @@ See `plingua/lang/tli/` for the lowered exemplars:
   `psystems/ch04/ch04_cfga_operator.pli`).
 - `time_crystal_core.tli` — the 11D nested phase-manifold base (ports
   `psystems/common/time_crystal_core.pli`).
+- `tc_neuron.tli` — the nn.nn time-crystal neuron clock (ports the
+  `time_crystal_neuron` convention in `nn.nn/lang/pli/time_crystal.pli`).
 
 Each is shown beside its `.pli` lowering to demonstrate the line-count
 reduction from convention to language primitive.
@@ -184,3 +186,8 @@ reduction from convention to language primitive.
 T-Lingua temporal core + R-Lingua observables + ECAN/PLN/MOSES + AtomSpace.
 See `plingua/docs/AILINGUA_SPEC.md` and `make acompiler`. The élan sketch in
 `plingua/lang/DIALECTS.md` remains the Lisp host of the same quadruple.
+
+`tc_neuron.tli` lowers the nn.nn 11-cycle neuron clock to one `@clock`.
+`psim --trace` emits `(tick <step> (phase <from>-><to>))` and
+`(resonance (<mem> <partner>) (match …))` as wire annotations; they do not
+change which rules fire. `tlingua` verifies the ring (`make check-tlingua`).

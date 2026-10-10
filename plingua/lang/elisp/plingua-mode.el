@@ -49,18 +49,25 @@
 ;;
 ;; We parse it with Emacs' own reader.
 
+(defun plingua--normalize-trace (text)
+  "Rewrite T-Lingua phase arrows so `read' can parse the wire stream.
+`(phase 3→4)' and `(phase 3->4)' become `(phase 3 4)'."
+  (replace-regexp-in-string
+   "(phase \\([0-9]+\\)\\(?:->\\|→\\)\\([0-9]+\\))"
+   "(phase \\1 \\2)" text))
+
 (defun plingua--parse-trace (text)
   "Parse trace TEXT into a plist (:meta :events :checkpoints :halted)."
   (let ((events '()) (checkpoints '()) (meta nil) (halted nil))
     (with-temp-buffer
-      (insert text)
+      (insert (plingua--normalize-trace text))
       (goto-char (point-min))
       (condition-case nil
           (while t
             (let ((form (read (current-buffer))))
               (pcase (car-safe form)
                 ('seed (setq meta form))
-                ('fired (push form events))
+                ((or 'fired 'tick 'resonance) (push form events))
                 ('checkpoint (push form checkpoints))
                 ('halted (setq halted form)))))
         (end-of-file nil)))
@@ -125,11 +132,33 @@
 ;;; Wire pane: the (fired ...) events for one step
 ;;; ---------------------------------------------------------------------------
 
+(defun plingua--event-step (e)
+  "Step number of event E, or nil."
+  (pcase (car-safe e)
+    ('fired (cadr (assoc 'step (cdr e))))
+    ('tick (cadr e))
+    (_ nil)))
+
 (defun plingua--wire-lines (events step)
-  "Return the (fired ...) lines of EVENTS belonging to STEP."
-  (cl-loop for e in events
-           when (equal (cadr (assoc 'step (cdr e))) step)
-           collect (format "%s" e)))
+  "Return the wire lines of EVENTS belonging to STEP.
+Includes (fired ...), (tick ...), and any (resonance ...) that follows
+a fired event of STEP in the stream."
+  (let ((lines '()) (open nil))
+    (dolist (e events)
+      (pcase (car-safe e)
+        ('fired
+         (setq open (equal (plingua--event-step e) step))
+         (when open (push (format "%s" e) lines)))
+        ('tick
+         (when (equal (plingua--event-step e) step)
+           (let* ((phase (nth 2 e))
+                  (from (if (listp phase) (nth 1 phase) phase))
+                  (to (if (listp phase) (nth 2 phase) (nth 3 e))))
+             (push (format "(tick %s (phase %s->%s))" (cadr e) from to)
+                   lines))))
+        ('resonance
+         (when open (push (format "%s" e) lines)))))
+    (nreverse lines)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Checkpoint pane
@@ -158,30 +187,39 @@
   (let ((dw (length s)))
     (if (< dw w) (concat s (make-string (- w dw) ? )) s)))
 
-(defun plingua--render-step (trace-data step)
-  "Return the three-pane text for STEP from TRACE-DATA."
+(defun plingua--render-step (trace-data step &optional width)
+  "Return the three-pane text for STEP from TRACE-DATA.
+WIDTH defaults to the selected window.  Below 120 columns the panes
+stack vertically, matching psim --trace=human."
   (let* ((events (plist-get trace-data :events))
          (checkpoints (plist-get trace-data :checkpoints))
          (glyph '())
          (check '())
-         (wire (plingua--wire-lines events step)))
+         (wire (plingua--wire-lines events step))
+         (cols (or width (window-width))))
     (let ((cp (cl-find-if (lambda (c)
                             (equal (cadr (assoc 'step (cdr c))) step))
                           checkpoints)))
       (when cp
         (setq glyph (plingua--glyph-lines cp))
         (setq check (plingua--checkpoint-lines cp))))
-    (let* ((GW 34) (WW 50)
-           (hdr (concat (plingua--pad "--glyph" GW)
-                        (plingua--pad "--wire" WW) "--checkpoint"))
-           (rows (max (length glyph) (max (length wire) (length check))))
-           (out (list hdr)))
-      (dotimes (i rows)
-        (push (concat (plingua--pad (or (nth i glyph) "") GW)
-                      (plingua--pad (or (nth i wire) "") WW)
-                      (or (nth i check) ""))
-              out))
-      (mapconcat #'identity (nreverse out) "\n"))))
+    (if (< cols 120)
+        (mapconcat #'identity
+                   (append (list "--glyph") glyph
+                           (list "--wire") wire
+                           (list "--checkpoint") check)
+                   "\n")
+      (let* ((GW 34) (WW 50)
+             (hdr (concat (plingua--pad "--glyph" GW)
+                          (plingua--pad "--wire" WW) "--checkpoint"))
+             (rows (max (length glyph) (max (length wire) (length check))))
+             (out (list hdr)))
+        (dotimes (i rows)
+          (push (concat (plingua--pad (or (nth i glyph) "") GW)
+                        (plingua--pad (or (nth i wire) "") WW)
+                        (or (nth i check) ""))
+                out))
+        (mapconcat #'identity (nreverse out) "\n")))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Interactive trace buffer

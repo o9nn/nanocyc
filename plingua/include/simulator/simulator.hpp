@@ -80,6 +80,19 @@ protected:
 	static std::string ruleTraceName(const Rule& rule, std::size_t index);
 	static std::string jsonEscape(const std::string& s);
 	static std::string multisetToJson(const Multiset& ms);
+	// T-Lingua wire annotations. Extra events only; they do not change firing.
+	static std::string featureString(const Features& features, const char* key);
+	static bool parsePhaseIndex(const std::string& label, int& n);
+	static int phaseOfLabel(const std::string& label);
+	static bool onlyClockObjects(const Multiset& ms);
+	static std::string normalizeMatch(const std::string& raw);
+	const char* phaseArrow() const;
+	bool collectPhaseChain(unsigned id, std::vector<unsigned>& chain) const;
+	std::string collapsedPhaseGlyph(const std::vector<unsigned>& chain) const;
+	void appendTraceAtoms(std::vector<std::string>& sexprOut,
+	                      std::vector<std::string>& jsonOut,
+	                      unsigned membraneId,
+	                      const Rule& rule) const;
 	
 
 private:
@@ -250,6 +263,8 @@ std::vector<std::string> Simulator::stepEventLines() const
 			     << (n > 1 ? ")" : "")
 			     << ")";
 			lines.push_back(line.str());
+			std::vector<std::string> jsonAtoms;
+			appendTraceAtoms(lines, jsonAtoms, it1->first, r);
 		}
 	}
 	return lines;
@@ -295,9 +310,15 @@ std::vector<std::string> Simulator::glyphLines() const
 		out.push_back(indent + vt + " " + width + " " + vt + "  " + objs.str());
 		for (int c : m.children) {
 			int phase = 0;
+			std::vector<unsigned> phaseChain;
 			if (!expandNests() && c >= 0 &&
 			    isPurePhaseNest(static_cast<unsigned>(c), phase)) {
 				out.push_back(indent + vt + " " + collapsedPhaseNote(phase) + " " + vt);
+			} else if (!expandNests() && c >= 0 &&
+			           collectPhaseChain(static_cast<unsigned>(c), phaseChain)) {
+				// Shorter clock rings (d1..dN, N>=3) collapse to one row.
+				// An 11-deep nest uses collapsedPhaseNote above.
+				out.push_back(indent + vt + " " + collapsedPhaseGlyph(phaseChain) + " " + vt);
 			} else {
 				render(static_cast<unsigned>(c), depth + 1);
 			}
@@ -307,8 +328,11 @@ std::vector<std::string> Simulator::glyphLines() const
 	for (std::size_t i = 0; i < configuration.membranes.size(); i++) {
 		if (configuration.membranes[i].parent != -1) continue;
 		int phase = 0;
+		std::vector<unsigned> phaseChain;
 		if (!expandNests() && isPurePhaseNest(static_cast<unsigned>(i), phase)) {
 			out.push_back(collapsedPhaseNote(phase));
+		} else if (!expandNests() && collectPhaseChain(static_cast<unsigned>(i), phaseChain)) {
+			out.push_back(collapsedPhaseGlyph(phaseChain));
 		} else {
 			render(static_cast<unsigned>(i), 0);
 		}
@@ -563,6 +587,215 @@ std::string Simulator::collapsedPhaseNote(int phase) const
 }
 
 inline
+std::string Simulator::featureString(const Features& features, const char* key)
+{
+	auto it = features.find(key);
+	if (it == features.end() || it->second.type() != Value::STRING) return "";
+	const char* raw = it->second.as_string();
+	if (raw == nullptr || raw[0] == '\0') return "";
+	std::string s(raw);
+	if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
+		s = s.substr(1, s.size() - 2);
+	return s;
+}
+
+inline
+bool Simulator::parsePhaseIndex(const std::string& label, int& n)
+{
+	if (label.size() >= 2 && (label[0] == 'd' || label[0] == 'D') &&
+	    std::all_of(label.begin() + 1, label.end(),
+	                [](unsigned char c) { return std::isdigit(c) != 0; })) {
+		n = std::atoi(label.c_str() + 1);
+		return n > 0;
+	}
+	if (label.compare(0, 5, "phase") == 0) {
+		std::string rest = label.substr(5);
+		if (!rest.empty() && (rest[0] == '{' || rest[0] == '(')) rest.erase(rest.begin());
+		if (!rest.empty() && (rest.back() == '}' || rest.back() == ')')) rest.pop_back();
+		if (!rest.empty() && std::all_of(rest.begin(), rest.end(),
+		        [](unsigned char c) { return std::isdigit(c) != 0; })) {
+			n = std::atoi(rest.c_str());
+			return true;
+		}
+	}
+	return false;
+}
+
+inline
+int Simulator::phaseOfLabel(const std::string& label)
+{
+	int n = -1;
+	if (parsePhaseIndex(label, n)) return n;
+	if (label == "skin" || label == "rim") return 0;
+	return -1;
+}
+
+inline
+bool Simulator::onlyClockObjects(const Multiset& ms)
+{
+	for (const auto& kv : ms) {
+		if (kv.second.raw() == 0) continue;
+		const std::string& name = kv.first.str();
+		if (name == "tick" || name.compare(0, 4, "tick") == 0) continue;
+		if (name == "singularity_point") continue;
+		if (name.compare(0, 5, "phase") == 0) continue;
+		if (name.compare(0, 6, "period") == 0) continue;
+		if (name.compare(0, 9, "coherence") == 0) continue;
+		return false;
+	}
+	return true;
+}
+
+inline
+std::string Simulator::normalizeMatch(const std::string& raw)
+{
+	std::string collapsed;
+	bool sp = false;
+	for (char c : raw) {
+		if (c == ',' || c == ';') c = ' ';
+		if (c == ' ' || c == '\t') {
+			if (!collapsed.empty()) sp = true;
+			continue;
+		}
+		if (sp) collapsed.push_back(' ');
+		sp = false;
+		collapsed.push_back(c);
+	}
+	return collapsed;
+}
+
+inline
+const char* Simulator::phaseArrow() const
+{
+	return isUnicode() ? "\u2192" : "->";
+}
+
+inline
+bool Simulator::collectPhaseChain(unsigned id, std::vector<unsigned>& chain) const
+{
+	chain.clear();
+	if (id >= configuration.membranes.size()) return false;
+	int expect = -1;
+	unsigned cur = id;
+	for (int depth = 0; depth < 64 && cur < configuration.membranes.size(); depth++) {
+		const CMembrane& m = configuration.membranes[cur];
+		if (m.parent == -2 || m.label.empty()) break;
+		int n = 0;
+		if (!parsePhaseIndex(m.label[0].str(), n)) break;
+		if (expect >= 0 && n != expect) break;
+		if (m.children.size() > 1) break;
+		if (!onlyClockObjects(m.multiset)) break;
+		chain.push_back(cur);
+		expect = n + 1;
+		if (m.children.empty() || m.children[0] < 0) break;
+		unsigned next = static_cast<unsigned>(m.children[0]);
+		if (next == cur) break;
+		cur = next;
+	}
+	return chain.size() >= 3;
+}
+
+inline
+std::string Simulator::collapsedPhaseGlyph(const std::vector<unsigned>& chain) const
+{
+	const CMembrane& first = configuration.membranes[chain.front()];
+	const CMembrane& last = configuration.membranes[chain.back()];
+	std::string where = "?";
+	std::string objs;
+	for (unsigned id : chain) {
+		const CMembrane& m = configuration.membranes[id];
+		bool hasTick = false;
+		for (const auto& kv : m.multiset) {
+			if (kv.second.raw() == 0) continue;
+			if (kv.first.str() == "tick" || kv.first.str().compare(0, 4, "tick") == 0)
+				hasTick = true;
+			for (std::size_t k = 0; k < kv.second.raw(); k++)
+				objs += kv.first.str() + " ";
+		}
+		if (hasTick && !m.label.empty()) where = m.label[0].str();
+	}
+	std::ostringstream os;
+	os << "[phase " << first.label[0].str() << ".." << last.label[0].str()
+	   << " @" << where;
+	if (!objs.empty()) os << " " << objs;
+	os << "]";
+	return os.str();
+}
+
+inline
+void Simulator::appendTraceAtoms(std::vector<std::string>& sexprOut,
+                                 std::vector<std::string>& jsonOut,
+                                 unsigned membraneId,
+                                 const Rule& rule) const
+{
+	if (membraneId >= configuration.membranes.size()) return;
+	const CMembrane& m = configuration.membranes[membraneId];
+	const std::string selfLabel = m.label.empty() ? "?" : m.label[0].str();
+	const std::string ruleName = featureString(rule.features, "name");
+
+	auto sawTick = [](const Multiset& ms) {
+		for (const auto& kv : ms) {
+			if (kv.second.raw() == 0) continue;
+			if (kv.first.str() == "tick" || kv.first.str().compare(0, 4, "tick") == 0)
+				return true;
+		}
+		return false;
+	};
+	bool movedTick = sawTick(rule.lhr.multiset) || sawTick(rule.lhr.membrane.multiset);
+	int tickTo = -1;
+	std::string tickToLabel;
+	if (!rule.rhr.data.empty()) {
+		for (const auto& child : rule.rhr.data[0].data) {
+			if (!sawTick(child.multiset)) continue;
+			tickToLabel = child.label.empty() ? "?" : child.label[0].str();
+			tickTo = phaseOfLabel(tickToLabel);
+		}
+	}
+	int tickFrom = phaseOfLabel(selfLabel);
+	if (movedTick && ruleName.find("wrap") != std::string::npos && tickFrom >= 0)
+		tickTo = 0;
+	if (movedTick && tickFrom >= 0 && tickTo >= 0 && tickTo != tickFrom) {
+		std::ostringstream tick;
+		tick << "(tick " << configuration.time
+		     << " (phase " << tickFrom << phaseArrow() << tickTo << "))";
+		sexprOut.push_back(tick.str());
+		std::ostringstream jtick;
+		jtick << "{\"event\":\"tick\",\"step\":" << configuration.time
+		      << ",\"phase_from\":" << tickFrom
+		      << ",\"phase_to\":" << tickTo << "}";
+		jsonOut.push_back(jtick.str());
+	}
+
+	std::string resonance = featureString(rule.features, "resonance");
+	if (resonance.empty()) return;
+	std::string partner = featureString(rule.features, "partner");
+	if (partner.empty()) partner = tickToLabel.empty() ? "?" : tickToLabel;
+	std::string match = normalizeMatch(resonance);
+	std::ostringstream res;
+	res << "(resonance (" << selfLabel << " " << partner
+	    << ") (match " << match << "))";
+	sexprOut.push_back(res.str());
+	std::ostringstream jres;
+	jres << "{\"event\":\"resonance\",\"membranes\":[\""
+	     << jsonEscape(selfLabel) << "\",\"" << jsonEscape(partner)
+	     << "\"],\"match\":[";
+	std::istringstream tokens(match);
+	std::string tok;
+	bool firstTok = true;
+	while (tokens >> tok) {
+		if (!firstTok) jres << ",";
+		bool numeric = !tok.empty() &&
+			std::all_of(tok.begin(), tok.end(),
+			            [](unsigned char c) { return std::isdigit(c) != 0; });
+		if (numeric) jres << tok;
+		else jres << "\"" << jsonEscape(tok) << "\"";
+		firstTok = false;
+	}
+	jres << "]}";
+	jsonOut.push_back(jres.str());
+}
+
+inline
 std::string Simulator::configurationFingerprint() const
 {
 	std::ostringstream os;
@@ -635,6 +868,16 @@ void Simulator::traceStepJson() const
 	}
 	os << "]}";
 	std::cout << os.str() << "\n";
+	std::vector<std::string> sexprUnused;
+	std::vector<std::string> atoms;
+	for (auto it1 = selectedRules.begin(); it1 != selectedRules.end(); ++it1) {
+		const CMembrane& m = configuration.membranes[it1->first];
+		const std::vector<Rule>& rules = ruleSets.at(m.label).at(m.charge);
+		for (auto it2 = it1->second.begin(); it2 != it1->second.end(); ++it2) {
+			appendTraceAtoms(sexprUnused, atoms, it1->first, rules[it2->first]);
+		}
+	}
+	for (const auto& a : atoms) std::cout << a << "\n";
 }
 
 inline
