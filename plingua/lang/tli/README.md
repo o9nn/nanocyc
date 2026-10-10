@@ -5,9 +5,18 @@ machinery that the `psystems/` corpus hand-encodes — closed tick rings, phase
 registers, prime-signature gating, resonance coupling — into language
 primitives.  See `plingua/docs/TLINGUA_SPEC.md` for the full specification.
 
-**Reference implementation = source-to-source lowering.** `tli_lower.py`
-expands a `.tli` model into plain P-Lingua (`.pli`), so the result runs on the
-unmodified `psim` / `psystems/validate.sh` pipeline.  No simulator changes.
+**Verifying compiler = `tlingua`.** From `plingua/`:
+
+```bash
+make tcompiler
+make check-tlingua
+bin/tlingua examples/tlingua/time_crystal_neuron.tli -s 11 -v
+```
+
+`tlingua` checks the 11-cycle, circular phase distance, prime gating, and
+resonance exchange on a language-owned ring.  `tli_lower.py` remains the
+bootstrap lowerer: it expands a `.tli` model into plain P-Lingua so the result
+still runs on the unmodified `psim` / `psystems/validate.sh` pipeline.
 
 ## Lowering
 
@@ -53,9 +62,10 @@ The lowered `.pli` files have balanced brackets, a declared `@mu` tree, named
 `--> ` rules, and no undeclared membrane labels — the same structural-lint
 checks `psystems/validate.sh` enforces.
 
-## What's next (native support)
+## Native verification
 
-Lowering is the bootstrap.  Native `.tli` support in the simulator would let
-the engine *check* the temporal invariants (the 11-cycle, phase guards, prime
-gating) instead of merely expanding them — that is the payoff that justifies
-the dialect's existence.
+`tlingua` is that check.  A clock is a ring of `period` phases; phase 0 is the
+rim, and after `period` steps the wrap count is 1.  `circ(10, 0, 11)` is 1.
+A prime gate is open only when `step % signature == 0`.  Resonance `match`
+exchanges when signatures intersect; `mismatch` dissipates.  Spinor and
+fractal files in `profiles/` are imported libraries, not dialects.

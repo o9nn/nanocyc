@@ -71,7 +71,7 @@ if compile "$EXAMPLES/trace/named_send.pli" "$TMP/named.json"; then
 
 	"$PSIM" "$TMP/named.json" -s 5 -o "$TMP/named.out.json" --trace=json \
 		>"$TMP/named.jsonl" 2>"$TMP/named.err" || { say "FAIL psim named json"; cat "$TMP/named.err"; fail=1; }
-	assert_has "json fired event" "$TMP/named.jsonl" '"event":"fired"'
+	assert_has "json step event" "$TMP/named.jsonl" '"event":"step"'
 	assert_has "json rule name" "$TMP/named.jsonl" '"rule":"send"'
 	assert_has "json header" "$TMP/named.jsonl" '"event":"header"'
 	assert_has "json checkpoint" "$TMP/named.jsonl" '"event":"checkpoint"'

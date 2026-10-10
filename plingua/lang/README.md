@@ -76,24 +76,26 @@ All three engines must agree byte-for-byte on the halting configuration.
 
 `--trace=human` renders the three-pane `--glyph / --wire / --checkpoint`
 layout (box-drawing membrane tree, event wire, full checkpoint), with an
-`--no-unicode` ASCII fallback.
+`--no-unicode` ASCII fallback (`+--[id]--+`). Under 120 columns the panes
+stack glyph → wire → checkpoint; `COLUMNS` overrides the tty width. A pure
+`d1`…`d11` nest collapses to `d1⋯d11 ◔ phase=N` unless `--expand` is set.
 
-## `psim --trace` modes
+`--trace=json` emits one JSON object per line (`header`, `step`, `checkpoint`,
+`halted`, plus `tick` and `resonance` annotations) so a GUI can consume the
+stream without parsing s-exprs. A step object is
+`{"event":"step","step":N,"fired":[...]}`. `--trace=diff` uses the human panes
+but redraws only when the multiset or membrane tree changes, printing
+`(unchanged (step k))` otherwise. Fired events use a rule's `name` / `id` /
+`rule` feature when the compiler stored one, and fall back to `r<index>`.
+Checkpoints are emitted every `--checkpoint-every` steps (default 1), or
+every step at `-v 2` and above.
 
-`--trace=off|sexpr|json|human|diff`.  `sexpr` is the cross-engine wire format.
-`json` is one object per line (`event` is `header`, `fired`, `tick`,
-`resonance`, `checkpoint`, or `halted`).  `human` draws `--glyph / --wire /
---checkpoint` side by side, and stacks those panes when the terminal (or
-`COLUMNS`) is under 120 columns.  `diff` uses the same panes but skips a step
-whose multiset and membrane tree did not change.  `--no-unicode` switches the
-glyph and the phase arrow (`→` vs `->`).
+A tick that falls into the next phase membrane also emits
+`(tick <step> (phase <from>-><to>))` (`->` with `--no-unicode`).
+`@resonance` / `@partner` emit `(resonance (<mem> <partner>) (match …))` as a
+trace annotation — they do not change which rules fire. A shorter pure phase
+ring (`d1`…`dN`, clock objects only, N≥3) collapses to one glyph row
+(`[phase d1..dN @ dK …]`); the s-expr checkpoint still lists every membrane.
 
-Fired events print the rule's `@name` when the compiler stored one, otherwise
-`r<index>`.  A pure phase ring (`d1`…`dN`, clock objects only) collapses to one
-glyph row (`[phase d1..dN @ dK tick ]`); the s-expr checkpoint still lists
-every membrane.  A tick that falls into the next phase membrane also emits
-`(tick <step> (phase <from>-><to>))`.  `@resonance` / `@partner` emit
-`(resonance (<mem> <partner>) (match …))` as a trace annotation — they do not
-change which rules fire.
-
-Regression: `make -C plingua check-trace` (fixtures in `examples/trace/`).
+Regression: `make -C plingua check-trace` runs `tests/test_trace.sh` and
+`check-trace.sh` (fixtures in `examples/trace/`).

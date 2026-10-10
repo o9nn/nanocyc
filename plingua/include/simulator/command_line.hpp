@@ -24,16 +24,19 @@ public:
 	bool hasSeed() const {return seedProvided;}
 	unsigned getSeed() const {return seed;}
 
-	// Trace mode: "off" (default, legacy STEP output), "sexpr", "json",
-	// "human", "diff".
-	// "sexpr" emits one parenthesised event per line (the "wire" stream) so the
-	// output can be diffed against the Lisp s-expr kernel. "json" emits the
-	// same events as one JSON object per line. "human" adds the
-	// --glyph/--wire/--checkpoint three-pane layout. "diff" is human layout
-	// that redraws only when the multiset or membrane tree changes.
+	// Trace mode: "off" (default, legacy STEP output), "sexpr", "human",
+	// "json", or "diff".
+	// "sexpr" emits one parenthesised event per line (the canonical "wire"
+	// stream). "human" adds the --glyph/--wire/--checkpoint three-pane layout.
+	// "json" emits the same events as one JSON object per step. "diff" uses
+	// the human panes but redraws only when the multiset or membrane tree
+	// changes.
 	const std::string& getTraceMode() const {return traceMode;}
 	unsigned getCheckpointEvery() const {return checkpointEvery;}
 	bool isUnicode() const {return unicode;}
+	// When false (default), an 11-deep d1..d11 time-crystal nest collapses to
+	// a single glyph row. --expand renders the full nest.
+	bool expandNests() const {return expandNestsFlag;}
 
 protected:
 	bool randomized;
@@ -53,6 +56,7 @@ private:
 	std::string traceMode;
 	unsigned checkpointEvery;
 	bool unicode;
+	bool expandNestsFlag;
 
 };
 

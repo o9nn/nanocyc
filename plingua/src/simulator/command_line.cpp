@@ -17,7 +17,8 @@ CommandLine::CommandLine()
   outputFile("a.json"),
   traceMode("off"),
   checkpointEvery(1),
-  unicode(true) {}
+  unicode(true),
+  expandNestsFlag(false) {}
 
 bool CommandLine::parse(int argc, char *argv[])
 {
@@ -45,9 +46,10 @@ bool CommandLine::parse(int argc, char *argv[])
 	("steps,s", po::value<int>(), "set the number of steps to simulate")
 	("configuration,c", po::value<string>(),"set the initial configuration file")
 	("output,o", po::value<string>(),"set the output file")
-	("trace,t", po::value<string>(),"set trace mode: off (default), sexpr, json, human or diff")
-	("checkpoint-every", po::value<unsigned>(),"emit a checkpoint every N steps (default 1)")
+	("trace,t", po::value<string>(),"set trace mode: off (default), sexpr, human, json or diff")
+	("checkpoint-every", po::value<unsigned>(),"emit a checkpoint every N steps (default 1; every step at -v 2+)")
 	("no-unicode", po::bool_switch(),"use ASCII instead of Unicode box drawing")
+	("expand", po::bool_switch(),"expand collapsed 11-deep time-crystal nests in the glyph pane")
 	("psystem", po::value< string>(), "set the psystem file")
 	;
 	
@@ -93,11 +95,12 @@ bool CommandLine::parse(int argc, char *argv[])
 		if (vm.count("configuration")) {
 			configurationFile = vm["configuration"].as<string>();
 		}
+		traceMode = "off";
 		if (vm.count("trace")) {
 			traceMode = vm["trace"].as<string>();
-			if (traceMode != "off" && traceMode != "sexpr" && traceMode != "json" &&
-			    traceMode != "human" && traceMode != "diff") {
-				throw std::runtime_error("invalid --trace mode (expected off|sexpr|json|human|diff)");
+			if (traceMode != "off" && traceMode != "sexpr" && traceMode != "human" &&
+			    traceMode != "json" && traceMode != "diff") {
+				throw std::runtime_error("invalid --trace mode (expected off|sexpr|human|json|diff)");
 			}
 		}
 		if (vm.count("checkpoint-every")) {
@@ -106,8 +109,13 @@ bool CommandLine::parse(int argc, char *argv[])
 				throw std::runtime_error("--checkpoint-every must be >= 1");
 			}
 		}
+		unicode = true;
 		if (vm.count("no-unicode")) {
 			unicode = !vm["no-unicode"].as<bool>();
+		}
+		expandNestsFlag = false;
+		if (vm.count("expand")) {
+			expandNestsFlag = vm["expand"].as<bool>();
 		}
 		if (vm.count("psystem")) {
 			inputFile = vm["psystem"].as<string>();

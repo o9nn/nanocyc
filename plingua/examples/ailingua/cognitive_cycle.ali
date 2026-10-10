@@ -1,0 +1,92 @@
+@aimodel<cognitive_time_crystal>
+
+/* Ai-Lingua cognitive cycle.
+ * T-Lingua clock + R-Lingua observables + ECAN/PLN/MOSES + AtomSpace.
+ * The .pli companion is recorded, not parsed as Ai-Lingua rules.
+ */
+
+@import "membrane_companion.pli";
+
+@ennead {
+    @triad_a { identity_continuity=0.7; skill_readiness=0.6; motivational_valence=0.8; }
+    @triad_b { constraint_clarity=0.5; affordance_density=0.9; feedback_latency=0.3; }
+    @triad_c { coupling_strength=0.7; reciprocal_shaping=0.6; adaptive_fit=0.5; }
+}
+
+@mu = [ [ [ ]'af ]'ecan [ ]'pln [ ]'moses [ ]'memory ]'skin;
+
+@clock skin {
+    period 11;
+    wrap d11 -> skin;
+    reseed singularity_point;
+}
+
+@phase_register crystal {
+    cycle 11;
+    slots [perceive, orient, decide, act, remember, perceive, orient, decide, act, remember, perceive];
+}
+
+@attention ecan {
+    wage 10;
+    rent 0.01;
+    af_threshold 100;
+    total_sti 10000;
+}
+
+@truth pln;
+@atomspace { backing memory; }
+
+@learn moses {
+    population 8;
+    fitness grip_index;
+    evolve rule_set(perception) every 4 ticks;
+    mutation_rate 1.0;
+    elitism 0.0;
+    seed 1;
+}
+
+@object perception {
+    symbol perception;
+    truth 0.9 0.8;
+    attention 200;
+    phase 0;
+    membrane skin;
+    kind arena;
+    count 1;
+}
+
+@object agent_self {
+    symbol agent_self;
+    truth 0.8 0.7;
+    attention 150;
+    membrane skin;
+    kind agent;
+}
+
+@object co_constitution {
+    symbol co_constitution;
+    truth 0.6 0.6;
+    attention 120;
+    membrane skin;
+    kind relation;
+}
+
+@rule attend {
+    membrane skin;
+    lhs perception;
+    rhs concept;
+    wage 10;
+    threshold 50;
+    when phase == 0;
+    pln deduction;
+    impl 0.9 0.8;
+    target memory;
+    restore;
+}
+
+def cognitive_cycle() {
+    perceive -> orient (grip) -> decide (PLN) -> act -> remember (AtomSpace);
+}
+
+@observe { sample_period=1; report_fields=grip_index, emergence_score; }
+@constraints { grip_threshold=0.3; }
