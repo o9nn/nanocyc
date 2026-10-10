@@ -96,6 +96,13 @@ int main(int argc, char* argv[]) {
 		          << "  Polytopes: " << sys.polytopes.size() << "\n"
 		          << "  Flows: " << sys.flows.size() << "\n"
 		          << "  Capabilities: " << sys.capabilities.size() << "\n"
+		          << "  Fractal: " << (sys.fractal.present ? "yes" : "no");
+		if (sys.fractal.present) {
+			std::cerr << " depth=" << sys.fractal.depth
+			          << " scale=" << sys.fractal.scale
+			          << " tile=" << sys.fractal.tile;
+		}
+		std::cerr << "\n"
 		          << "  Imports: " << sys.imports.size() << "\n";
 		for (size_t i = 0; i < sys.imports.size(); ++i) {
 			const plingua::ImportedModule& im = sys.imports[i];

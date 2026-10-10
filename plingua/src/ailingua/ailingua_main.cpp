@@ -5,6 +5,7 @@
  *
  * Usage:
  *   ailingua input.ali [-o output.json] [-s steps] [-v]
+ *                    [--trace=off|sexpr|json] [--no-unicode]
  *
  * Copyright (C) 2026  P-Lingua/Ai-Lingua Contributors
  * Licensed under GPL-3.0
@@ -28,6 +29,8 @@ static void printUsage(const char* prog) {
         << "  -o <file>    Output JSON report (default: stdout)\n"
         << "  -s <steps>   Run N cognitive cycles (default: 0)\n"
         << "  -v           Verbose output\n"
+        << "  --trace=MODE off|sexpr|json (default off). Wire goes to stdout.\n"
+        << "  --no-unicode Phase arrow is -> instead of U+2192.\n"
         << "  -h           Show this help\n"
         << "\nExample:\n"
         << "  " << prog << " cognitive_cycle.ali -o report.json -s 11\n";
@@ -40,6 +43,8 @@ int main(int argc, char* argv[]) {
     std::string outputFile;
     int steps = 0;
     bool verbose = false;
+    std::string traceMode = "off";
+    bool unicode = true;
 
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "-h") == 0 || std::strcmp(argv[i], "--help") == 0) {
@@ -51,12 +56,22 @@ int main(int argc, char* argv[]) {
             steps = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "-v") == 0) {
             verbose = true;
+        } else if (std::strcmp(argv[i], "--no-unicode") == 0) {
+            unicode = false;
+        } else if (std::strncmp(argv[i], "--trace=", 8) == 0) {
+            traceMode = argv[i] + 8;
+        } else if (std::strcmp(argv[i], "--trace") == 0 && i + 1 < argc) {
+            traceMode = argv[++i];
         } else if (argv[i][0] != '-') {
             inputFile = argv[i];
         } else {
             std::cerr << "Unknown option: " << argv[i] << "\n";
             return 1;
         }
+    }
+    if (traceMode != "off" && traceMode != "sexpr" && traceMode != "json") {
+        std::cerr << "invalid --trace mode (expected off|sexpr|json)\n";
+        return 1;
     }
 
     if (inputFile.empty()) {
@@ -103,8 +118,15 @@ int main(int argc, char* argv[]) {
 
     const int sample = parser.system().observe.sample_period > 0
                            ? parser.system().observe.sample_period : 1;
+    if (traceMode != "off" && steps == 0) {
+        engine.writeStepWire(std::cout, traceMode, unicode, engine.phase());
+    }
     for (int step = 0; step < steps; ++step) {
+        int phaseFrom = engine.phase();
         plingua::ailingua::CycleSnapshot snap = engine.step();
+        if (traceMode != "off") {
+            engine.writeStepWire(std::cout, traceMode, unicode, phaseFrom);
+        }
         if (verbose && ((step + 1) % sample == 0)) {
             std::cerr << "  step " << (step + 1)
                       << " | phase=" << snap.phase
@@ -117,8 +139,11 @@ int main(int argc, char* argv[]) {
     }
 
     std::string report = engine.reportJson(steps);
-    if (outputFile.empty()) {
+    // Tracing owns stdout so the wire stays a pure event stream.
+    if (outputFile.empty() && traceMode == "off") {
         std::cout << report;
+    } else if (outputFile.empty()) {
+        std::cerr << report;
     } else {
         std::ofstream ofs(outputFile.c_str());
         if (!ofs.is_open()) {

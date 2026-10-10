@@ -1,0 +1,11 @@
+@model<transition>
+@include "transition_model.pli"
+
+def main()
+{
+	@mu = [ ]'skin;
+	@ms(skin) = a;
+
+	/* grip is a trace annotation, not a new simulator rule. */
+	[a --> b]'skin @name="orient", grip="a1 0.71";
+}

@@ -18,6 +18,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <cctype>
+#include <cstdlib>
 
 namespace plingua {
 namespace msystem {
@@ -259,7 +260,10 @@ bool MliParser::parseBody(const std::string& source, const std::string& filename
 	bool inTiling = false;
 	bool inTile = false;
 	bool inMain = false;
+	bool inFractal = false;
 	int braceDepth = 0;
+	int fractalDepth = 0;
+	std::string fractalBody;
 	std::string currentTileName;
 	Tile currentTile;
 
@@ -267,6 +271,21 @@ bool MliParser::parseBody(const std::string& source, const std::string& filename
 		lineNum_ = i + 1;
 		std::string ln = trim(lines[i]);
 		if (ln.empty()) continue;
+
+		if (inFractal) {
+			fractalBody += "\n" + ln;
+			for (size_t c = 0; c < ln.size(); ++c) {
+				if (ln[c] == '{') ++fractalDepth;
+				else if (ln[c] == '}') --fractalDepth;
+			}
+			if (fractalBody.find('{') != std::string::npos && fractalDepth <= 0) {
+				finishFractal(fractalBody);
+				inFractal = false;
+				fractalBody.clear();
+				fractalDepth = 0;
+			}
+			continue;
+		}
 
 		if (handleImport(ln)) continue;
 		if (parseModelDecl(ln)) continue;
@@ -277,6 +296,26 @@ bool MliParser::parseBody(const std::string& source, const std::string& filename
 		if (parseCapability(ln)) continue;
 		if (parseFlow(ln)) continue;
 		if (parsePolytope(ln)) continue;
+		if (isFractalHeader(ln)) {
+			fractalBody = ln;
+			fractalDepth = 0;
+			for (size_t c = 0; c < ln.size(); ++c) {
+				if (ln[c] == '{') ++fractalDepth;
+				else if (ln[c] == '}') --fractalDepth;
+			}
+			bool hasBrace = ln.find('{') != std::string::npos;
+			bool oneLineFields = !hasBrace &&
+				(ln.find("depth") != std::string::npos ||
+				 ln.find("scale") != std::string::npos ||
+				 ln.find("tile") != std::string::npos);
+			if ((hasBrace && fractalDepth <= 0) || oneLineFields) {
+				finishFractal(fractalBody);
+				fractalBody.clear();
+			} else {
+				inFractal = true;
+			}
+			continue;
+		}
 		if (parseTilingStart(ln)) { inTiling = true; braceDepth = 1; continue; }
 
 		if (inTiling) {
@@ -333,6 +372,13 @@ bool MliParser::parseBody(const std::string& source, const std::string& filename
 			if (ln == "}") { inMain = false; continue; }
 		}
 	}
+
+	if (inFractal) {
+		errors_.push_back(filename + ": error: unclosed @fractal");
+	}
+	// Validate once the outermost file and its inlined tilings are complete,
+	// so a directive written before @import still sees the imported tiles.
+	if (importStack_.size() == 1) validateFractal();
 
 	importStack_.erase(key);
 	filename_ = prevFile;
@@ -501,6 +547,50 @@ bool MliParser::parsePolytope(const std::string& line) {
 	if (symmetryIt != args.end()) poly.symmetryGroup = symmetryIt->second;
 	system_.polytopes.push_back(poly);
 	return true;
+}
+
+bool MliParser::isFractalHeader(const std::string& line) const {
+	if (line.compare(0, 8, "@fractal") != 0) return false;
+	if (line.size() == 8) return true;
+	unsigned char next = static_cast<unsigned char>(line[8]);
+	return !std::isalnum(next) && next != '_';
+}
+
+void MliParser::finishFractal(const std::string& body) {
+	FractalSpec fp;
+	fp.present = true;
+	fp.depth = 1;
+	fp.scale = 1.0;
+	std::smatch m;
+	std::regex depthRe(R"(depth\s+(\d+))");
+	std::regex scaleRe(R"(scale\s+([0-9]+(?:\.[0-9]+)?))");
+	std::regex tileRe(R"(tile\s+([A-Za-z_][A-Za-z0-9_]*))");
+	if (std::regex_search(body, m, depthRe)) fp.depth = std::atoi(m[1].str().c_str());
+	if (std::regex_search(body, m, scaleRe)) fp.scale = std::atof(m[1].str().c_str());
+	if (std::regex_search(body, m, tileRe)) fp.tile = m[1].str();
+	system_.fractal = fp;
+}
+
+void MliParser::validateFractal() {
+	if (!system_.fractal.present) return;
+	if (system_.fractal.depth < 1) {
+		errors_.push_back(filename_ + ": error: @fractal depth must be >= 1");
+	}
+	if (!(system_.fractal.scale > 0.0)) {
+		errors_.push_back(filename_ + ": error: @fractal scale must be > 0");
+	}
+	if (system_.fractal.tile.empty()) {
+		errors_.push_back(filename_ + ": error: @fractal tile is required");
+		return;
+	}
+	bool found = false;
+	for (size_t i = 0; i < system_.tiling.tiles.size(); ++i) {
+		if (system_.tiling.tiles[i].name == system_.fractal.tile) found = true;
+	}
+	if (!found) {
+		errors_.push_back(filename_ + ": error: @fractal tile '" +
+		                  system_.fractal.tile + "' is not in the tiling");
+	}
 }
 
 bool MliParser::parseTilingStart(const std::string& line) {

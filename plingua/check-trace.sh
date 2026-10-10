@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # check-trace.sh --- intelligible psim --trace modes.
 #
-# Covers --trace=sexpr|json|human|diff, named rules, narrow-terminal stacking,
+# Covers --trace=sexpr|json|human|diff, named rules, grip atoms, narrow-terminal stacking,
 # phase-ring glyph collapse, and T-Lingua tick/resonance wire atoms.
 #
 # Usage: from plingua/, after `make compiler simulator`:
@@ -128,6 +128,20 @@ if compile "$EXAMPLES/trace/phase_ring.pli" "$TMP/phase.json"; then
 	# a fully expanded ring would draw a box per membrane; the collapsed row
 	# replaces those boxes, so the glyph must not contain a [d6] box label.
 	assert_lacks "glyph does not box every phase membrane" "$TMP/phase.human" "]d6"
+fi
+
+# ---- grip atom ---------------------------------------------------------------
+if compile "$EXAMPLES/trace/grip.pli" "$TMP/grip.json"; then
+	"$PSIM" "$TMP/grip.json" -s 1 -o "$TMP/grip.out.json" --trace=sexpr --no-unicode \
+		>"$TMP/grip.sexpr" 2>"$TMP/grip.err" || { say "FAIL psim grip"; cat "$TMP/grip.err"; fail=1; }
+	assert_has "grip wire atom" "$TMP/grip.sexpr" "(grip a1 0.71)"
+	"$PSIM" "$TMP/grip.json" -s 1 -o "$TMP/grip.out.json" --trace=json \
+		>"$TMP/grip.jsonl" 2>/dev/null || true
+	assert_has "json grip event" "$TMP/grip.jsonl" '"event":"grip"'
+	assert_has "json grip id and score" "$TMP/grip.jsonl" '"id":"a1","grip":0.71'
+	COLUMNS=80 "$PSIM" "$TMP/grip.json" -s 1 -o "$TMP/grip.out.json" --trace=human --no-unicode \
+		>"$TMP/grip.human" 2>/dev/null || true
+	assert_has "human wire shows grip" "$TMP/grip.human" "(grip a1 0.71)"
 fi
 
 # ---- resonance atom ----------------------------------------------------------

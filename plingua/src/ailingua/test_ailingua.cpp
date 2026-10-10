@@ -13,6 +13,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 using namespace plingua::ailingua;
@@ -248,6 +249,36 @@ static void test_rent_wrap_grip_moses() {
     ASSERT_TRUE(json.find("\"dialect\": \"ali\"") != std::string::npos, "dialect field");
     ASSERT_TRUE(grip.gripIndex() >= 0.0 && grip.gripIndex() <= 1.0, "grip_index in [0,1]");
     ASSERT_TRUE(grip.emergenceScore() > 0.0, "relation kind contributes to emergence");
+
+    AliParser wire_p;
+    ASSERT_TRUE(wire_p.parseString(modelWith(
+        "@clock skin { period 11; }\n"
+        "@object perception { attention 80; membrane skin; kind arena; truth 0.9 0.8; }\n"
+        "@object bond { attention 80; membrane skin; kind relation; truth 0.7 0.6; }\n")),
+                "wire model parses");
+    AiEngine wireEng(wire_p.system());
+    int phaseFrom = wireEng.phase();
+    wireEng.step();
+    std::ostringstream sexpr;
+    wireEng.writeStepWire(sexpr, "sexpr", false, phaseFrom);
+    std::string sw = sexpr.str();
+    ASSERT_TRUE(sw.find("(tick 0 (phase 0->1))") != std::string::npos,
+                "tick wire records the phase before advanceClock");
+    ASSERT_TRUE(sw.find("(grip perception ") != std::string::npos,
+                "grip wire uses the object id");
+    ASSERT_TRUE(sw.find("(grip bond ") != std::string::npos,
+                "relation object emits a grip atom");
+    std::ostringstream uni;
+    wireEng.writeStepWire(uni, "sexpr", true, phaseFrom);
+    ASSERT_TRUE(uni.str().find("(tick 0 (phase 0\u21921))") != std::string::npos,
+                "unicode phase arrow");
+    std::ostringstream jsonw;
+    wireEng.writeStepWire(jsonw, "json", false, phaseFrom);
+    std::string jw = jsonw.str();
+    ASSERT_TRUE(jw.find("\"event\":\"tick\"") != std::string::npos, "json tick event");
+    ASSERT_TRUE(jw.find("\"event\":\"grip\"") != std::string::npos, "json grip event");
+    ASSERT_TRUE(jw.find("\"id\":\"perception\"") != std::string::npos,
+                "json grip id is the object id");
 
     AliParser mos_p;
     ASSERT_TRUE(mos_p.parseString(
