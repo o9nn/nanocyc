@@ -37,6 +37,9 @@ private:
 	bool parseFlow(const std::string& line);
 	bool parsePolytope(const std::string& line);
 	bool parseTilingStart(const std::string& line);
+	bool isFractalHeader(const std::string& line) const;
+	void finishFractal(const std::string& body);
+	void validateFractal();
 	bool parseTileStart(const std::string& line, Tile& tile);
 	bool parseConnector(const std::string& line, Tile& tile);
 	bool parseSurfaceGlue(const std::string& line, Tile& tile);

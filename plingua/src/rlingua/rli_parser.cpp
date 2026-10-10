@@ -571,6 +571,7 @@ std::shared_ptr<plingua::rr::RRHypergraph> RliParser::buildHypergraph() const {
         n.salience             = std::max(0.0, std::min(1.0, decl.salience));
         n.affordance_potential = std::max(1e-6, decl.affordance_potential);
         n.affordance_realization = n.affordance_potential * 0.3;
+        n.original_object = decl.id;
 
         id_map[decl.id] = node_id;
     }
@@ -583,6 +584,7 @@ std::shared_ptr<plingua::rr::RRHypergraph> RliParser::buildHypergraph() const {
 
         auto node_id = hg->addObjectNode(decl.label, plingua::rr::AARType::RELATION);
         hg->nodes[node_id]->salience = std::max(0.0, std::min(1.0, decl.salience));
+        hg->nodes[node_id]->original_object = decl.id;
         id_map[decl.id] = node_id;
     }
 

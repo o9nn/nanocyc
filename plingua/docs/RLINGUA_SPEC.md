@@ -322,5 +322,10 @@ Before submitting an R-Lingua model, verify:
 ```
 
 Resolution, cycle detection, and diamond skipping match M-Lingua. A `.rli` import is inlined (nodes, couplings, and later `@ennead` assignments append or overwrite fields; the host system is not reset). A `.pli` companion is recorded with its `@mu` labels and is not inlined. `rlingua -v` prints `Imports: N` and one companion/inlined line per module.
+`--trace=sexpr` writes `(grip <id> <score>)` to stdout after each dynamics
+step, using the declared node id (`a1`, not the numeric hypergraph id).
+`--trace=json` writes `{"event":"grip","id":"...","grip":0.71}`. The JSON
+grip report is unchanged and goes to `-o` (or stderr while tracing, so the
+wire stays a pure stream). Default trace mode is `off`.
 
 Chapter relevance hybrids live beside their discrete specs under `psystems/ch05`, `ch07`, and `ch10`. `make check-extensions` compiles all five.

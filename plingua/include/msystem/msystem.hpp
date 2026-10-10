@@ -331,6 +331,15 @@ struct FlowSpec {
 	}
 };
 
+struct FractalSpec {
+	bool present;
+	int depth;
+	double scale;
+	std::string tile;
+
+	FractalSpec() : present(false), depth(0), scale(0.0) {}
+};
+
 struct PolytopeSpec {
 	std::string name;
 	int dimension;
@@ -365,6 +374,9 @@ struct MSystem {
 	// Composition metadata. Intentionally omitted from serialize() so Cytos
 	// XML and binary archives stay compatible with pre-import models.
 	std::vector<plingua::ImportedModule> imports;
+	// F-Lingua self-similar tiling. Also omitted from serialize(): Cytos
+	// archives do not know this directive.
+	FractalSpec fractal;
 
 	MSystem() : modelType("morphogenetic"), reactionDistance(1.0),
 	            geometryProfile(GeometryProfile::EUCLIDEAN),

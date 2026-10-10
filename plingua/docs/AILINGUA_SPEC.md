@@ -318,7 +318,15 @@ ailingua model.ali -s 11 -v -o report.json
 | `-s N` | Run N cognitive cycles (default 0: parse and emit the initial quadruples). |
 | `-o file` | JSON report (default stdout). |
 | `-v` | Print model stats, imports, and one line per sample period. |
+| `--trace=off\|sexpr\|json` | Step wire on stdout (default `off`). With tracing and no `-o`, the JSON report goes to stderr so the wire stays a pure stream. |
+| `--no-unicode` | Phase arrow is `->` instead of `→`. |
 | `-h` | Help. |
+
+Each traced step emits `(tick <step> (phase <from>→<to>))` when the clock
+phase changes, using the phase from before `advanceClock`, and
+`(grip <object-id> <score>)` for every live object except `af_member`.
+`--trace=json` uses `{"event":"tick",...}` and `{"event":"grip","id":...,"grip":...}`.
+Scores are two decimal places. These lines do not change which rules fire.
 
 Verbose import lines match R-Lingua: `Imports: N` and
 `import <dialect> <path> (inlined|companion) symbols=K`.

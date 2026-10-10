@@ -6,7 +6,7 @@
  * and outputs a JSON grip report.
  *
  * Usage:
- *   rlingua input.rli [-o output.json] [-s steps] [-v]
+ *   rlingua input.rli [-o output.json] [-s steps] [-v] [--trace=off|sexpr|json]
  *
  * Copyright (C) 2024  P-Lingua/R-Lingua Contributors
  * Licensed under GPL-3.0
@@ -14,9 +14,13 @@
 
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <cstring>
+#include <algorithm>
 #include <iomanip>
+#include <utility>
+#include <vector>
 #include <rlingua/rli_parser.hpp>
 
 static void printUsage(const char* prog) {
@@ -27,6 +31,7 @@ static void printUsage(const char* prog) {
         << "  -o <file>    Output JSON file (default: stdout)\n"
         << "  -s <steps>   Run RR dynamics for N steps (default: 0)\n"
         << "  -v           Verbose output\n"
+        << "  --trace=MODE off|sexpr|json (default off). Wire goes to stdout.\n"
         << "  -h           Show this help\n"
         << "\nExample:\n"
         << "  " << prog << " minimal_ennead.rli -o report.json -s 100\n";
@@ -86,6 +91,44 @@ static std::string generateGripReport(
     return j.str();
 }
 
+static std::string jsonEscapeId(const std::string& s) {
+    std::string out;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == '\\' || s[i] == '"') out.push_back('\\');
+        out.push_back(s[i]);
+    }
+    return out;
+}
+
+static std::string formatGrip(double v) {
+    std::ostringstream os;
+    os << std::fixed << std::setprecision(2) << v;
+    return os.str();
+}
+
+// (grip <declared-id> <score>) — the external id, not the numeric node id.
+static void emitGripWire(std::ostream& os, const plingua::rr::RRHypergraph& hg,
+                         const std::string& mode) {
+    std::vector<std::pair<std::string, double>> rows;
+    for (auto& kv : hg.nodes) {
+        if (!kv.second) continue;
+        const plingua::rr::RRNode& n = *kv.second;
+        std::string id = n.original_object.empty() ? n.label : n.original_object;
+        if (id.empty()) id = "n" + std::to_string(n.id);
+        rows.push_back(std::make_pair(id, n.grip_index));
+    }
+    std::sort(rows.begin(), rows.end());
+    for (size_t i = 0; i < rows.size(); ++i) {
+        std::string score = formatGrip(rows[i].second);
+        if (mode == "sexpr") {
+            os << "(grip " << rows[i].first << " " << score << ")\n";
+        } else if (mode == "json") {
+            os << "{\"event\":\"grip\",\"id\":\"" << jsonEscapeId(rows[i].first)
+               << "\",\"grip\":" << score << "}\n";
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) { printUsage(argv[0]); return 1; }
 
@@ -93,6 +136,7 @@ int main(int argc, char* argv[]) {
     std::string outputFile;
     int   steps   = 0;
     bool  verbose = false;
+    std::string traceMode = "off";
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -103,12 +147,20 @@ int main(int argc, char* argv[]) {
             steps = std::atoi(argv[++i]);
         } else if (strcmp(argv[i], "-v") == 0) {
             verbose = true;
+        } else if (strncmp(argv[i], "--trace=", 8) == 0) {
+            traceMode = argv[i] + 8;
+        } else if (strcmp(argv[i], "--trace") == 0 && i+1 < argc) {
+            traceMode = argv[++i];
         } else if (argv[i][0] != '-') {
             inputFile = argv[i];
         } else {
             std::cerr << "Unknown option: " << argv[i] << "\n";
             return 1;
         }
+    }
+    if (traceMode != "off" && traceMode != "sexpr" && traceMode != "json") {
+        std::cerr << "invalid --trace mode (expected off|sexpr|json)\n";
+        return 1;
     }
 
     if (inputFile.empty()) {
@@ -156,8 +208,10 @@ int main(int argc, char* argv[]) {
     const int sample = parser.system().observe.sample_period > 0
                        ? parser.system().observe.sample_period : 10;
 
+    if (traceMode != "off" && steps == 0) emitGripWire(std::cout, *hg, traceMode);
     for (int step = 0; step < steps; ++step) {
         hg->updateRelevanceRealization(0.1);
+        if (traceMode != "off") emitGripWire(std::cout, *hg, traceMode);
 
         if (verbose && (step + 1) % sample == 0) {
             std::cerr << "  step " << (step+1)
@@ -178,8 +232,10 @@ int main(int argc, char* argv[]) {
     // Generate output
     std::string report = generateGripReport(*hg, steps);
 
-    if (outputFile.empty()) {
+    if (outputFile.empty() && traceMode == "off") {
         std::cout << report;
+    } else if (outputFile.empty()) {
+        std::cerr << report;
     } else {
         std::ofstream ofs(outputFile);
         if (!ofs.is_open()) {

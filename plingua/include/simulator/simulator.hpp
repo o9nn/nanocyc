@@ -80,7 +80,8 @@ protected:
 	static std::string ruleTraceName(const Rule& rule, std::size_t index);
 	static std::string jsonEscape(const std::string& s);
 	static std::string multisetToJson(const Multiset& ms);
-	// T-Lingua wire annotations. Extra events only; they do not change firing.
+	// Wire annotations. Extra events only; they do not change firing.
+	// tick / resonance are T-Lingua; grip is the R-Lingua score atom.
 	static std::string featureString(const Features& features, const char* key);
 	static bool parsePhaseIndex(const std::string& label, int& n);
 	static int phaseOfLabel(const std::string& label);
@@ -767,32 +768,76 @@ void Simulator::appendTraceAtoms(std::vector<std::string>& sexprOut,
 	}
 
 	std::string resonance = featureString(rule.features, "resonance");
-	if (resonance.empty()) return;
-	std::string partner = featureString(rule.features, "partner");
-	if (partner.empty()) partner = tickToLabel.empty() ? "?" : tickToLabel;
-	std::string match = normalizeMatch(resonance);
-	std::ostringstream res;
-	res << "(resonance (" << selfLabel << " " << partner
-	    << ") (match " << match << "))";
-	sexprOut.push_back(res.str());
-	std::ostringstream jres;
-	jres << "{\"event\":\"resonance\",\"membranes\":[\""
-	     << jsonEscape(selfLabel) << "\",\"" << jsonEscape(partner)
-	     << "\"],\"match\":[";
-	std::istringstream tokens(match);
-	std::string tok;
-	bool firstTok = true;
-	while (tokens >> tok) {
-		if (!firstTok) jres << ",";
-		bool numeric = !tok.empty() &&
-			std::all_of(tok.begin(), tok.end(),
-			            [](unsigned char c) { return std::isdigit(c) != 0; });
-		if (numeric) jres << tok;
-		else jres << "\"" << jsonEscape(tok) << "\"";
-		firstTok = false;
+	if (!resonance.empty()) {
+		std::string partner = featureString(rule.features, "partner");
+		if (partner.empty()) partner = tickToLabel.empty() ? "?" : tickToLabel;
+		std::string match = normalizeMatch(resonance);
+		std::ostringstream res;
+		res << "(resonance (" << selfLabel << " " << partner
+		    << ") (match " << match << "))";
+		sexprOut.push_back(res.str());
+		std::ostringstream jres;
+		jres << "{\"event\":\"resonance\",\"membranes\":[\""
+		     << jsonEscape(selfLabel) << "\",\"" << jsonEscape(partner)
+		     << "\"],\"match\":[";
+		std::istringstream tokens(match);
+		std::string tok;
+		bool firstTok = true;
+		while (tokens >> tok) {
+			if (!firstTok) jres << ",";
+			bool numeric = !tok.empty() &&
+				std::all_of(tok.begin(), tok.end(),
+				            [](unsigned char c) { return std::isdigit(c) != 0; });
+			if (numeric) jres << tok;
+			else jres << "\"" << jsonEscape(tok) << "\"";
+			firstTok = false;
+		}
+		jres << "]}";
+		jsonOut.push_back(jres.str());
 	}
-	jres << "]}";
-	jsonOut.push_back(jres.str());
+
+	// grip="<id> <score>" or grip="<score>" (id defaults to the membrane label).
+	// Emitted even when the rule has no resonance feature.
+	std::string grip = featureString(rule.features, "grip");
+	if (!grip.empty()) {
+		std::istringstream gs(grip);
+		std::string a, b;
+		if (gs >> a) {
+			std::string id = selfLabel;
+			std::string score = a;
+			if (gs >> b) {
+				id = a;
+				score = b;
+			}
+			std::ostringstream gline;
+			gline << "(grip " << id << " " << score << ")";
+			sexprOut.push_back(gline.str());
+			auto numericScore = [](const std::string& tok) {
+				if (tok.empty()) return false;
+				std::size_t i = (tok[0] == '+' || tok[0] == '-') ? 1 : 0;
+				if (i >= tok.size()) return false;
+				bool dot = false, digit = false;
+				for (; i < tok.size(); ++i) {
+					unsigned char c = static_cast<unsigned char>(tok[i]);
+					if (c == '.') {
+						if (dot) return false;
+						dot = true;
+					} else if (std::isdigit(c)) {
+						digit = true;
+					} else {
+						return false;
+					}
+				}
+				return digit;
+			};
+			std::ostringstream jg;
+			jg << "{\"event\":\"grip\",\"id\":\"" << jsonEscape(id) << "\",\"grip\":";
+			if (numericScore(score)) jg << score;
+			else jg << "\"" << jsonEscape(score) << "\"";
+			jg << "}";
+			jsonOut.push_back(jg.str());
+		}
+	}
 }
 
 inline
