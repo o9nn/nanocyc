@@ -143,6 +143,40 @@ int main() {
 	expect(!malformed.parseString("@import foo;\n@msystem<morphogenetic>\n", "<string>"),
 	       "malformed @import is an error");
 
+	const std::string fractalSrc = R"(
+@msystem<morphogenetic>
+@tiling {
+    @glue g_scale;
+    @tile scale_1(sides=4, radius=4.0) {
+        @connector c1(vertices=[v1,v2], glue=g_scale, angle=90);
+    }
+}
+@fractal {
+    depth 3;
+    scale 0.5;
+    tile scale_1;
+}
+)";
+	MliParser fractal;
+	expect(fractal.parseString(fractalSrc, "<fractal>"), "@fractal block parses");
+	expect(fractal.system().fractal.present, "@fractal is recorded");
+	expect(fractal.system().fractal.depth == 3, "fractal depth 3");
+	expect(fractal.system().fractal.scale > 0.49 && fractal.system().fractal.scale < 0.51,
+	       "fractal scale 0.5");
+	expect(fractal.system().fractal.tile == "scale_1", "fractal tile is scale_1");
+
+	MliParser missingTile;
+	expect(!missingTile.parseString(
+	           "@msystem<morphogenetic>\n@fractal { depth 2; scale 0.5; tile missing; }\n",
+	           "<fractal>"),
+	       "fractal tile must exist in the tiling");
+	MliParser badScale;
+	expect(!badScale.parseString(
+	           "@msystem<morphogenetic>\n@tiling { @tile box(sides=4, radius=1.0) { } }\n"
+	           "@fractal { depth 0; scale 0; tile box; }\n",
+	           "<fractal>"),
+	       "fractal depth and scale are checked");
+
 	std::cout << "\nResults: " << tests_passed << "/" << tests_run << " passed.\n";
 	return (tests_passed == tests_run) ? 0 : 1;
 }

@@ -42,6 +42,13 @@
     @seed sphere at (0, 0, 0);
 }
 
+/* F-Lingua profile: three nested scales (4 -> 2 -> 1), seeded at scale_1. */
+@fractal {
+    depth 3;
+    scale 0.5;
+    tile scale_1;
+}
+
 @floating cell(mobility=1, radius=0.02, concentration=4);
 @floating patch(mobility=1, radius=0.02, concentration=1);
 

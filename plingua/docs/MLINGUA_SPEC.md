@@ -44,6 +44,7 @@ An M system `M = (F, P, T, μ, R, σ)` where:
 | `@polytope` | Declares high-dimensional polytope incidence metadata |
 | `@flow` | Declares geometric flow metadata (e.g., discrete Ricci) |
 | `@capability` | Enables capability/invariant flags (e.g., gauge invariance) |
+| `@fractal` | Self-similar tiling profile: `depth`, `scale`, and a `tile` that must exist in the tiling. Not a separate grammar |
 | `@import` | Composes another module. `@import "rel.mli";` or `@import <rel.pli>;`. Same-dialect `.mli` files are inlined; other dialects are recorded as companions and not inlined |
 
 ## Rule Types
@@ -115,6 +116,20 @@ u [| p v --> v [| p u;
 These directives are currently parsed as **model metadata** and are designed to
 keep backward compatibility while enabling staged language evolution for
 higher-dimensional and non-Euclidean experiments.
+
+`@fractal` is the F-Lingua profile, parsed here rather than by a new grammar.
+The tile must already be declared in `@tiling` (including tiles inlined by
+`@import`). `depth` must be at least 1 and `scale` must be greater than 0.
+The directive is omitted from Cytos XML and binary archives, the same way
+`@import` metadata is.
+
+```mli
+@fractal {
+    depth 3;
+    scale 0.5;
+    tile scale_1;
+}
+```
 
 ## Full Example: Boxy Hallows
 

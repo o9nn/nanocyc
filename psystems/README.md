@@ -87,7 +87,7 @@ content was only prose now have a native companion beside the `.pli` file.
 | Companion | Dialect | Discrete spec |
 |-----------|---------|---------------|
 | `ch02/ch02_singularity_assembly.mli` | M-Lingua | singularity seeds nucleate edges into loops |
-| `ch02/ch02_fractal_tape.mli` | M-Lingua | nested-sphere fractal tape |
+| `ch02/ch02_fractal_tape.mli` | M-Lingua | nested-sphere fractal tape (`@fractal` depth 3) |
 | `ch06/ch06_tubulin_ppm.mli` | M-Lingua | helix rings, 13 protofilaments, water channel |
 | `ch06/ch06_nanodevice_tc.mli` | M-Lingua | pump/probe device and kHz/MHz/GHz bands |
 | `ch08/ch08_spiral_cylinders.mli` | M-Lingua | three concentric spiral cylinders |

@@ -28,9 +28,11 @@
 #include <iomanip>
 #include <map>
 #include <memory>
+#include <ostream>
 #include <random>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace plingua {
 namespace ailingua {
@@ -203,6 +205,46 @@ public:
         }
         j << "\n  ]\n}\n";
         return j.str();
+    }
+
+    // Step wire. phaseFrom is the phase before this step's advanceClock.
+    // Tick is emitted only when the phase changed. Grip uses the object id.
+    void writeStepWire(std::ostream& os, const std::string& mode, bool unicode,
+                       int phaseFrom) const {
+        const char* arrow = unicode ? "\u2192" : "->";
+        unsigned stepIndex = steps_ == 0 ? 0u : steps_ - 1u;
+        if (phaseFrom != phase_) {
+            if (mode == "sexpr") {
+                os << "(tick " << stepIndex << " (phase " << phaseFrom
+                   << arrow << phase_ << "))\n";
+            } else if (mode == "json") {
+                os << "{\"event\":\"tick\",\"step\":" << stepIndex
+                   << ",\"phase_from\":" << phaseFrom
+                   << ",\"phase_to\":" << phase_ << "}\n";
+            }
+        }
+        std::vector<size_t> order;
+        for (size_t i = 0; i < objects_.size(); ++i) {
+            const RuntimeObject& o = objects_[i];
+            if (o.count == 0 || o.symbol == "af_member") continue;
+            if (!rr_.nodes.count(o.rr_id) || !rr_.nodes.at(o.rr_id)) continue;
+            order.push_back(i);
+        }
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            return objects_[a].id < objects_[b].id;
+        });
+        for (size_t k = 0; k < order.size(); ++k) {
+            const RuntimeObject& o = objects_[order[k]];
+            std::ostringstream score;
+            score << std::fixed << std::setprecision(2)
+                  << rr_.nodes.at(o.rr_id)->grip_index;
+            if (mode == "sexpr") {
+                os << "(grip " << o.id << " " << score.str() << ")\n";
+            } else if (mode == "json") {
+                os << "{\"event\":\"grip\",\"id\":\"" << jsonEscape(o.id)
+                   << "\",\"grip\":" << score.str() << "}\n";
+            }
+        }
     }
 
     int phase() const { return phase_; }

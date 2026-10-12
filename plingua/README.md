@@ -98,6 +98,7 @@ M-Lingua (`.mli`) extends P-Lingua with support for **Morphogenetic Systems** �
 * Rule types: `@create`, `@destroy`, `@divide`, metabolic rules
 * Geometry extensions: `@geometry`, `@manifold`, `@metric`, `@connection`
 * Advanced model directives: `@polytope`, `@flow`, `@capability`
+* `@fractal { depth N; scale s; tile name; }` — self-similar tiling profile (F-Lingua), not a separate parser
 * Cytos-compatible XML output for Unity visualization
 * `@import "path";` / `@import <path>;` — inline another `.mli`, or record a `.pli` companion without inlining its rules
 
@@ -217,6 +218,7 @@ make bin/test_ailingua
 make check-ailingua         # unit tests + examples/ailingua/cognitive_cycle.ali
 
 bin/ailingua examples/ailingua/cognitive_cycle.ali -s 11 -v -o report.json
+bin/ailingua examples/ailingua/cognitive_cycle.ali -s 1 --trace=sexpr --no-unicode
 ```
 
 See `docs/AILINGUA_SPEC.md`.

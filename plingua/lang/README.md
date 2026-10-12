@@ -93,7 +93,10 @@ every step at `-v 2` and above.
 A tick that falls into the next phase membrane also emits
 `(tick <step> (phase <from>-><to>))` (`->` with `--no-unicode`).
 `@resonance` / `@partner` emit `(resonance (<mem> <partner>) (match …))` as a
-trace annotation — they do not change which rules fire. A shorter pure phase
+trace annotation — they do not change which rules fire. A rule feature
+`grip="<id> <score>"` emits `(grip <id> <score>)` and
+`{"event":"grip","id":"<id>","grip":<score>}` even when resonance is absent.
+A shorter pure phase
 ring (`d1`…`dN`, clock objects only, N≥3) collapses to one glyph row
 (`[phase d1..dN @ dK …]`); the s-expr checkpoint still lists every membrane.
 

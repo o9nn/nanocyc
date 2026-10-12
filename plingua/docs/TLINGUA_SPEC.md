@@ -150,7 +150,7 @@ One dialect.  The other proposed letters are libraries and pragmas:
 
 | Proposal | In T-Lingua |
 |---|---|
-| F-Lingua (fractal/frequency) | `@fractal { depth N; scale s; tile name; }` — a profile recorded for an M-Lingua companion, not a parser |
+| F-Lingua (fractal/frequency) | `@fractal { depth N; scale s; tile name; }` — parsed by M-Lingua; T-Lingua records the same profile, not a second grammar |
 | N-Lingua (neural/nested) | `@module` / `@import` — same-dialect `.tli` is inlined; other dialects are recorded |
 | S-Lingua (spinor/spectral) | `@spinor name { period N; flip_at N/2; object obj; }` — one rule schema |
 | D-Lingua / A-Lingua | `@semantics { mode = daemon \| angel; }` — scheduling poles, default angel |

@@ -1,5 +1,5 @@
-/* F-Lingua is an M-Lingua tiling profile recorded inside T-Lingua.
- * The geometric companion is not a second grammar.
+/* F-Lingua is an M-Lingua tiling profile. mlingua parses the same @fractal
+ * block; T-Lingua only records it. Not a second grammar.
  * Traceability: plingua/docs/TLINGUA_SPEC.md
  */
 

@@ -69,6 +69,9 @@ check-extensions: mcompiler rcompiler $(BDIR)/test_mli_geometry_extensions $(BDI
 	  echo "$$err" | grep -E 'Imports:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no imports in $$f"; echo "$$err"; exit 1; }; \
 	  echo "$$err" | grep -E 'symbols=[1-9]' >/dev/null || { echo "FAIL: companion has no symbols in $$f"; echo "$$err"; exit 1; }; \
 	  echo "$$err" | grep -E 'Tiles:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no tiles in $$f"; echo "$$err"; exit 1; }; \
+	  if echo "$$f" | grep -q 'ch02_fractal_tape.mli'; then \
+	    echo "$$err" | grep -E 'Fractal:[[:space:]]+yes' >/dev/null || { echo "FAIL: @fractal not recorded in $$f"; echo "$$err"; exit 1; }; \
+	  fi; \
 	done; \
 	for f in $(RLI_HYBRIDS); do \
 	  echo "== $$f"; \
@@ -77,7 +80,10 @@ check-extensions: mcompiler rcompiler $(BDIR)/test_mli_geometry_extensions $(BDI
 	  echo "$$err" | grep -E 'symbols=[1-9]' >/dev/null || { echo "FAIL: companion has no symbols in $$f"; echo "$$err"; exit 1; }; \
 	  echo "$$err" | grep -E 'Nodes:[[:space:]]+[1-9]' >/dev/null || { echo "FAIL: no nodes in $$f"; echo "$$err"; exit 1; }; \
 	done; \
-	echo "check-extensions: 8 .mli + 5 .rli hybrids OK"
+	echo "check-extensions: 8 .mli + 5 .rli hybrids OK"; \
+	wire=$$($(BDIR)/$(BIN_RLINGUA) --trace=sexpr -s 1 -o /dev/null ../psystems/ch05/ch05_wheel_of_intelligence.rli); \
+	echo "$$wire" | grep -q '(grip ppm_wheel ' || { echo "FAIL: grip wire"; echo "$$wire"; exit 1; }; \
+	echo "check-extensions: grip wire OK"
 
 check-ailingua: acompiler $(BDIR)/test_ailingua
 	@$(BDIR)/test_ailingua
@@ -90,6 +96,13 @@ check-ailingua: acompiler $(BDIR)/test_ailingua
 	grep -q '"dialect": "ali"' /tmp/nanocyc_ali_report.json || { echo "FAIL: dialect"; exit 1; }; \
 	grep -q '"grip_index"' /tmp/nanocyc_ali_report.json || { echo "FAIL: grip_index"; exit 1; }; \
 	grep -q '"emergence_score"' /tmp/nanocyc_ali_report.json || { echo "FAIL: emergence_score"; exit 1; }; \
+	wire=$$($(BDIR)/$(BIN_AILINGUA) --trace=sexpr --no-unicode -s 1 -o /tmp/nanocyc_ali_wire.json examples/ailingua/cognitive_cycle.ali); \
+	echo "$$wire" | grep -q '(tick 0 (phase 0->1))' || { echo "FAIL: tick wire"; echo "$$wire"; exit 1; }; \
+	echo "$$wire" | grep -q '(grip perception ' || { echo "FAIL: grip wire"; echo "$$wire"; exit 1; }; \
+	if $(BDIR)/$(BIN_AILINGUA) --trace=nope examples/ailingua/cognitive_cycle.ali -o /tmp/nanocyc_ali_bad.json >/tmp/nanocyc_ali_bad.out 2>&1; then \
+	  echo "FAIL: invalid --trace should fail"; exit 1; \
+	fi; \
+	grep -q 'invalid --trace mode' /tmp/nanocyc_ali_bad.out || { echo "FAIL: trace error text"; cat /tmp/nanocyc_ali_bad.out; exit 1; }; \
 	echo "check-ailingua: OK"
 
 check-tlingua: tcompiler $(BDIR)/test_tlingua
@@ -119,7 +132,7 @@ check-finops: compiler simulator
 # (tolerating intermediate metadata lines), and the multiset entries are
 # sorted so assertions do not depend on the serializer's print order.
 # Intelligible step output: sexpr/json/human/diff traces, width fallback,
-# time-crystal collapse, named rules, and T-Lingua tick/resonance atoms.
+# time-crystal collapse, named rules, and tick/resonance/grip wire atoms.
 check-trace: compiler simulator
 	bash tests/test_trace.sh
 	bash check-trace.sh

@@ -403,6 +403,11 @@ static void test_buildHypergraph_basic() {
 
     ASSERT_TRUE(hg != nullptr, "buildHypergraph returns non-null");
     ASSERT_TRUE(hg->nodes.size() == 2, "two nodes in hypergraph");
+    bool sawA1 = false;
+    for (auto& kv : hg->nodes) {
+        if (kv.second && kv.second->original_object == "a1") sawA1 = true;
+    }
+    ASSERT_TRUE(sawA1, "agent wire id is the declared id a1");
     // Bidirectional coupling → two edges
     ASSERT_TRUE(hg->edges.size() == 2, "two edges (bidirectional coupling)");
 }
